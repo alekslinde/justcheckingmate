@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { CheckResult, ScamType } from "@/lib/scamDetector";
 import VerdictBadge from "./VerdictBadge";
-import PoisonPanel from "./PoisonPanel";
 
 const SCAM_TYPES: { value: ScamType; label: string; placeholder: string; icon: string }[] = [
   { value: "url",    label: "Dodgy Link",    icon: "🔗", placeholder: "Paste the sus URL in here, e.g. https://my-g0v-ato-login.tk/verify" },
@@ -20,7 +19,6 @@ export default function ScamChecker() {
   const [result, setResult] = useState<CheckResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPoison, setShowPoison] = useState(false);
 
   const selectedType = SCAM_TYPES.find((t) => t.value === scamType)!;
 
@@ -29,7 +27,6 @@ export default function ScamChecker() {
     setLoading(true);
     setError(null);
     setResult(null);
-    setShowPoison(false);
 
     try {
       const res = await fetch("/api/check", {
@@ -47,8 +44,6 @@ export default function ScamChecker() {
     }
   }
 
-  const isScam = result && (result.verdict === "likely_scam" || result.verdict === "suspicious");
-
   return (
     <div className="space-y-6">
       {/* Type selector */}
@@ -60,7 +55,7 @@ export default function ScamChecker() {
           {SCAM_TYPES.map((t) => (
             <button
               key={t.value}
-              onClick={() => { setScamType(t.value); setResult(null); setShowPoison(false); setError(null); }}
+              onClick={() => { setScamType(t.value); setResult(null); setError(null); }}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                 scamType === t.value
                   ? "bg-amber-500 border-amber-400 text-gray-900"
@@ -130,26 +125,6 @@ export default function ScamChecker() {
               </ul>
             </div>
           )}
-
-          {/* Poison data button — only show for suspicious/scam results */}
-          {isScam && (
-            <div className="bg-gray-900 border border-amber-900/50 rounded-lg p-4">
-              <h3 className="text-sm font-bold text-amber-400 mb-1">
-                🧨 Give &apos;em the Runaround?
-              </h3>
-              <p className="text-xs text-gray-400 mb-3">
-                Reckon it&apos;s a scammer? We can generate a full fake Aussie identity — completely made-up but dead realistic — to feed back to them. Wastes their time, stuffs up their data, and throws off their whole setup.
-              </p>
-              <button
-                onClick={() => setShowPoison(!showPoison)}
-                className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/50 text-amber-400 text-sm font-semibold rounded-lg transition-all"
-              >
-                {showPoison ? "Hide Poison Data" : "Generate Poison Data 💉"}
-              </button>
-            </div>
-          )}
-
-          {showPoison && <PoisonPanel />}
         </div>
       )}
     </div>

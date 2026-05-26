@@ -1,4 +1,4 @@
-import ScamChecker from "@/components/ScamChecker";
+import TabView from "@/components/TabView";
 
 export default function Home() {
   return (
@@ -20,12 +20,10 @@ export default function Home() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        {/* Main checker */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-          <ScamChecker />
-        </div>
+        {/* Tabbed main content */}
+        <TabView />
 
-        {/* How-to tips */}
+        {/* Common red flags */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
           <h2 className="font-bold text-amber-400 text-sm uppercase tracking-wider">
             Common Scam Red Flags
@@ -56,7 +54,8 @@ export default function Home() {
             <div className="space-y-2 text-sm">
               <p className="font-semibold text-amber-400">Fair dinkum disclaimer, mate.</p>
               <p className="text-gray-400">
-                This tool gives you a best-effort check — it&apos;s not infallible, and scammers are crafty buggers who constantly change their tricks. <strong className="text-gray-200">It does not guarantee 100% detection of every scam.</strong>
+                This tool gives you a best-effort check — it&apos;s not infallible, and scammers are crafty buggers who constantly change their tricks.{" "}
+                <strong className="text-gray-200">It does not guarantee 100% detection of every scam.</strong>
               </p>
               <p className="text-gray-400">
                 If you&apos;ve been targeted, always report it to{" "}
@@ -77,19 +76,6 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Poison data explainer */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-2">
-          <h2 className="font-bold text-amber-400 text-sm uppercase tracking-wider flex items-center gap-2">
-            <span>💉</span> About the Poison Data Feature
-          </h2>
-          <p className="text-sm text-gray-400">
-            When we detect a scam, you can generate a fake-but-realistic Aussie identity — complete name, address, bank details, TFN, Medicare number, and card info. <strong className="text-gray-200">None of it is real.</strong> The idea is to feed this back to scammers, wasting their time and contaminating their stolen data lists.
-          </p>
-          <p className="text-sm text-gray-500">
-            Credit card numbers are Luhn-valid (they pass format checks) but are not attached to any real account. TFNs, Medicare numbers and BSBs follow valid formats but are completely made up. Use it to fight back — but only against confirmed scammers.
-          </p>
         </div>
 
         <p className="text-center text-xs text-gray-700 pb-4">
