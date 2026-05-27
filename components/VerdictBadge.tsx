@@ -1,6 +1,11 @@
 "use client";
 
 import { CheckResult } from "@/lib/scamDetector";
+import { safeDisplayUrl } from "@/lib/urlSanitizer";
+
+function defang(text: string): string {
+  return text.replace(/https?:\/\/[^\s"'>]+/gi, (u) => safeDisplayUrl(u));
+}
 
 const VERDICTS = {
   safe: {
@@ -73,7 +78,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
       </div>
 
       <p className="text-sm text-gray-300 border-t border-gray-700 pt-3">
-        {result.details}
+        {defang(result.details)}
       </p>
     </div>
   );

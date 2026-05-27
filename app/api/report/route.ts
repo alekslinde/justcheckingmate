@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardSubmission } from "@/lib/submissionGuard";
 import { generateReportId, storeReport, getStats } from "@/lib/reportStore";
+import { stripTrackingParams } from "@/lib/urlSanitizer";
 
 function getClientIp(req: NextRequest): string {
   // x-forwarded-for can contain a comma-separated list; take the first entry.
@@ -23,10 +24,18 @@ export async function POST(req: NextRequest) {
   }
 
   const rawContent = String(body.content ?? "");
+  const type = String(body.type ?? "");
+
+  // For URL/QR reports strip tracking parameters before storing — keeping them
+  // would let the scammer correlate which of their campaigns got reported.
+  const safeContent =
+    (type === "url" || type === "qr")
+      ? stripTrackingParams(rawContent)
+      : rawContent;
 
   const guardResult = guardSubmission({
-    type: String(body.type ?? ""),
-    content: rawContent,
+    type,
+    content: safeContent,
     description: String(body.description ?? "").slice(0, 1000),
     hp: String(body.hp ?? ""),
     loadedAt: Number(body.loadedAt ?? 0),
@@ -46,8 +55,8 @@ export async function POST(req: NextRequest) {
   storeReport(
     {
       id: reportId,
-      type: String(body.type ?? ""),
-      content: rawContent.slice(0, 2000),
+      type,
+      content: safeContent.slice(0, 2000),
       description: String(body.description ?? "").slice(0, 1000),
       contact: String(body.contact ?? "").slice(0, 200),
       submittedAt: Date.now(),

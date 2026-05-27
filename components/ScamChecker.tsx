@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckResult, ScamType } from "@/lib/scamDetector";
+import { safeDisplayUrl } from "@/lib/urlSanitizer";
 import VerdictBadge from "./VerdictBadge";
 
 const SCAM_TYPES: { value: ScamType; label: string; placeholder: string; icon: string }[] = [
@@ -12,6 +13,12 @@ const SCAM_TYPES: { value: ScamType; label: string; placeholder: string; icon: s
   { value: "qr",     label: "QR Code Link",  icon: "📷", placeholder: "Paste the URL your QR code points to..." },
   { value: "custom", label: "Something Else",icon: "🤔", placeholder: "Describe it or paste it in — we'll do our best, mate..." },
 ];
+
+// Replace any http(s) URLs embedded in flag strings with defanged versions
+// so they can never become live links or trigger browser DNS prefetch.
+function defangFlagText(text: string): string {
+  return text.replace(/https?:\/\/[^\s"'>]+/gi, (url) => safeDisplayUrl(url));
+}
 
 export default function ScamChecker() {
   const [scamType, setScamType] = useState<ScamType>("url");
@@ -119,7 +126,9 @@ export default function ScamChecker() {
                 {result.flags.map((flag, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
                     <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
-                    <span>{flag}</span>
+                    {/* Defang any URLs embedded in flag text so they're never
+                        rendered as live links and won't trigger DNS prefetch */}
+                    <span>{defangFlagText(flag)}</span>
                   </li>
                 ))}
               </ul>
