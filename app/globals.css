@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #1c0f07;
+  --foreground: #f5e6d3;
 }
 
 @theme inline {
@@ -10,17 +10,43 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Outback warm palette — replaces the default Tailwind gray scale */
+  --color-gray-50:  #fdf6ee;
+  --color-gray-100: #f5e6d3;
+  --color-gray-200: #e8c9a8;
+  --color-gray-300: #d4b080;
+  --color-gray-400: #b08860;
+  --color-gray-500: #8a6248;
+  --color-gray-600: #6b4830;
+  --color-gray-700: #503520;
+  --color-gray-800: #3d2815;
+  --color-gray-900: #2e1a0e;
+  --color-gray-950: #1c0f07;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* WCAG 2.4.11/2.4.12 — 2px amber focus ring on all interactive elements */
+:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Visually hidden but announced to screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, reportId });
   }
 
-  storeReport(
+  await storeReport(
     {
       id: reportId,
       type,
@@ -69,5 +69,6 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json(getStats());
+  const { reports } = await getStats();
+  return NextResponse.json({ totalReports: reports });
 }

@@ -1,8 +1,10 @@
-// In-memory store — swap the storeReport/getStats functions for DB calls in production.
-// The guard logic (rate limiting, dedup) is intentionally kept in-memory so it's fast
-// and doesn't require a round-trip, and because its state doesn't need to survive restarts.
+// Rate limiting and dedup are intentionally in-memory — they don't need to
+// survive restarts and keeping them out of the DB makes them fast and
+// impossible for scammers to probe via the API.
 
 import { randomBytes } from "crypto";
+import { scrubPii } from "./piiScrubber";
+import { getDb } from "./db";
 
 export interface Report {
   id: string;
@@ -14,16 +16,10 @@ export interface Report {
   ip: string;
 }
 
-// Seed a plausible starting count so stats aren't always 0 on cold start
-let legitimateCount = 847 + Math.floor(Math.random() * 50);
-const legitimateReports: Report[] = [];
-const suspectReports: Report[] = [];
+// ── Rate limiter ──────────────────────────────────────────────────────────────
 
-// ── Rate limiter ─────────────────────────────────────────────────────────────
-
-const RATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const RATE_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT = 4;
-
 const rateLimiter = new Map<string, number[]>();
 
 function cleanRateLimiter() {
@@ -46,8 +42,6 @@ export function checkAndRecordRateLimit(ip: string): boolean {
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
 
-// Keep a rolling window of recently seen content fingerprints.
-// Cap at 5000 entries so memory doesn't grow forever.
 const MAX_SEEN = 5000;
 const seenContent: string[] = [];
 
@@ -65,17 +59,67 @@ export function generateReportId(): string {
   return "RPT-" + randomBytes(4).toString("hex").toUpperCase();
 }
 
-export function storeReport(report: Report, suspect: boolean) {
-  if (suspect) {
-    suspectReports.push(report);
-  } else {
-    legitimateReports.push(report);
-    legitimateCount++;
+export async function storeReport(report: Report, suspect: boolean): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `INSERT INTO reports (id, type, content, description, contact, submitted_at, suspect)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      report.id,
+      report.type,
+      report.content,
+      report.description,
+      report.contact,
+      report.submittedAt,
+      suspect ? 1 : 0,
+    ],
+  });
+  if (!suspect) {
+    await db.execute({
+      sql: `UPDATE counters SET value = value + 1 WHERE name = 'reports'`,
+      args: [],
+    });
   }
 }
 
-export function getStats() {
-  return {
-    totalReports: legitimateCount,
-  };
+export async function incrementCheckCount(): Promise<void> {
+  const db = await getDb();
+  await db.execute({
+    sql: `UPDATE counters SET value = value + 1 WHERE name = 'checks'`,
+    args: [],
+  });
+}
+
+export async function getStats(): Promise<{ checks: number; reports: number }> {
+  const db = await getDb();
+  const result = await db.execute(`SELECT name, value FROM counters`);
+  const map = Object.fromEntries(result.rows.map((r) => [r.name as string, Number(r.value)]));
+  return { checks: map.checks ?? 0, reports: map.reports ?? 0 };
+}
+
+// ── Public feed ───────────────────────────────────────────────────────────────
+
+export interface PublicReport {
+  id: string;
+  type: string;
+  content: string;
+  description: string;
+  submittedAt: number;
+}
+
+export async function getPublicReports(limit = 50): Promise<PublicReport[]> {
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT id, type, content, description, submitted_at
+          FROM reports WHERE suspect = 0
+          ORDER BY submitted_at DESC LIMIT ?`,
+    args: [limit],
+  });
+  return result.rows.map((r) => ({
+    id: r.id as string,
+    type: r.type as string,
+    content: r.content as string,
+    description: scrubPii(r.description as string),
+    submittedAt: Number(r.submitted_at),
+  }));
 }

@@ -75,3 +75,9 @@ export function normaliseForAnalysis(raw: string): string {
 export function safeDisplayUrl(raw: string): string {
   return defang(stripTrackingParams(raw));
 }
+
+// ── Defang URLs embedded in free text ────────────────────────────────────────
+// Finds all http/https URLs in a block of text and applies safeDisplayUrl to each.
+export function defangText(text: string): string {
+  return text.replace(/https?:\/\/[^\s"'>]+/gi, (u) => safeDisplayUrl(u));
+}

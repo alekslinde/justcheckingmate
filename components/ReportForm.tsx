@@ -28,15 +28,15 @@ export default function ReportForm() {
   const [content, setContent] = useState("");
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState("");
-  const [hp, setHp] = useState(""); // honeypot — never set by real users
+  const [hp, setHp] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [reportId, setReportId] = useState<string | null>(null);
   const [totalReports, setTotalReports] = useState<number | null>(null);
 
-  // Record when the form was rendered — used server-side to detect bots (too-fast submit)
-  const loadedAt = useRef(Date.now());
+  const loadedAt = useRef(0);
 
   useEffect(() => {
+    loadedAt.current = Date.now();
     fetch("/api/report")
       .then((r) => r.json())
       .then((d) => setTotalReports(d.totalReports))
@@ -58,7 +58,7 @@ export default function ReportForm() {
           content,
           description,
           contact,
-          hp,            // honeypot value
+          hp,
           loadedAt: loadedAt.current,
         }),
       });
@@ -88,19 +88,19 @@ export default function ReportForm() {
   if (status === "success") {
     return (
       <div className="space-y-5 text-center py-4">
-        <div className="text-5xl">🦘</div>
+        <div className="text-5xl" aria-hidden="true">🦘</div>
         <div>
           <h3 className="font-bold text-green-400 text-lg mb-1">Ripper — thanks for reporting it!</h3>
-          <p className="text-gray-400 text-sm">
+          <p className="text-gray-300 text-sm">
             Your report has been logged. Every submission helps protect other Australians from getting done over.
           </p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 inline-block mx-auto">
-          <div className="text-xs text-gray-500 mb-0.5">Report reference</div>
+          <div className="text-xs text-gray-400 mb-0.5">Report reference</div>
           <div className="font-mono text-amber-400 font-bold">{reportId}</div>
         </div>
         {totalReports !== null && (
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-gray-400">
             {totalReports.toLocaleString()} reports submitted by Australians like you
           </p>
         )}
@@ -110,10 +110,23 @@ export default function ReportForm() {
         >
           Report another one
         </button>
-        <div className="text-xs text-gray-600 pt-2 border-t border-gray-800">
+        <div className="text-xs text-gray-400 pt-2 border-t border-gray-800">
           For immediate help, report to{" "}
-          <span className="text-amber-700">Scamwatch (scamwatch.gov.au)</span> or call{" "}
-          <span className="text-amber-700">IDCARE on 1800 595 160</span>
+          <a
+            href="https://www.scamwatch.gov.au"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-amber-400 underline underline-offset-2 hover:text-amber-300"
+          >
+            Scamwatch (scamwatch.gov.au)
+          </a>{" "}
+          or call{" "}
+          <a
+            href="tel:1800595160"
+            className="text-amber-400 underline underline-offset-2 hover:text-amber-300"
+          >
+            IDCARE on 1800 595 160
+          </a>
         </div>
       </div>
     );
@@ -122,8 +135,7 @@ export default function ReportForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-5" noValidate>
 
-      {/* Honeypot — visually hidden, never shown to real users.
-          Positioned off-screen rather than display:none so some bots don't skip it. */}
+      {/* Honeypot — off-screen, never shown to real users */}
       <div style={{ position: "absolute", left: "-9999px", top: "-9999px", opacity: 0 }} aria-hidden="true">
         <label htmlFor="website">Website (leave blank)</label>
         <input
@@ -139,91 +151,110 @@ export default function ReportForm() {
 
       {/* Stats badge */}
       {totalReports !== null && (
-        <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-900/50 rounded-lg px-3 py-2">
-          <span className="text-amber-600">📊</span>
+        <div className="flex items-center gap-2 text-xs text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
+          <span className="text-amber-400" aria-hidden="true">📊</span>
           <span>
-            <strong className="text-gray-400">{totalReports.toLocaleString()}</strong> scams reported by Australians so far
+            <strong className="text-gray-100">{totalReports.toLocaleString()}</strong> scams reported by Australians so far
           </span>
         </div>
       )}
 
-      {/* Type */}
-      <div>
-        <label className="block text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
+      {/* Required field note */}
+      <p className="text-xs text-gray-400">
+        Fields marked <span aria-hidden="true" className="text-red-400">*</span>
+        <span className="sr-only">with an asterisk</span> are required.
+      </p>
+
+      {/* Type — radio group */}
+      <fieldset>
+        <legend className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
           What are you reporting?
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        </legend>
+        <div role="radiogroup" aria-labelledby="report-type-legend" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {REPORT_TYPES.map((t) => (
             <button
               type="button"
               key={t.value}
+              role="radio"
+              aria-checked={type === t.value}
               onClick={() => setType(t.value)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
                 type === t.value
                   ? "bg-amber-500 border-amber-400 text-gray-900 font-semibold"
-                  : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-200"
+                  : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500 hover:text-gray-100"
               }`}
             >
-              <span>{t.icon}</span>
+              <span aria-hidden="true">{t.icon}</span>
               <span>{t.label}</span>
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* Scam content */}
       <div>
-        <label className="block text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
-          The scam content <span className="text-red-500">*</span>
+        <label htmlFor="report-content" className="block text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
+          The scam content{" "}
+          <span aria-hidden="true" className="text-red-400">*</span>
         </label>
         <textarea
+          id="report-content"
           required
+          aria-required="true"
+          aria-describedby="content-count"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder={PLACEHOLDERS[type]}
           rows={type === "url" || type === "phone" ? 2 : 4}
           maxLength={2000}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-y text-sm font-mono"
+          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-y text-sm font-mono"
         />
-        <div className="text-right text-xs text-gray-700 mt-0.5">{content.length}/2000</div>
+        <div id="content-count" aria-live="polite" className="text-right text-xs text-gray-400 mt-0.5">
+          {content.length}/2000
+        </div>
       </div>
 
       {/* Description */}
       <div>
-        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-          What happened? <span className="text-gray-600">(optional but helpful)</span>
+        <label htmlFor="report-description" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+          What happened?{" "}
+          <span className="text-gray-400 normal-case font-normal">(optional but helpful)</span>
         </label>
         <textarea
+          id="report-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="E.g. Got a text claiming to be from the ATO asking me to verify my TFN. Almost fell for it..."
           rows={3}
           maxLength={1000}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 resize-y text-sm"
+          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 resize-y text-sm"
         />
       </div>
 
       {/* Contact */}
       <div>
-        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-          Your email <span className="text-gray-600">(optional — only for follow-up)</span>
+        <label htmlFor="report-contact" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+          Your email{" "}
+          <span className="text-gray-400 normal-case font-normal">(optional — only for follow-up)</span>
         </label>
         <input
+          id="report-contact"
           type="email"
+          aria-describedby="contact-hint"
           value={contact}
           onChange={(e) => setContact(e.target.value)}
           placeholder="you@example.com.au"
           maxLength={200}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-600 focus:ring-1 focus:ring-gray-600 text-sm"
+          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-sm"
         />
-        <p className="mt-1 text-xs text-gray-600">
+        <p id="contact-hint" className="mt-1 text-xs text-gray-400">
           Never shared. Only used if we need to follow up on your report.
         </p>
       </div>
 
       {/* Error */}
       {status === "error" && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-red-400 text-sm">
+        <div role="alert" className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-red-300 text-sm">
           Strewth, something went wrong. Give it another crack.
         </div>
       )}
@@ -232,15 +263,22 @@ export default function ReportForm() {
       <button
         type="submit"
         disabled={!content.trim() || status === "submitting"}
-        className="w-full py-3 px-6 bg-amber-500 hover:bg-amber-400 disabled:bg-gray-800 disabled:text-gray-600 text-gray-900 font-bold rounded-lg transition-all text-sm uppercase tracking-wide"
+        aria-busy={status === "submitting"}
+        className="w-full py-3 px-6 bg-amber-500 hover:bg-amber-400 disabled:bg-gray-800 disabled:text-gray-400 text-gray-900 font-bold rounded-lg transition-all text-sm uppercase tracking-wide"
       >
         {status === "submitting" ? "Lodging your report..." : "Report This Scam 🚨"}
       </button>
 
-      <p className="text-xs text-gray-700 text-center">
-        For urgent matters, contact Scamwatch, your bank, or the AFP directly.
-        This tool is not a substitute for official reporting channels.
-      </p>
+      <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-3 space-y-1.5">
+        <p className="text-xs text-amber-400 font-semibold text-center">
+          For urgent matters, contact Scamwatch, your bank, or the{" "}
+          <abbr title="Australian Federal Police">AFP</abbr>{" "}
+          directly — this tool is not a substitute for official reporting channels.
+        </p>
+        <p className="text-xs text-gray-400 text-center">
+          Your report is valuable. Every submission helps raise awareness and protects others from the same scam.
+        </p>
+      </div>
     </form>
   );
 }
