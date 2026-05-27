@@ -33,9 +33,10 @@ export default function ReportForm() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [totalReports, setTotalReports] = useState<number | null>(null);
 
-  const loadedAt = useRef(Date.now());
+  const loadedAt = useRef(0);
 
   useEffect(() => {
+    loadedAt.current = Date.now();
     fetch("/api/report")
       .then((r) => r.json())
       .then((d) => setTotalReports(d.totalReports))
