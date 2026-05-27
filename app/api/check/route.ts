@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkUrl, checkSms, checkEmail, checkPhone, checkCustom, ScamType } from "@/lib/scamDetector";
 import { normaliseForAnalysis } from "@/lib/urlSanitizer";
+import { incrementCheckCount } from "@/lib/reportStore";
 
 // IMPORTANT: This route performs ONLY string analysis on the submitted content.
 // It must NEVER make an outbound HTTP request, DNS lookup, or socket connection
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unknown scam type" }, { status: 400 });
     }
 
+    incrementCheckCount().catch(() => {});
     return NextResponse.json(result);
   } catch {
     return NextResponse.json({ error: "Something went sideways on our end" }, { status: 500 });
