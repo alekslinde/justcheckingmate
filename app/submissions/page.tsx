@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PublicReport } from "@/lib/reportStore";
 import { timeAgo, truncate } from "@/lib/formatters";
@@ -25,41 +25,38 @@ const PERIOD_OPTIONS = [
 const PAGE_SIZE = 25;
 const SORT_KEY  = "submissions_sort";
 
+function savedSort(): "desc" | "asc" {
+  if (typeof window === "undefined") return "desc";
+  const v = localStorage.getItem(SORT_KEY);
+  return v === "asc" || v === "desc" ? v : "desc";
+}
+
 function pageNumbers(current: number, total: number): (number | "…")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages: (number | "…")[] = [1];
-  if (current > 3)           pages.push("…");
+  if (current > 3)          pages.push("…");
   for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) pages.push(p);
-  if (current < total - 2)   pages.push("…");
+  if (current < total - 2)  pages.push("…");
   pages.push(total);
   return pages;
 }
 
 export default function SubmissionsPage() {
-  const [reports, setReports]     = useState<PublicReport[]>([]);
-  const [total, setTotal]         = useState(0);
-  const [loading, setLoading]     = useState(true);
-  const [type, setType]           = useState("all");
-  const [sort, setSort]           = useState<"desc" | "asc">("desc");
+  const [reports, setReports]       = useState<PublicReport[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [loading, setLoading]       = useState(true);
+  const [type, setType]             = useState("all");
+  const [sort, setSort]             = useState<"desc" | "asc">(savedSort);
   const [periodDays, setPeriodDays] = useState("0");
-  const [page, setPage]           = useState(1);
+  const [page, setPage]             = useState(1);
 
-  // Restore saved sort preference on mount
+  // Persist sort whenever it changes
+  useEffect(() => { localStorage.setItem(SORT_KEY, sort); }, [sort]);
+
+  // Fetch whenever any filter or page changes
   useEffect(() => {
-    const saved = localStorage.getItem(SORT_KEY);
-    if (saved === "asc" || saved === "desc") setSort(saved);
-  }, []);
+    let cancelled = false;
 
-  // Persist sort preference whenever it changes
-  useEffect(() => {
-    localStorage.setItem(SORT_KEY, sort);
-  }, [sort]);
-
-  // Reset to page 1 when filters change
-  useEffect(() => { setPage(1); }, [type, sort, periodDays]);
-
-  const fetchReports = useCallback(async () => {
-    setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     const since  = periodDays !== "0"
       ? Date.now() - parseInt(periodDays, 10) * 24 * 60 * 60 * 1000
@@ -69,22 +66,27 @@ export default function SubmissionsPage() {
     if (type !== "all") params.set("type", type);
     if (since)          params.set("since", String(since));
 
-    try {
-      const data = await fetch(`/api/reports?${params}`).then((r) => r.json());
-      setReports(data.reports ?? []);
-      setTotal(data.total ?? 0);
-    } catch {
-      // leave previous results visible on error
-    } finally {
-      setLoading(false);
-    }
-  }, [type, sort, periodDays, page]);
+    fetch(`/api/reports?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setReports(data.reports ?? []);
+        setTotal(data.total ?? 0);
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
 
-  useEffect(() => { fetchReports(); }, [fetchReports]);
+    return () => { cancelled = true; };
+  }, [type, sort, periodDays, page]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // All filter changes set loading and reset page in the same handler
+  function changeType(val: string)        { setLoading(true); setType(val); setPage(1); }
+  function changeSort(val: "asc"|"desc") { setLoading(true); setSort(val); setPage(1); }
+  function changePeriod(val: string)      { setLoading(true); setPeriodDays(val); setPage(1); }
   function goTo(p: number) {
+    setLoading(true);
     setPage(Math.max(1, Math.min(p, totalPages)));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -116,49 +118,47 @@ export default function SubmissionsPage() {
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
         {/* Filters */}
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex rounded-lg border border-gray-700 overflow-hidden text-sm">
-              <button
-                onClick={() => setSort("desc")}
-                className={`px-3 py-1.5 transition-colors ${sort === "desc" ? "bg-gray-700 text-gray-100" : "bg-gray-900 text-gray-400 hover:text-gray-200"}`}
-              >
-                Newest first
-              </button>
-              <button
-                onClick={() => setSort("asc")}
-                className={`px-3 py-1.5 border-l border-gray-700 transition-colors ${sort === "asc" ? "bg-gray-700 text-gray-100" : "bg-gray-900 text-gray-400 hover:text-gray-200"}`}
-              >
-                Oldest first
-              </button>
-            </div>
-
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500"
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex rounded-lg border border-gray-700 overflow-hidden text-sm">
+            <button
+              onClick={() => changeSort("desc")}
+              className={`px-3 py-1.5 transition-colors ${sort === "desc" ? "bg-gray-700 text-gray-100" : "bg-gray-900 text-gray-400 hover:text-gray-200"}`}
             >
-              {TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
-              ))}
-            </select>
-
-            <select
-              value={periodDays}
-              onChange={(e) => setPeriodDays(e.target.value)}
-              className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500"
+              Newest first
+            </button>
+            <button
+              onClick={() => changeSort("asc")}
+              className={`px-3 py-1.5 border-l border-gray-700 transition-colors ${sort === "asc" ? "bg-gray-700 text-gray-100" : "bg-gray-900 text-gray-400 hover:text-gray-200"}`}
             >
-              {PERIOD_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-
-            {!loading && total > 0 && (
-              <span className="text-sm text-gray-500 ml-auto">
-                {total.toLocaleString()} {total === 1 ? "report" : "reports"}
-              </span>
-            )}
+              Oldest first
+            </button>
           </div>
+
+          <select
+            value={type}
+            onChange={(e) => changeType(e.target.value)}
+            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500"
+          >
+            {TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
+            ))}
+          </select>
+
+          <select
+            value={periodDays}
+            onChange={(e) => changePeriod(e.target.value)}
+            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500"
+          >
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+
+          {!loading && total > 0 && (
+            <span className="text-sm text-gray-500 ml-auto">
+              {total.toLocaleString()} {total === 1 ? "report" : "reports"}
+            </span>
+          )}
         </div>
 
         {/* Results */}
