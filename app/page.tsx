@@ -1,11 +1,25 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import TabView from "@/components/TabView";
-import LatestReports from "@/components/LatestReports";
 import StatsBar from "@/components/StatsBar";
+import { getPublicReportsCount } from "@/lib/reportStore";
 
-export default function Home() {
+export default async function Home() {
+  const reportCount = await getPublicReportsCount();
+
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
+      {/* Nav */}
+      {reportCount > 0 && (
+        <nav className="border-b border-gray-800 bg-gray-900">
+          <div className="max-w-2xl mx-auto px-4 h-11 flex items-center justify-end">
+            <Link href="/submissions" className="text-sm text-gray-400 hover:text-amber-400 transition-colors">
+              Community submissions
+            </Link>
+          </div>
+        </nav>
+      )}
+
       {/* Hero */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
         <div className="max-w-2xl mx-auto px-4 py-10 text-center">
@@ -26,9 +40,6 @@ export default function Home() {
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Tabbed main content */}
         <TabView />
-
-        {/* Latest submissions */}
-        <LatestReports />
 
         {/* Common red flags */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
@@ -92,10 +103,10 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className="bg-gray-900/60 rounded-lg px-3 py-2 hover:bg-gray-900 transition-colors block"
                   >
-                    <div className="text-xs text-gray-200 font-semibold">
+                    <div className="text-sm text-gray-200 font-semibold">
                       {abbrTitle ? <abbr title={abbrTitle}>{name}</abbr> : name}
                     </div>
-                    <div className="text-xs text-amber-400 font-mono">{site}</div>
+                    <div className="text-sm text-amber-400 font-mono">{site}</div>
                   </a>
                 ))}
               </div>
@@ -103,16 +114,19 @@ export default function Home() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-gray-400 pb-4">
-          Built for Australians{" "}<span aria-hidden="true">🦘</span>{" "} by 
+        <p className="text-center text-sm text-gray-400 pb-4">
+          Built for Australians
+          {" "}<span aria-hidden="true">🦘</span>{" "} 
+          by {" "}
           <a
-            href="https://alekslinde.github.io/portfolio/"
+            href="https://alekslinde.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-amber-400 font-semibold underline underline-offset-2 hover:text-amber-300"
           >
             Aleks Linde
-          </a>{" "}
+          </a>
+          {" "}
           Always exercise caution with unexpected messages
         </p>
       </div>

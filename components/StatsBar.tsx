@@ -26,7 +26,7 @@ export default function StatsBar() {
 
   if (!hasActivity) {
     return (
-      <p className="text-center text-xs text-gray-400 pb-1">
+      <p className="text-center text-sm text-gray-400 pb-1">
         New tool — give it a go below
       </p>
     );

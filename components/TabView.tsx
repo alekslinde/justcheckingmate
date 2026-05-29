@@ -60,7 +60,7 @@ export default function TabView() {
             aria-selected={active === t.id}
             aria-controls={`panel-${t.id}`}
             onClick={() => setActive(t.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-3.5 text-xs sm:text-sm font-semibold transition-all border-b-2 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-3.5 text-sm font-semibold transition-all border-b-2 ${
               active === t.id
                 ? t.activeClass
                 : "border-transparent text-gray-300 hover:text-gray-100 hover:bg-gray-800/50"
@@ -74,7 +74,7 @@ export default function TabView() {
       </div>
 
       {/* Tab description */}
-      <div className={`px-6 py-2.5 border-b border-gray-800 text-xs no-underline ${tab.descClass}`}>
+      <div className={`px-6 py-2.5 border-b border-gray-800 text-sm no-underline ${tab.descClass}`}>
         {tab.description}
       </div>
 

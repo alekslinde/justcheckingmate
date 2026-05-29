@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
 
 const REPORT_TYPES: { value: ScamType; label: string; icon: string }[] = [
@@ -96,21 +97,32 @@ export default function ReportForm() {
           </p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 inline-block mx-auto">
-          <div className="text-xs text-gray-400 mb-0.5">Report reference</div>
+          <div className="text-sm text-gray-400 mb-0.5">Report reference</div>
           <div className="font-mono text-amber-400 font-bold">{reportId}</div>
         </div>
         {totalReports !== null && (
-          <p className="text-xs text-gray-400">
-            {totalReports.toLocaleString()} reports submitted by Australians like you
+          <p className="text-sm text-gray-400">
+            {totalReports.toLocaleString()} reports submitted by Australians like you.{" "}
+            <Link href="/submissions" className="text-amber-400 hover:text-amber-300 underline underline-offset-2">
+              View all →
+            </Link>
           </p>
         )}
-        <button
-          onClick={reset}
-          className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-all"
-        >
-          Report another one
-        </button>
-        <div className="text-xs text-gray-400 pt-2 border-t border-gray-800">
+        <div className="flex flex-wrap justify-center gap-3">
+          <button
+            onClick={reset}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-all"
+          >
+            Report another one
+          </button>
+          <Link
+            href="/submissions"
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-amber-400 text-sm rounded-lg transition-all"
+          >
+            View community submissions →
+          </Link>
+        </div>
+        <div className="text-sm text-gray-400 pt-2 border-t border-gray-800">
           For immediate help, report to{" "}
           <a
             href="https://www.scamwatch.gov.au"
@@ -151,7 +163,7 @@ export default function ReportForm() {
 
       {/* Stats badge */}
       {totalReports !== null && (
-        <div className="flex items-center gap-2 text-xs text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
           <span className="text-amber-400" aria-hidden="true">📊</span>
           <span>
             <strong className="text-gray-100">{totalReports.toLocaleString()}</strong> scams reported by Australians so far
@@ -160,14 +172,14 @@ export default function ReportForm() {
       )}
 
       {/* Required field note */}
-      <p className="text-xs text-gray-400">
+      <p className="text-sm text-gray-400">
         Fields marked <span aria-hidden="true" className="text-red-400">*</span>
         <span className="sr-only">with an asterisk</span> are required.
       </p>
 
       {/* Type — radio group */}
       <fieldset>
-        <legend className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
+        <legend className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-2">
           What are you reporting?
         </legend>
         <div role="radiogroup" aria-labelledby="report-type-legend" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -193,7 +205,7 @@ export default function ReportForm() {
 
       {/* Scam content */}
       <div>
-        <label htmlFor="report-content" className="block text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">
+        <label htmlFor="report-content" className="block text-sm font-semibold text-amber-400 uppercase tracking-wider mb-2">
           The scam content{" "}
           <span aria-hidden="true" className="text-red-400">*</span>
         </label>
@@ -209,14 +221,14 @@ export default function ReportForm() {
           maxLength={2000}
           className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-y text-sm font-mono"
         />
-        <div id="content-count" aria-live="polite" className="text-right text-xs text-gray-400 mt-0.5">
+        <div id="content-count" aria-live="polite" className="text-right text-sm text-gray-400 mt-0.5">
           {content.length}/2000
         </div>
       </div>
 
       {/* Description */}
       <div>
-        <label htmlFor="report-description" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+        <label htmlFor="report-description" className="block text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">
           What happened?{" "}
           <span className="text-gray-400 normal-case font-normal">(optional but helpful)</span>
         </label>
@@ -233,7 +245,7 @@ export default function ReportForm() {
 
       {/* Contact */}
       <div>
-        <label htmlFor="report-contact" className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
+        <label htmlFor="report-contact" className="block text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">
           Your email{" "}
           <span className="text-gray-400 normal-case font-normal">(optional — only for follow-up)</span>
         </label>
@@ -247,7 +259,7 @@ export default function ReportForm() {
           maxLength={200}
           className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-sm"
         />
-        <p id="contact-hint" className="mt-1 text-xs text-gray-400">
+        <p id="contact-hint" className="mt-1 text-sm text-gray-400">
           Never shared. Only used if we need to follow up on your report.
         </p>
       </div>
@@ -270,12 +282,12 @@ export default function ReportForm() {
       </button>
 
       <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-3 space-y-1.5">
-        <p className="text-xs text-amber-400 font-semibold text-center">
+        <p className="text-sm text-amber-400 font-semibold text-center">
           For urgent matters, contact Scamwatch, your bank, or the{" "}
           <abbr title="Australian Federal Police">AFP</abbr>{" "}
           directly — this tool is not a substitute for official reporting channels.
         </p>
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-sm text-gray-400 text-center">
           Your report is valuable. Every submission helps raise awareness and protects others from the same scam.
         </p>
       </div>
