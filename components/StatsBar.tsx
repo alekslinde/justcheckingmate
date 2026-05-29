@@ -24,25 +24,20 @@ export default function StatsBar() {
   const { checks, reports } = stats;
   const hasActivity = checks > 0 || reports > 0;
 
-  if (!hasActivity) {
+  if (hasActivity) {
     return (
-      <p className="text-center text-sm text-gray-400 pb-1">
-        New tool — give it a go below
-      </p>
+      <div className="flex items-center justify-center gap-6 text-sm text-gray-300 pb-1">
+        <span>
+          <span className="text-emerald-400 font-bold">{fmt(checks)}</span>
+          {" "}scam{checks === 1 ? "" : "s"} checked
+        </span>
+        <span className="text-gray-600" aria-hidden="true">·</span>
+        <span>
+          <span className="text-emerald-400 font-bold">{fmt(reports)}</span>
+          {" "}report{reports === 1 ? "" : "s"} submitted
+        </span>
+      </div>
     );
   }
 
-  return (
-    <div className="flex items-center justify-center gap-6 text-sm text-gray-300 pb-1">
-      <span>
-        <span className="text-amber-400 font-bold">{fmt(checks)}</span>
-        {" "}scam{checks === 1 ? "" : "s"} checked
-      </span>
-      <span className="text-gray-600" aria-hidden="true">·</span>
-      <span>
-        <span className="text-amber-400 font-bold">{fmt(reports)}</span>
-        {" "}report{reports === 1 ? "" : "s"} submitted
-      </span>
-    </div>
-  );
 }

@@ -19,8 +19,8 @@ const TABS: {
     label: "Check a Scam",
     icon: "🔍",
     description: "Got something suspicious? Chuck it in here.",
-    activeClass: "border-amber-500 text-amber-400 bg-amber-950/20",
-    descClass: "text-amber-400 bg-amber-950/10",
+    activeClass: "border-emerald-500 text-emerald-400 bg-emerald-950/20",
+    descClass: "text-emerald-400 bg-emerald-950/10",
   },
   {
     id: "report",

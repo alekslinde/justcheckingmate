@@ -107,15 +107,15 @@ export default function PoisonPanel() {
   }
 
   return (
-    <div className="bg-gray-950 border border-amber-800/40 rounded-xl overflow-hidden">
+    <div className="bg-gray-950 border border-emerald-800/40 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="bg-amber-900/20 border-b border-amber-800/40 px-5 py-4">
+      <div className="bg-emerald-900/20 border-b border-emerald-800/40 px-5 py-4">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xl" aria-hidden="true">💉</span>
-          <h2 className="font-bold text-amber-400 text-base">Poison Data Generator</h2>
+          <h2 className="font-bold text-emerald-400 text-base">Poison Data Generator</h2>
         </div>
         <p className="text-sm text-gray-300">
-          All of this is <span className="text-amber-400 font-semibold">100% fabricated</span>. Names, numbers, cards — completely made up but formatted to look real. Feed it back to the scammers to waste their time and corrupt their stolen data.
+          All of this is <span className="text-emerald-400 font-semibold">100% fabricated</span>. Names, numbers, cards — completely made up but formatted to look real. Feed it back to the scammers to waste their time and corrupt their stolen data.
         </p>
       </div>
 
@@ -125,14 +125,14 @@ export default function PoisonPanel() {
             onClick={fetchPoison}
             disabled={loading}
             aria-busy={loading}
-            className="w-full py-3 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-600/50 text-amber-400 font-bold rounded-lg transition-all"
+            className="w-full py-3 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/50 text-emerald-400 font-bold rounded-lg transition-all"
           >
             {loading ? "Cooking up a fake identity..." : <><span aria-hidden="true">🎲</span>{" "}Generate a Fake Aussie Profile</>}
           </button>
         ) : (
           <>
             {/* Note */}
-            <div className="bg-amber-950/40 border border-amber-800/30 rounded-lg px-4 py-2 text-sm text-amber-300 italic">
+            <div className="bg-emerald-950/40 border border-emerald-800/30 rounded-lg px-4 py-2 text-sm text-emerald-300 italic">
               &ldquo;{profile.notes}&rdquo;
             </div>
 
@@ -164,7 +164,7 @@ export default function PoisonPanel() {
             <div className="grid sm:grid-cols-2 gap-4">
               {FIELD_GROUPS.map((group) => (
                 <div key={group.title} className="space-y-2">
-                  <h4 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">{group.title}</h4>
+                  <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">{group.title}</h4>
                   {group.fields.map((field) => {
                     const value = String(profile[field.key]);
                     const hidden = field.sensitive && !revealSensitive;
