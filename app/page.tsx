@@ -2,18 +2,23 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import TabView from "@/components/TabView";
 import StatsBar from "@/components/StatsBar";
+import { getPublicReportsCount } from "@/lib/reportStore";
 
-export default function Home() {
+export default async function Home() {
+  const reportCount = await getPublicReportsCount();
+
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
       {/* Nav */}
-      <nav className="border-b border-gray-800 bg-gray-900">
-        <div className="max-w-2xl mx-auto px-4 h-11 flex items-center justify-end">
-          <Link href="/submissions" className="text-sm text-gray-400 hover:text-amber-400 transition-colors">
-            Community submissions
-          </Link>
-        </div>
-      </nav>
+      {reportCount > 0 && (
+        <nav className="border-b border-gray-800 bg-gray-900">
+          <div className="max-w-2xl mx-auto px-4 h-11 flex items-center justify-end">
+            <Link href="/submissions" className="text-sm text-gray-400 hover:text-amber-400 transition-colors">
+              Community submissions
+            </Link>
+          </div>
+        </nav>
+      )}
 
       {/* Hero */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
