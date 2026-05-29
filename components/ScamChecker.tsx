@@ -4,18 +4,19 @@ import { useState, useRef } from "react";
 import { CheckResult, ScamType } from "@/lib/scamDetector";
 import { defangText } from "@/lib/urlSanitizer";
 import VerdictBadge from "./VerdictBadge";
+import { useLang } from "@/lib/lang";
 
-const SCAM_TYPES: { value: ScamType; label: string; placeholder: string; icon: string }[] = [
-  { value: "url",    label: "Dodgy Link",    icon: "🔗", placeholder: "Paste the sus URL in here, e.g. https://my-g0v-ato-login.tk/verify" },
-  { value: "sms",    label: "Suss Text/SMS", icon: "📱", placeholder: "Paste the whole text message in here..." },
-  { value: "email",  label: "Phishing Email",icon: "📧", placeholder: "Paste the email content (From: ..., Subject: ..., Body: ...)..." },
-  { value: "phone",  label: "Scam Number",   icon: "📞", placeholder: "Enter the phone number, e.g. +61 412 345 678 or +1 202 555 0123" },
-  { value: "qr",     label: "QR Code Link",  icon: "📷", placeholder: "Paste the URL your QR code points to..." },
-  { value: "custom", label: "Something Else",icon: "🤔", placeholder: "Describe it or paste it in — we'll do our best, mate..." },
+const SCAM_TYPES: { value: ScamType; label: string; normal: string; aussie: string; icon: string }[] = [
+  { value: "url",    label: "Suspicious Link",  normal: "Paste the URL you want to check, e.g. https://ato-refund.xyz/verify", aussie: "Paste the sus URL in here, e.g. https://my-g0v-ato-login.tk/verify", icon: "🔗" },
+  { value: "sms",    label: "Suspicious SMS",   normal: "Paste the full text message you received...", aussie: "Paste the whole text message in here...", icon: "📱" },
+  { value: "email",  label: "Suspicious Email", normal: "Paste the email content (From: ..., Subject: ..., Body: ...)...", aussie: "Paste the email content (From: ..., Subject: ..., Body: ...)...", icon: "📧" },
+  { value: "phone",  label: "Suspicious Number",normal: "Enter the phone number, e.g. +61 412 345 678", aussie: "Enter the phone number, e.g. +61 412 345 678 or +1 202 555 0123", icon: "📞" },
+  { value: "qr",     label: "QR Code",          normal: "Paste the URL your QR code points to...", aussie: "Paste the URL your QR code points to...", icon: "📷" },
+  { value: "custom", label: "Something Else",   normal: "Describe what you received and we'll do our best to analyse it...", aussie: "Describe it or paste it in — we'll do our best, mate...", icon: "🤔" },
 ];
 
-
 export default function ScamChecker() {
+  const { t } = useLang();
   const [scamType, setScamType] = useState<ScamType>("url");
   const [content, setContent] = useState("");
   const [result, setResult] = useState<CheckResult | null>(null);
@@ -29,7 +30,7 @@ export default function ScamChecker() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedType = SCAM_TYPES.find((t) => t.value === scamType)!;
+  const selectedType = SCAM_TYPES.find((s) => s.value === scamType)!;
 
   async function handleQrUpload(file: File) {
     setQrDecodeError(null);
@@ -49,7 +50,10 @@ export default function ScamChecker() {
         setResult(null);
         setError(null);
       } else {
-        setQrDecodeError("Couldn't find a QR code in that image — try a clearer screenshot, mate.");
+        setQrDecodeError(t(
+          "Couldn't detect a QR code in that image — try a clearer screenshot.",
+          "Couldn't find a QR code in that image — try a clearer screenshot, mate."
+        ));
       }
     } catch {
       setQrDecodeError("Couldn't read that file. Make sure it's a PNG, JPG, or WebP image.");
@@ -80,7 +84,10 @@ export default function ScamChecker() {
         setResult(null);
         setError(null);
       } else {
-        setOcrError("Couldn't read any text from that image — try a clearer screenshot, mate.");
+        setOcrError(t(
+          "Couldn't read any text from that image — try a clearer screenshot.",
+          "Couldn't read any text from that image — try a clearer screenshot, mate."
+        ));
       }
     } catch {
       setOcrError("Couldn't process that file. Make sure it's a PNG, JPG, or WebP image.");
@@ -103,11 +110,14 @@ export default function ScamChecker() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: scamType, content }),
       });
-      if (!res.ok) throw new Error("Server said nah");
+      if (!res.ok) throw new Error("Server error");
       const data: CheckResult = await res.json();
       setResult(data);
     } catch {
-      setError("Strewth, something went wrong on our end. Give it another crack.");
+      setError(t(
+        "Something went wrong on our end — please try again.",
+        "Strewth, something went wrong on our end. Give it another crack."
+      ));
     } finally {
       setLoading(false);
     }
@@ -115,23 +125,19 @@ export default function ScamChecker() {
 
   return (
     <div className="space-y-6">
-      {/* Type selector — radio group */}
+      {/* Type selector */}
       <div>
-        <p id="scam-type-label" className="text-sm font-semibold text-amber-400 mb-2 uppercase tracking-wider">
-          What are you checking?
+        <p id="scam-type-label" className="text-sm font-semibold text-emerald-400 mb-2 uppercase tracking-wider">
+          {t("What would you like to check?", "What are you checking?")}
         </p>
-        <div
-          role="radiogroup"
-          aria-labelledby="scam-type-label"
-          className="grid grid-cols-2 sm:grid-cols-3 gap-2"
-        >
-          {SCAM_TYPES.map((t) => (
+        <div role="radiogroup" aria-labelledby="scam-type-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {SCAM_TYPES.map((s) => (
             <button
-              key={t.value}
+              key={s.value}
               role="radio"
-              aria-checked={scamType === t.value}
+              aria-checked={scamType === s.value}
               onClick={() => {
-                setScamType(t.value);
+                setScamType(s.value);
                 setResult(null);
                 setError(null);
                 setQrDecodeError(null);
@@ -139,13 +145,13 @@ export default function ScamChecker() {
                 setOcrProgress(null);
               }}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                scamType === t.value
-                  ? "bg-amber-500 border-amber-400 text-gray-900"
-                  : "bg-gray-800 border-gray-700 text-gray-300 hover:border-amber-600 hover:text-amber-400"
+                scamType === s.value
+                  ? "bg-emerald-500 border-emerald-400 text-gray-900"
+                  : "bg-gray-800 border-gray-700 text-gray-300 hover:border-emerald-600 hover:text-emerald-400"
               }`}
             >
-              <span aria-hidden="true">{t.icon}</span>
-              <span>{t.label}</span>
+              <span aria-hidden="true">{s.icon}</span>
+              <span>{s.label}</span>
             </button>
           ))}
         </div>
@@ -153,11 +159,11 @@ export default function ScamChecker() {
 
       {/* Input */}
       <div>
-        <label htmlFor="scam-content" className="block text-sm font-semibold text-amber-400 mb-2 uppercase tracking-wider">
+        <label htmlFor="scam-content" className="block text-sm font-semibold text-emerald-400 mb-2 uppercase tracking-wider">
           <span aria-hidden="true">{selectedType.icon}</span>{" "}{selectedType.label}
         </label>
 
-        {/* Screenshot upload — OCR for all types except QR (which has its own decoder) */}
+        {/* Screenshot upload — OCR */}
         {scamType !== "qr" && (
           <div className="mb-3">
             <input
@@ -167,25 +173,25 @@ export default function ScamChecker() {
               className="hidden"
               tabIndex={-1}
               aria-hidden="true"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleOcrUpload(file);
-              }}
+              onChange={(e) => { const file = e.target.files?.[0]; if (file) handleOcrUpload(file); }}
             />
             <button
               type="button"
               onClick={() => ocrFileInputRef.current?.click()}
               disabled={ocrLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:border-amber-500 hover:text-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <span aria-hidden="true" className="text-lg">📂</span>
-              <span>{ocrLoading ? (ocrProgress ?? "Reading…") : "Got a screenshot? Upload it and we'll read the text for ya"}</span>
+              <span>{ocrLoading
+                ? (ocrProgress ?? "Reading…")
+                : t("Have a screenshot? Upload it and we'll extract the text.", "Got a screenshot? Upload it and we'll read the text for ya")
+              }</span>
             </button>
             <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
               {ocrError
                 ? <span className="text-red-400">{ocrError}</span>
                 : content && !ocrLoading
-                  ? <span className="text-green-400">Text extracted — have a squiz below and hit Check when ready.</span>
+                  ? <span className="text-emerald-400">{t("Text extracted — review it below and click Check.", "Text extracted — have a squiz below and hit Check when ready.")}</span>
                   : null}
             </p>
           </div>
@@ -201,25 +207,25 @@ export default function ScamChecker() {
               className="hidden"
               tabIndex={-1}
               aria-hidden="true"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleQrUpload(file);
-              }}
+              onChange={(e) => { const file = e.target.files?.[0]; if (file) handleQrUpload(file); }}
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={qrDecoding}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:border-amber-500 hover:text-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <span aria-hidden="true" className="text-lg">📂</span>
-              <span>{qrDecoding ? "Reading QR code…" : "Upload a screenshot — we'll read the QR for ya"}</span>
+              <span>{qrDecoding
+                ? "Reading QR code…"
+                : t("Upload a screenshot — we'll decode the QR for you.", "Upload a screenshot — we'll read the QR for ya")
+              }</span>
             </button>
             <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
               {qrDecodeError
                 ? <span className="text-red-400">{qrDecodeError}</span>
                 : content && !qrDecoding
-                  ? <span className="text-green-400">QR decoded — URL&apos;s ready to check below.</span>
+                  ? <span className="text-emerald-400">{t("QR decoded — the URL is ready to check below.", "QR decoded — URL's ready to check below.")}</span>
                   : null}
             </p>
           </div>
@@ -229,13 +235,16 @@ export default function ScamChecker() {
           id="scam-content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder={selectedType.placeholder}
+          placeholder={t(selectedType.normal, selectedType.aussie)}
           rows={scamType === "url" || scamType === "phone" ? 2 : 5}
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-y text-sm font-mono"
+          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
         />
         {scamType === "custom" && (
           <p className="mt-1 text-sm text-gray-400">
-            No worries if it doesn&apos;t fit a category — just describe it or paste whatever you&apos;ve got.
+            {t(
+              "Don't worry if it doesn't fit a category — describe it and we'll do our best.",
+              "No worries if it doesn't fit a category — just describe it or paste whatever you've got."
+            )}
           </p>
         )}
       </div>
@@ -245,9 +254,11 @@ export default function ScamChecker() {
         onClick={handleCheck}
         disabled={loading || !content.trim()}
         aria-busy={loading}
-        className="w-full py-3 px-6 bg-amber-500 hover:bg-amber-400 disabled:bg-gray-700 disabled:text-gray-400 text-gray-900 font-bold rounded-lg transition-all text-base uppercase tracking-wide"
+        className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold rounded-lg transition-all text-base uppercase tracking-wide"
       >
-        {loading ? "Checking it out..." : "Just Checking, Mate! 🔍"}
+        {loading
+          ? t("Analysing…", "Checking it out…")
+          : t("Check This Now 🔍", "Just Checking, Mate! 🔍")}
       </button>
 
       {/* Error */}
@@ -262,12 +273,10 @@ export default function ScamChecker() {
         {result && (
           <div className="space-y-4 animate-in fade-in duration-300">
             <VerdictBadge result={result} />
-
-            {/* Flags */}
             {result.flags.length > 0 && (
               <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-3">
-                  Red Flags Spotted
+                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-3">
+                  {t("Warning Signs Detected", "Red Flags Spotted")}
                 </h3>
                 <ul className="space-y-2">
                   {result.flags.map((flag, i) => (

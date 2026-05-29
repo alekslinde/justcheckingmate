@@ -91,19 +91,19 @@ export default function ReportForm() {
       <div className="space-y-5 text-center py-4">
         <div className="text-5xl" aria-hidden="true">🦘</div>
         <div>
-          <h3 className="font-bold text-green-400 text-lg mb-1">Ripper — thanks for reporting it!</h3>
+          <h3 className="font-bold text-green-400 text-lg mb-1">Thank you — you&apos;ve helped protect others.</h3>
           <p className="text-gray-300 text-sm">
-            Your report has been logged. Every submission helps protect other Australians from getting done over.
+            Your report has been logged. Every submission helps warn others about this scam.
           </p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 inline-block mx-auto">
           <div className="text-sm text-gray-400 mb-0.5">Report reference</div>
-          <div className="font-mono text-amber-400 font-bold">{reportId}</div>
+          <div className="font-mono text-emerald-400 font-bold">{reportId}</div>
         </div>
         {totalReports !== null && (
           <p className="text-sm text-gray-400">
             {totalReports.toLocaleString()} reports submitted by Australians like you.{" "}
-            <Link href="/submissions" className="text-amber-400 hover:text-amber-300 underline underline-offset-2">
+            <Link href="/submissions" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
               View all →
             </Link>
           </p>
@@ -113,11 +113,11 @@ export default function ReportForm() {
             onClick={reset}
             className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-all"
           >
-            Report another one
+            Report another
           </button>
           <Link
             href="/submissions"
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-amber-400 text-sm rounded-lg transition-all"
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-sm rounded-lg transition-all"
           >
             View community submissions →
           </Link>
@@ -128,14 +128,14 @@ export default function ReportForm() {
             href="https://www.scamwatch.gov.au"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-amber-400 underline underline-offset-2 hover:text-amber-300"
+            className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
           >
             Scamwatch (scamwatch.gov.au)
           </a>{" "}
           or call{" "}
           <a
             href="tel:1800595160"
-            className="text-amber-400 underline underline-offset-2 hover:text-amber-300"
+            className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
           >
             IDCARE on 1800 595 160
           </a>
@@ -164,7 +164,7 @@ export default function ReportForm() {
       {/* Stats badge */}
       {totalReports !== null && (
         <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
-          <span className="text-amber-400" aria-hidden="true">📊</span>
+          <span className="text-emerald-400" aria-hidden="true">📊</span>
           <span>
             <strong className="text-gray-100">{totalReports.toLocaleString()}</strong> scams reported by Australians so far
           </span>
@@ -179,7 +179,7 @@ export default function ReportForm() {
 
       {/* Type — radio group */}
       <fieldset>
-        <legend className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-2">
+        <legend className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
           What are you reporting?
         </legend>
         <div role="radiogroup" aria-labelledby="report-type-legend" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -192,7 +192,7 @@ export default function ReportForm() {
               onClick={() => setType(t.value)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
                 type === t.value
-                  ? "bg-amber-500 border-amber-400 text-gray-900 font-semibold"
+                  ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
                   : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500 hover:text-gray-100"
               }`}
             >
@@ -205,7 +205,7 @@ export default function ReportForm() {
 
       {/* Scam content */}
       <div>
-        <label htmlFor="report-content" className="block text-sm font-semibold text-amber-400 uppercase tracking-wider mb-2">
+        <label htmlFor="report-content" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
           The scam content{" "}
           <span aria-hidden="true" className="text-red-400">*</span>
         </label>
@@ -219,7 +219,7 @@ export default function ReportForm() {
           placeholder={PLACEHOLDERS[type]}
           rows={type === "url" || type === "phone" ? 2 : 4}
           maxLength={2000}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-y text-sm font-mono"
+          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
         />
         <div id="content-count" aria-live="polite" className="text-right text-sm text-gray-400 mt-0.5">
           {content.length}/2000
@@ -276,13 +276,13 @@ export default function ReportForm() {
         type="submit"
         disabled={!content.trim() || status === "submitting"}
         aria-busy={status === "submitting"}
-        className="w-full py-3 px-6 bg-amber-500 hover:bg-amber-400 disabled:bg-gray-800 disabled:text-gray-400 text-gray-900 font-bold rounded-lg transition-all text-sm uppercase tracking-wide"
+        className="w-full py-3 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-800 disabled:text-gray-400 text-gray-900 font-bold rounded-lg transition-all text-sm uppercase tracking-wide"
       >
         {status === "submitting" ? "Lodging your report..." : "Report This Scam 🚨"}
       </button>
 
-      <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-3 space-y-1.5">
-        <p className="text-sm text-amber-400 font-semibold text-center">
+      <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 space-y-1.5">
+        <p className="text-sm text-emerald-400 font-semibold text-center">
           For urgent matters, contact Scamwatch, your bank, or the{" "}
           <abbr title="Australian Federal Police">AFP</abbr>{" "}
           directly — this tool is not a substitute for official reporting channels.

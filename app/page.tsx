@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import TabView from "@/components/TabView";
 import StatsBar from "@/components/StatsBar";
+import HeroText from "@/components/HeroText";
+import LangToggle from "@/components/LangToggle";
 import { getPublicReportsCount } from "@/lib/reportStore";
 
 export default async function Home() {
@@ -10,29 +12,25 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
       {/* Nav */}
-      {reportCount > 0 && (
-        <nav className="border-b border-gray-800 bg-gray-900">
-          <div className="max-w-2xl mx-auto px-4 h-11 flex items-center justify-end">
-            <Link href="/submissions" className="text-sm text-gray-400 hover:text-amber-400 transition-colors">
+      <nav className="border-b border-gray-800 bg-gray-900">
+        <div className="max-w-2xl mx-auto px-4 h-11 flex items-center justify-between">
+          <LangToggle />
+          {reportCount > 0 && (
+            <Link href="/submissions" className="text-sm text-gray-400 hover:text-emerald-400 transition-colors">
               Community submissions
             </Link>
-          </div>
-        </nav>
-      )}
+          )}
+        </div>
+      </nav>
 
       {/* Hero */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
         <div className="max-w-2xl mx-auto px-4 py-10 text-center">
           <div className="text-5xl mb-3" aria-hidden="true">🦘</div>
-          <h1 className="text-4xl font-black text-amber-400 tracking-tight mb-2">
+          <h1 className="text-4xl font-black text-emerald-400 tracking-tight mb-2">
             Just Checking, Mate
           </h1>
-          <p className="text-gray-300 text-lg mb-1">
-            Australia&apos;s no-nonsense scam detector
-          </p>
-          <p className="text-gray-400 text-sm mb-5">
-            Suspicious link? Dodgy text? Shifty call? Chuck it in and we&apos;ll have a squiz.
-          </p>
+          <HeroText />
           <StatsBar />
         </div>
       </div>
@@ -43,7 +41,7 @@ export default async function Home() {
 
         {/* Common red flags */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
-          <h2 className="font-bold text-amber-400 text-sm uppercase tracking-wider">
+          <h2 className="font-bold text-emerald-400 text-sm uppercase tracking-wider">
             Common Scam Red Flags
           </h2>
           <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-300 list-none">
@@ -66,13 +64,13 @@ export default async function Home() {
         </div>
 
         {/* Disclaimer */}
-        <div className="bg-amber-950/30 border border-amber-900/50 rounded-2xl p-5 space-y-3">
+        <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-5 space-y-3">
           <div className="flex items-start gap-3">
             <span className="text-2xl shrink-0" aria-hidden="true">🇦🇺</span>
             <div className="space-y-2 text-sm">
-              <p className="font-semibold text-amber-400">Fair dinkum disclaimer, mate.</p>
+              <p className="font-semibold text-emerald-400">A word before you go.</p>
               <p className="text-gray-300">
-                This tool gives you a best-effort check — it&apos;s not infallible, and scammers are crafty buggers who constantly change their tricks.{" "}
+                This tool gives you a best-effort check — scammers constantly change tactics and no automated tool catches everything.{" "}
                 <strong className="text-gray-100">It does not guarantee 100% detection of every scam.</strong>
               </p>
               <p className="text-gray-300">
@@ -81,7 +79,7 @@ export default async function Home() {
                   href="https://www.scamwatch.gov.au"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-amber-400 font-semibold underline underline-offset-2 hover:text-amber-300"
+                  className="text-emerald-400 font-semibold underline underline-offset-2 hover:text-emerald-300"
                 >
                   Scamwatch
                 </a>{" "}
@@ -106,7 +104,7 @@ export default async function Home() {
                     <div className="text-sm text-gray-200 font-semibold">
                       {abbrTitle ? <abbr title={abbrTitle}>{name}</abbr> : name}
                     </div>
-                    <div className="text-sm text-amber-400 font-mono">{site}</div>
+                    <div className="text-sm text-emerald-400 font-mono">{site}</div>
                   </a>
                 ))}
               </div>
@@ -116,18 +114,17 @@ export default async function Home() {
 
         <p className="text-center text-sm text-gray-400 pb-4">
           Built for Australians
-          {" "}<span aria-hidden="true">🦘</span>{" "} 
-          by {" "}
+          {" "}<span aria-hidden="true">🦘</span>{" "}
+          by{" "}
           <a
             href="https://alekslinde.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-amber-400 font-semibold underline underline-offset-2 hover:text-amber-300"
+            className="text-emerald-400 font-semibold underline underline-offset-2 hover:text-emerald-300"
           >
             Aleks Linde
           </a>
-          {" "}
-          Always exercise caution with unexpected messages
+          {" "}— always check before you act.
         </p>
       </div>
     </main>

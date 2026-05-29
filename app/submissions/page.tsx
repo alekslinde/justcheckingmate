@@ -98,14 +98,14 @@ export default function SubmissionsPage() {
         <div className="max-w-2xl mx-auto px-4 py-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-amber-400 transition-colors mb-4"
+            className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-400 transition-colors mb-4"
           >
             ← Back
           </Link>
           <div className="flex items-center gap-3">
             <span className="text-3xl" aria-hidden="true">📋</span>
             <div>
-              <h1 className="text-2xl font-black text-amber-400 tracking-tight">
+              <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
                 Community Submissions
               </h1>
               <p className="text-sm text-gray-400">
@@ -137,7 +137,7 @@ export default function SubmissionsPage() {
           <select
             value={type}
             onChange={(e) => changeType(e.target.value)}
-            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500"
+            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500"
           >
             {TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
@@ -147,7 +147,7 @@ export default function SubmissionsPage() {
           <select
             value={periodDays}
             onChange={(e) => changePeriod(e.target.value)}
-            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500"
+            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500"
           >
             {PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -221,7 +221,7 @@ export default function SubmissionsPage() {
                   disabled={loading}
                   className={`w-9 py-1.5 text-sm rounded-lg border transition-colors ${
                     p === page
-                      ? "bg-amber-500 border-amber-400 text-gray-900 font-semibold"
+                      ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
                       : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500"
                   }`}
                 >
@@ -242,7 +242,7 @@ export default function SubmissionsPage() {
 
         <p className="text-center text-sm text-gray-500 pb-4">
           Reports are community-submitted and unverified.{" "}
-          <Link href="/" className="text-amber-400 hover:text-amber-300 underline underline-offset-2">
+          <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
             Check or report a scam →
           </Link>
         </p>
