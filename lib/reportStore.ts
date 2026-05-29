@@ -107,14 +107,33 @@ export interface PublicReport {
   submittedAt: number;
 }
 
-export async function getPublicReports(limit = 50): Promise<PublicReport[]> {
+function buildConditions(type?: string, since?: number) {
+  const conditions: string[] = ["suspect = 0"];
+  const args: (string | number)[] = [];
+  if (type && type !== "all") { conditions.push("type = ?"); args.push(type); }
+  if (since)                  { conditions.push("submitted_at >= ?"); args.push(since); }
+  return { where: conditions.join(" AND "), args };
+}
+
+export async function getPublicReports(opts: {
+  limit?: number;
+  offset?: number;
+  type?: string;
+  sort?: "asc" | "desc";
+  since?: number;
+} = {}): Promise<PublicReport[]> {
+  const { limit = 25, offset = 0, type, sort = "desc", since } = opts;
+  const { where, args } = buildConditions(type, since);
   const db = await getDb();
+
   const result = await db.execute({
     sql: `SELECT id, type, content, description, submitted_at
-          FROM reports WHERE suspect = 0
-          ORDER BY submitted_at DESC LIMIT ?`,
-    args: [limit],
+          FROM reports WHERE ${where}
+          ORDER BY submitted_at ${sort === "asc" ? "ASC" : "DESC"}
+          LIMIT ? OFFSET ?`,
+    args: [...args, Math.min(limit, 100), offset],
   });
+
   return result.rows.map((r) => ({
     id: r.id as string,
     type: r.type as string,
@@ -122,4 +141,18 @@ export async function getPublicReports(limit = 50): Promise<PublicReport[]> {
     description: scrubPii(r.description as string),
     submittedAt: Number(r.submitted_at),
   }));
+}
+
+export async function getPublicReportsCount(opts: {
+  type?: string;
+  since?: number;
+} = {}): Promise<number> {
+  const { type, since } = opts;
+  const { where, args } = buildConditions(type, since);
+  const db = await getDb();
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) as n FROM reports WHERE ${where}`,
+    args,
+  });
+  return Number(result.rows[0]?.n ?? 0);
 }

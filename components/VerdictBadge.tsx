@@ -57,7 +57,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
         </div>
         <div className="text-right">
           <div className={`text-2xl font-black ${v.text}`} aria-hidden="true">{result.score}</div>
-          <div className="text-xs text-gray-400">Scam Score</div>
+          <div className="text-sm text-gray-400">Scam Score</div>
         </div>
       </div>
 
@@ -75,7 +75,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
           style={{ width: `${result.score}%` }}
         />
       </div>
-      <div className="flex justify-between text-xs text-gray-400" aria-hidden="true">
+      <div className="flex justify-between text-sm text-gray-400" aria-hidden="true">
         <span>Clean as a whistle</span>
         <span>Dead set scam</span>
       </div>

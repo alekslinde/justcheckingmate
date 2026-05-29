@@ -181,7 +181,7 @@ export default function ScamChecker() {
               <span aria-hidden="true" className="text-lg">📂</span>
               <span>{ocrLoading ? (ocrProgress ?? "Reading…") : "Got a screenshot? Upload it and we'll read the text for ya"}</span>
             </button>
-            <p aria-live="polite" className="mt-1.5 text-xs min-h-[1rem]">
+            <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
               {ocrError
                 ? <span className="text-red-400">{ocrError}</span>
                 : content && !ocrLoading
@@ -215,7 +215,7 @@ export default function ScamChecker() {
               <span aria-hidden="true" className="text-lg">📂</span>
               <span>{qrDecoding ? "Reading QR code…" : "Upload a screenshot — we'll read the QR for ya"}</span>
             </button>
-            <p aria-live="polite" className="mt-1.5 text-xs min-h-[1rem]">
+            <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
               {qrDecodeError
                 ? <span className="text-red-400">{qrDecodeError}</span>
                 : content && !qrDecoding
@@ -234,7 +234,7 @@ export default function ScamChecker() {
           className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 resize-y text-sm font-mono"
         />
         {scamType === "custom" && (
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-sm text-gray-400">
             No worries if it doesn&apos;t fit a category — just describe it or paste whatever you&apos;ve got.
           </p>
         )}
@@ -266,7 +266,7 @@ export default function ScamChecker() {
             {/* Flags */}
             {result.flags.length > 0 && (
               <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-3">
+                <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-3">
                   Red Flags Spotted
                 </h3>
                 <ul className="space-y-2">

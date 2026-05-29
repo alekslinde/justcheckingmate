@@ -74,7 +74,7 @@ function CopyButton({ value }: { value: string }) {
     <button
       onClick={handleCopy}
       aria-label={copied ? "Copied to clipboard" : "Copy to clipboard"}
-      className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-gray-100 transition-all shrink-0"
+      className="px-2 py-0.5 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-gray-100 transition-all shrink-0"
     >
       <span aria-hidden="true">{copied ? "Copied!" : "Copy"}</span>
       {/* Announced to screen readers via aria-label change; visual label is decorative */}
@@ -114,7 +114,7 @@ export default function PoisonPanel() {
           <span className="text-xl" aria-hidden="true">💉</span>
           <h2 className="font-bold text-amber-400 text-base">Poison Data Generator</h2>
         </div>
-        <p className="text-xs text-gray-300">
+        <p className="text-sm text-gray-300">
           All of this is <span className="text-amber-400 font-semibold">100% fabricated</span>. Names, numbers, cards — completely made up but formatted to look real. Feed it back to the scammers to waste their time and corrupt their stolen data.
         </p>
       </div>
@@ -132,7 +132,7 @@ export default function PoisonPanel() {
         ) : (
           <>
             {/* Note */}
-            <div className="bg-amber-950/40 border border-amber-800/30 rounded-lg px-4 py-2 text-xs text-amber-300 italic">
+            <div className="bg-amber-950/40 border border-amber-800/30 rounded-lg px-4 py-2 text-sm text-amber-300 italic">
               &ldquo;{profile.notes}&rdquo;
             </div>
 
@@ -164,14 +164,14 @@ export default function PoisonPanel() {
             <div className="grid sm:grid-cols-2 gap-4">
               {FIELD_GROUPS.map((group) => (
                 <div key={group.title} className="space-y-2">
-                  <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">{group.title}</h4>
+                  <h4 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">{group.title}</h4>
                   {group.fields.map((field) => {
                     const value = String(profile[field.key]);
                     const hidden = field.sensitive && !revealSensitive;
                     return (
                       <div key={field.key} className="flex items-center gap-2 bg-gray-900 rounded-lg px-3 py-2">
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-300">{field.label}</div>
+                          <div className="text-sm text-gray-300">{field.label}</div>
                           <div className="text-sm text-gray-100 font-mono truncate">
                             {hidden ? <span aria-label="Hidden">••••••••••</span> : value}
                           </div>
@@ -184,7 +184,7 @@ export default function PoisonPanel() {
               ))}
             </div>
 
-            <p className="text-xs text-gray-400 text-center pt-1">
+            <p className="text-sm text-gray-400 text-center pt-1">
               <span aria-hidden="true">⚠</span>{" "}Never use generated data on real systems. This is strictly for poisoning scammers&apos; databases.
             </p>
           </>
