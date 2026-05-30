@@ -194,6 +194,18 @@ describe("checkEmail", () => {
     expect(result.flags.some((f) => f.includes("impersonation"))).toBe(true);
   });
 
+  it("flags a From/Reply-To mismatch (sender spoofing)", () => {
+    const result = checkEmail(
+      'From: "myGov" <noreply@evil.tk>\nReply-To: scammer@other-domain.ru\nSubject: Account suspended\n\nVerify now.'
+    );
+    expect(result.flags.some((f) => /reply-to/i.test(f))).toBe(true);
+  });
+
+  it("flags display-name masking (brand name over a mismatched domain)", () => {
+    const result = checkEmail('From: "myGov" <noreply@evil.tk>\n\nClick here.');
+    expect(result.flags.some((f) => /masking|display name/i.test(f))).toBe(true);
+  });
+
   it("scores lower than equivalent SMS (0.7 lenience modifier)", () => {
     const sms = checkSms("URGENT: Your ATO account is suspended. Verify now.");
     const email = checkEmail("URGENT: Your ATO account is suspended. Verify now.");

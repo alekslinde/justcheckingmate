@@ -1,3 +1,5 @@
+import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
+
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 
 export interface CheckResult {
@@ -228,22 +230,28 @@ export function checkEmail(text: string): CheckResult {
   flags.push(...smsCheck.flags);
   score += Math.floor(smsCheck.score * 0.7); // Email gets a bit more lenience
 
-  // Extract sender email if present
-  const senderMatch = text.match(/from:\s*([^\s<>]+@[^\s<>]+)/i);
-  if (senderMatch) {
-    const senderDomain = senderMatch[1].split("@")[1]?.toLowerCase();
-    const suspTlds = SUSPICIOUS_TLDS.find((t) => senderDomain?.endsWith(t));
+  // Header-aware sender analysis: parse From / Reply-To / Return-Path and flag
+  // display-name masking and From≠Reply-To spoofing.
+  const headers = parseEmailHeaders(text);
+  if (headers.fromAddress) {
+    const senderDomain = domainOf(headers.fromAddress);
+    const suspTlds = SUSPICIOUS_TLDS.find((t) => senderDomain.endsWith(t));
     if (suspTlds) {
       flags.push(`Sender email uses a dodgy domain extension (${suspTlds})`);
       score += 30;
     }
-    // Impersonation pattern: official name but weird domain
+    // Impersonation pattern: official name in the body but a mismatched domain
     const officialNames = ["ato", "mygov", "centrelink", "medicare", "commbank", "westpac", "anz", "nab"];
     if (officialNames.some((n) => lower.includes(n)) && senderDomain && !senderDomain.endsWith(".gov.au") && !senderDomain.endsWith(".com.au")) {
       flags.push(`Sender claims to be official but domain doesn't match — textbook impersonation`);
       score += 40;
     }
   }
+
+  // Identity spoofing signals (display-name masking, From≠Reply-To, Return-Path)
+  const identity = analyseEmailIdentities(headers);
+  flags.push(...identity.flags);
+  score += identity.score;
 
   // Generic greeting
   if (/dear (customer|user|member|valued|account holder|sir|madam)/i.test(text)) {
