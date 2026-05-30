@@ -64,25 +64,23 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
         return;
       }
 
-      // OCR fallback via server
-      const formData = new FormData();
-      formData.append("image", file);
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60_000);
-      let res: Response;
+      // OCR fallback: run Tesseract in the browser to avoid serverless timeouts.
+      // langPath points to the training data committed under public/tessdata/,
+      // served from the same origin so no CDN dependency.
+      const { createWorker } = await import("tesseract.js");
+      const worker = await createWorker("eng", 1, {
+        langPath: "/tessdata",
+        logger: () => {},
+      });
+      let ocrText = "";
       try {
-        res = await fetch("/api/ocr", { method: "POST", body: formData, signal: controller.signal });
+        const { data } = await worker.recognize(file);
+        ocrText = (data.text ?? "").trim();
       } finally {
-        clearTimeout(timer);
+        await worker.terminate();
       }
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(errData.error ?? "OCR request failed");
-      }
-      const data = await res.json() as { text?: string };
-      const cleaned = (data.text ?? "").trim();
-      if (cleaned) {
-        setContent(cleaned);
+      if (ocrText) {
+        setContent(ocrText);
         setResult(null);
         setError(null);
       } else {
@@ -93,13 +91,10 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
       }
     } catch (err) {
       console.error("[Upload] failed:", err);
-      const isTimeout = err instanceof DOMException && err.name === "AbortError";
-      const serverMsg = !isTimeout && err instanceof Error && err.message ? err.message : null;
       setUploadError(
-        isTimeout
-          ? t("OCR is taking too long — try again or paste the text manually.",
-              "OCR is taking too long — try again or paste the text in yourself.")
-          : serverMsg ?? t(
+        err instanceof Error && err.message
+          ? err.message
+          : t(
               "Couldn't process that image — try a clearer screenshot or paste the text manually.",
               "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
             )
