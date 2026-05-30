@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
 
   const rawContent = String(body.content ?? "");
   const type = String(body.type ?? "");
+  const rawScamUrl = String(body.scamUrl ?? "").slice(0, 2000);
 
   // For URL/QR reports strip tracking parameters before storing — keeping them
   // would let the scammer correlate which of their campaigns got reported.
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     (type === "url" || type === "qr")
       ? stripTrackingParams(rawContent)
       : rawContent;
+  const safeScamUrl = rawScamUrl ? stripTrackingParams(rawScamUrl) : "";
 
   const guardResult = guardSubmission({
     type,
@@ -56,11 +58,14 @@ export async function POST(req: NextRequest) {
     {
       id: reportId,
       type,
-      content: safeContent.slice(0, 2000),
+      content:     safeContent.slice(0, 2000),
       description: String(body.description ?? "").slice(0, 1000),
-      contact: String(body.contact ?? "").slice(0, 200),
+      contact:     String(body.contact ?? "").slice(0, 200),
       submittedAt: Date.now(),
-      ip: getClientIp(req),
+      ip:          getClientIp(req),
+      scamUrl:     safeScamUrl,
+      scamPhone:   String(body.scamPhone ?? "").slice(0, 50),
+      scamEmail:   String(body.scamEmail ?? "").slice(0, 200),
     },
     guardResult.verdict === "suspect",
   );

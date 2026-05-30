@@ -13,6 +13,7 @@ import {
   incrementCheckCount,
   getStats,
   getPublicReports,
+  getPublicReportsCount,
 } from "@/lib/reportStore";
 import { getDb } from "@/lib/db";
 
@@ -129,11 +130,138 @@ describe("storeReport", () => {
       contact: "",
       submittedAt: Date.now(),
       ip: "1.2.3.4",
+      scamUrl: "",
+      scamPhone: "",
+      scamEmail: "",
     };
     await storeReport(report, false);
     expect(mockExecute).toHaveBeenCalledWith(
       expect.objectContaining({ sql: expect.stringContaining("INSERT INTO reports") })
     );
+  });
+
+  it("includes scam identifier fields in the INSERT args", async () => {
+    // First call is the COUNT query; second is the INSERT
+    mockExecute.mockResolvedValueOnce({ rows: [{ n: 0 }] }); // COUNT → 0 existing
+
+    const report = {
+      id: "RPT-IDS001",
+      type: "sms",
+      content: "Your parcel is ready",
+      description: "",
+      contact: "",
+      submittedAt: Date.now(),
+      ip: "1.2.3.4",
+      scamUrl:   "https://au-post.fake/track",
+      scamPhone: "+61412345678",
+      scamEmail: "noreply@fake-ato.com",
+    };
+    await storeReport(report, false);
+
+    const insertCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("INSERT INTO reports")
+    )!;
+    expect(insertCall[0].args).toContain("https://au-post.fake/track");
+    expect(insertCall[0].args).toContain("+61412345678");
+    expect(insertCall[0].args).toContain("noreply@fake-ato.com");
+  });
+
+  it("sets report_count to 1 for the first report with a given identifier", async () => {
+    mockExecute.mockResolvedValueOnce({ rows: [{ n: 0 }] }); // COUNT → no existing match
+
+    const report = {
+      id: "RPT-FIRST",
+      type: "url",
+      content: "https://evil.com",
+      description: "",
+      contact: "",
+      submittedAt: Date.now(),
+      ip: "1.2.3.4",
+      scamUrl: "https://evil.com",
+      scamPhone: "",
+      scamEmail: "",
+    };
+    await storeReport(report, false);
+
+    const insertCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("INSERT INTO reports")
+    )!;
+    expect(insertCall[0].args).toContain(1); // report_count = 1
+  });
+
+  it("increments count and updates existing rows when the identifier matches", async () => {
+    mockExecute.mockResolvedValueOnce({ rows: [{ n: 2 }] }); // COUNT → 2 existing
+
+    const report = {
+      id: "RPT-MATCH",
+      type: "url",
+      content: "https://evil.com",
+      description: "",
+      contact: "",
+      submittedAt: Date.now(),
+      ip: "1.2.3.4",
+      scamUrl: "https://evil.com",
+      scamPhone: "",
+      scamEmail: "",
+    };
+    await storeReport(report, false);
+
+    // Should have UPDATEd existing reports with count = 3
+    const updateCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("UPDATE reports SET report_count")
+    )!;
+    expect(updateCall[0].args).toContain(3);
+
+    // INSERT should carry the same count
+    const insertCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("INSERT INTO reports")
+    )!;
+    expect(insertCall[0].args).toContain(3);
+  });
+
+  it("skips count logic entirely for suspect reports", async () => {
+    const report = {
+      id: "RPT-SUSP2",
+      type: "url",
+      content: "https://evil.com",
+      description: "",
+      contact: "",
+      submittedAt: Date.now(),
+      ip: "1.2.3.4",
+      scamUrl: "https://evil.com",
+      scamPhone: "",
+      scamEmail: "",
+    };
+    await storeReport(report, true); // suspect
+
+    const countCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("SELECT COUNT(*)")
+    );
+    expect(countCall).toBeUndefined();
+  });
+
+  it("uses scam_phone as identifier when scam_url is empty", async () => {
+    mockExecute.mockResolvedValueOnce({ rows: [{ n: 0 }] }); // COUNT for phone
+
+    const report = {
+      id: "RPT-PHONE",
+      type: "phone",
+      content: "+61412345678",
+      description: "",
+      contact: "",
+      submittedAt: Date.now(),
+      ip: "1.2.3.4",
+      scamUrl: "",
+      scamPhone: "+61412345678",
+      scamEmail: "",
+    };
+    await storeReport(report, false);
+
+    const countCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("SELECT COUNT(*)")
+    )!;
+    expect(countCall[0].sql).toContain("scam_phone");
+    expect(countCall[0].args).toContain("+61412345678");
   });
 
   it("increments the reports counter for legitimate (non-suspect) reports", async () => {
@@ -145,6 +273,9 @@ describe("storeReport", () => {
       contact: "",
       submittedAt: Date.now(),
       ip: "1.2.3.4",
+      scamUrl: "",
+      scamPhone: "",
+      scamEmail: "",
     };
     await storeReport(report, false);
     const calls = mockExecute.mock.calls.map((c) => c[0]);
@@ -160,6 +291,9 @@ describe("storeReport", () => {
       contact: "",
       submittedAt: Date.now(),
       ip: "1.2.3.4",
+      scamUrl: "",
+      scamPhone: "",
+      scamEmail: "",
     };
     await storeReport(report, true);
     const calls = mockExecute.mock.calls.map((c) => c[0]);
@@ -214,18 +348,20 @@ describe("getStats", () => {
 // ── getPublicReports ──────────────────────────────────────────────────────────
 
 describe("getPublicReports", () => {
+  const baseRow = {
+    id: "RPT-ABCD1234",
+    type: "url",
+    content: "https://scam.com",
+    description: "Very dodgy",
+    submitted_at: 1700000000000,
+    scam_url: "",
+    scam_phone: "",
+    scam_email: "",
+    report_count: 1,
+  };
+
   it("returns mapped public report objects", async () => {
-    const mockExecute = vi.fn().mockResolvedValue({
-      rows: [
-        {
-          id: "RPT-ABCD1234",
-          type: "url",
-          content: "https://scam.com",
-          description: "Very dodgy",
-          submitted_at: 1700000000000,
-        },
-      ],
-    });
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [baseRow] });
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
     const reports = await getPublicReports();
@@ -233,22 +369,34 @@ describe("getPublicReports", () => {
     expect(reports[0]).toMatchObject({
       id: "RPT-ABCD1234",
       type: "url",
-      content: "https://scam.com",
+      // content is passed through defangText — URLs are defanged; stripTrackingParams
+      // normalises bare domains to include a trailing slash
+      content: "hxtps://scam[.]com/",
       submittedAt: 1700000000000,
     });
   });
 
+  it("applies defangText to content", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ ...baseRow, content: "Click: https://evil.com/phish and also http://bad.tk" }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].content).not.toContain("https://");
+    expect(reports[0].content).toContain("hxtps://evil[.]com/phish");
+    expect(reports[0].content).toContain("hxtp://bad[.]tk");
+  });
+
   it("applies PII scrubbing to the description", async () => {
     const mockExecute = vi.fn().mockResolvedValue({
-      rows: [
-        {
-          id: "RPT-PII0001",
-          type: "sms",
-          content: "scam sms",
-          description: "Called from 0412 345 678 asking for my TFN",
-          submitted_at: 1700000000000,
-        },
-      ],
+      rows: [{
+        ...baseRow,
+        id: "RPT-PII0001",
+        type: "sms",
+        content: "scam sms",
+        description: "Called from 0412 345 678 asking for my TFN",
+      }],
     });
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
@@ -257,12 +405,151 @@ describe("getPublicReports", () => {
     expect(reports[0].description).toContain("[phone removed]");
   });
 
-  it("passes the limit argument to the query", async () => {
+  it("defangs scam_url in returned reports", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ ...baseRow, scam_url: "https://fake-ato.xyz/verify" }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].scamUrl).toBe("hxtps://fake-ato[.]xyz/verify");
+  });
+
+  it("defangs scam_email in returned reports", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ ...baseRow, scam_email: "phish@fake-ato.com" }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].scamEmail).toBe("phish[@]fake-ato[.]com");
+  });
+
+  it("applies defangPhone to scam_phone in returned reports", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ ...baseRow, scam_phone: "+61412345678" }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    // Strip invisible characters; the visible digits must be intact
+    const visible = reports[0].scamPhone.replace(/[^\x20-\x7E]/g, "");
+    expect(visible).toBe("+61412345678");
+    // Invisible joiners were inserted
+    expect(reports[0].scamPhone.length).toBeGreaterThan("+61412345678".length);
+  });
+
+  it("returns empty strings for missing identifier columns", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [baseRow] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].scamUrl).toBe("");
+    expect(reports[0].scamPhone).toBe("");
+    expect(reports[0].scamEmail).toBe("");
+  });
+
+  it("passes the limit option to the query", async () => {
     const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
-    await getPublicReports(5);
+    await getPublicReports({ limit: 5 });
     const call = mockExecute.mock.calls[0][0] as { args: unknown[] };
     expect(call.args).toContain(5);
+  });
+
+  it("maps report_count to matchCount", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ ...baseRow, report_count: 7 }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].matchCount).toBe(7);
+  });
+
+  it("defaults matchCount to 1 when report_count column is absent", async () => {
+    const { report_count: _, ...rowWithoutCount } = baseRow;
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [rowWithoutCount] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].matchCount).toBe(1);
+  });
+
+  it("orders by report_count DESC for sort='most'", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await getPublicReports({ sort: "most" });
+    const { sql } = mockExecute.mock.calls[0][0] as { sql: string };
+    expect(sql).toContain("report_count DESC");
+  });
+
+  it("orders by report_count ASC for sort='least'", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await getPublicReports({ sort: "least" });
+    const { sql } = mockExecute.mock.calls[0][0] as { sql: string };
+    expect(sql).toContain("report_count ASC");
+  });
+
+  it("includes search term as LIKE parameters when provided", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await getPublicReports({ search: "fake-ato" });
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(call.sql).toContain("LIKE ?");
+    expect(call.args).toContain("%fake-ato%");
+  });
+
+  it("searches across content, scam_url, scam_phone, and scam_email", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await getPublicReports({ search: "evil" });
+    const { sql, args } = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(sql).toContain("content LIKE ?");
+    expect(sql).toContain("scam_url LIKE ?");
+    expect(sql).toContain("scam_phone LIKE ?");
+    expect(sql).toContain("scam_email LIKE ?");
+    // Same search term passed for each column
+    expect(args.filter((a) => a === "%evil%")).toHaveLength(4);
+  });
+
+  it("omits the search clause when search is empty or whitespace", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await getPublicReports({ search: "   " });
+    const { sql } = mockExecute.mock.calls[0][0] as { sql: string };
+    expect(sql).not.toContain("LIKE");
+  });
+});
+
+// ── getPublicReportsCount with search ─────────────────────────────────────────
+
+describe("getPublicReportsCount", () => {
+  it("includes search term in the WHERE clause", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [{ n: 3 }] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const count = await getPublicReportsCount({ search: "scam" });
+    expect(count).toBe(3);
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(call.sql).toContain("LIKE ?");
+    expect(call.args).toContain("%scam%");
+  });
+
+  it("returns the total without search when search is absent", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [{ n: 42 }] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const count = await getPublicReportsCount();
+    expect(count).toBe(42);
+    const call = mockExecute.mock.calls[0][0] as { sql: string };
+    expect(call.sql).not.toContain("LIKE");
   });
 });
