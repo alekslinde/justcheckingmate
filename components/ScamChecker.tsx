@@ -75,8 +75,11 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
       } finally {
         clearTimeout(timer);
       }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "OCR failed");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? "OCR request failed");
+      }
+      const data = await res.json() as { text?: string };
       const cleaned = (data.text ?? "").trim();
       if (cleaned) {
         setContent(cleaned);
@@ -90,10 +93,17 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
       }
     } catch (err) {
       console.error("[Upload] failed:", err);
-      setUploadError(t(
-        "Couldn't process that image — try a clearer screenshot or paste the text manually.",
-        "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
-      ));
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      const serverMsg = !isTimeout && err instanceof Error && err.message ? err.message : null;
+      setUploadError(
+        isTimeout
+          ? t("OCR is taking too long — try again or paste the text manually.",
+              "OCR is taking too long — try again or paste the text in yourself.")
+          : serverMsg ?? t(
+              "Couldn't process that image — try a clearer screenshot or paste the text manually.",
+              "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
+            )
+      );
     } finally {
       setUploadLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
