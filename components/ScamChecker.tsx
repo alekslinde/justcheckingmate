@@ -2,143 +2,94 @@
 
 import { useState, useRef } from "react";
 import { CheckResult, ScamType } from "@/lib/scamDetector";
-import { defangText } from "@/lib/urlSanitizer";
+import { defangText, extractIdentifiers } from "@/lib/urlSanitizer";
 import VerdictBadge from "./VerdictBadge";
 import { useLang } from "@/lib/lang";
 
-const SCAM_TYPES: { value: ScamType; label: string; normal: string; aussie: string; icon: string }[] = [
-  { value: "url",    label: "Suspicious Link",  normal: "Paste the URL you want to check, e.g. https://ato-refund.xyz/verify", aussie: "Paste the sus URL in here, e.g. https://my-g0v-ato-login.tk/verify", icon: "🔗" },
-  { value: "sms",    label: "Suspicious SMS",   normal: "Paste the full text message you received...", aussie: "Paste the whole text message in here...", icon: "📱" },
-  { value: "email",  label: "Suspicious Email", normal: "Paste the email content (From: ..., Subject: ..., Body: ...)...", aussie: "Paste the email content (From: ..., Subject: ..., Body: ...)...", icon: "📧" },
-  { value: "phone",  label: "Suspicious Number",normal: "Enter the phone number, e.g. +61 412 345 678", aussie: "Enter the phone number, e.g. +61 412 345 678 or +1 202 555 0123", icon: "📞" },
-  { value: "qr",     label: "QR Code",          normal: "Paste the URL your QR code points to...", aussie: "Paste the URL your QR code points to...", icon: "📷" },
-  { value: "custom", label: "Something Else",   normal: "Describe what you received and we'll do our best to analyse it...", aussie: "Describe it or paste it in — we'll do our best, mate...", icon: "🤔" },
+const SCAM_CATEGORIES = [
+  { icon: "🔗", label: "Links & URLs",   aussieLabel: "Links & URLs",    desc: "Fake sites & phishing URLs",         aussieDesc: "Dodgy sites & phishing URLs" },
+  { icon: "📱", label: "SMS & texts",    aussieLabel: "Texts & SMS",     desc: "Impersonation & delivery scams",     aussieDesc: "Impersonation & delivery scams" },
+  { icon: "📧", label: "Emails",         aussieLabel: "Emails",          desc: "Phishing & fake invoices",           aussieDesc: "Phishing & dodgy invoices" },
+  { icon: "📞", label: "Phone numbers",  aussieLabel: "Phone numbers",   desc: "Robocalls & scam callers",           aussieDesc: "Robocalls & dodgy callers" },
+  { icon: "📷", label: "QR codes",       aussieLabel: "QR codes",        desc: "Malicious codes in emails & flyers", aussieDesc: "Dodgy codes in emails & flyers" },
+  { icon: "🤔", label: "Anything else",  aussieLabel: "Something sus?",  desc: "If it feels off — check it",        aussieDesc: "If it smells dodgy — chuck it in" },
 ];
 
-// Convert any image the browser can display — including HEIC on iOS Safari —
-// into a JPEG File via the Canvas API before passing to tesseract.
-// iOS screenshots are PNG, but Photos library images can arrive as HEIC.
-// iOS Safari renders HEIC natively in <img>, so the canvas round-trip
-// converts any format to JPEG without needing any native module.
-async function normaliseToJpeg(file: File): Promise<File> {
-  const url = URL.createObjectURL(file);
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const MAX_W = 1800;
-      const scale = Math.min(1, MAX_W / img.naturalWidth);
-      const w = Math.floor(img.naturalWidth * scale);
-      const h = Math.floor(img.naturalHeight * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(
-        (blob) => blob
-          ? resolve(new File([blob], "screenshot.jpg", { type: "image/jpeg" }))
-          : reject(new Error("Canvas export failed")),
-        "image/jpeg",
-        0.92,
-      );
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not load image")); };
-    img.src = url;
-  });
+
+function detectType(text: string): ScamType {
+  const t = text.trim();
+  if (/^https?:\/\//i.test(t) || /^www\./i.test(t)) return "url";
+  if (/^\+?[\d][\d\s\-().]{6,}[\d]$/.test(t)) return "phone";
+  if (/^(from|to|subject|date)\s*:/im.test(t)) return "email";
+  return "sms";
 }
 
-export default function ScamChecker() {
+type Identifiers = { scamUrl: string; scamPhone: string; scamEmail: string };
+
+export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, content: string, ids: Identifiers) => void }) {
   const { t } = useLang();
-  const [scamType, setScamType] = useState<ScamType>("url");
   const [content, setContent] = useState("");
   const [result, setResult] = useState<CheckResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [qrDecodeError, setQrDecodeError] = useState<string | null>(null);
-  const [qrDecoding, setQrDecoding] = useState(false);
-  const [ocrError, setOcrError] = useState<string | null>(null);
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState<string | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const ocrFileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedType = SCAM_TYPES.find((s) => s.value === scamType)!;
-
-  async function handleQrUpload(file: File) {
-    setQrDecodeError(null);
-    setQrDecoding(true);
+  async function handleImageUpload(file: File) {
+    setUploadError(null);
+    setUploadLoading(true);
     try {
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(bitmap, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const jsQR = (await import("jsqr")).default;
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      if (code) {
-        setContent(code.data);
+      // Try QR decode first — client-side, no upload needed
+      let qrData: string | null = null;
+      try {
+        const bitmap = await createImageBitmap(file);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(bitmap, 0, 0);
+        const jsQR = (await import("jsqr")).default;
+        const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+        if (code) qrData = code.data;
+      } catch {
+        // Not a QR or unreadable — fall through to OCR
+      }
+
+      if (qrData) {
+        setContent(qrData);
         setResult(null);
         setError(null);
-      } else {
-        setQrDecodeError(t(
-          "Couldn't detect a QR code in that image — try a clearer screenshot.",
-          "Couldn't find a QR code in that image — try a clearer screenshot, mate."
-        ));
+        return;
       }
-    } catch {
-      setQrDecodeError("Couldn't read that file. Make sure it's a PNG, JPG, or WebP image.");
-    } finally {
-      setQrDecoding(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
 
-  async function handleOcrUpload(file: File) {
-    setOcrError(null);
-    setOcrProgress("Loading OCR engine…");
-    setOcrLoading(true);
-    try {
-      // Normalise to JPEG via Canvas before passing to tesseract.
-      // Tesseract's WASM decoder rejects HEIC files with a generic error;
-      // iOS Safari can render HEIC natively in <img>, so the canvas round-trip
-      // converts any format (HEIC, HEIF, WebP, etc.) to a guaranteed JPEG.
-      const normalised = await normaliseToJpeg(file);
-
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng", 1, {
-        logger: (m: { status: string; progress: number }) => {
-          if (m.status === "recognizing text") {
-            setOcrProgress(`Reading text… ${Math.round(m.progress * 100)}%`);
-          }
-        },
-      });
-      const { data: { text } } = await worker.recognize(normalised);
-      await worker.terminate();
-      const cleaned = text.trim();
+      // OCR fallback via server
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await fetch("/api/ocr", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "OCR failed");
+      const cleaned = (data.text ?? "").trim();
       if (cleaned) {
         setContent(cleaned);
         setResult(null);
         setError(null);
       } else {
-        setOcrError(t(
+        setUploadError(t(
           "Couldn't read any text from that image — try a clearer screenshot.",
           "Couldn't read any text from that image — try a clearer screenshot, mate."
         ));
       }
-    } catch {
-      setOcrError(t(
+    } catch (err) {
+      console.error("[Upload] failed:", err);
+      setUploadError(t(
         "Couldn't process that image — try a clearer screenshot or paste the text manually.",
         "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
       ));
     } finally {
-      setOcrLoading(false);
-      setOcrProgress(null);
-      if (ocrFileInputRef.current) ocrFileInputRef.current.value = "";
+      setUploadLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -147,16 +98,14 @@ export default function ScamChecker() {
     setLoading(true);
     setError(null);
     setResult(null);
-
     try {
       const res = await fetch("/api/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: scamType, content }),
+        body: JSON.stringify({ type: detectType(content), content }),
       });
       if (!res.ok) throw new Error("Server error");
-      const data: CheckResult = await res.json();
-      setResult(data);
+      setResult(await res.json());
     } catch {
       setError(t(
         "Something went wrong on our end — please try again.",
@@ -168,129 +117,101 @@ export default function ScamChecker() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Type selector */}
+    <div className="space-y-5">
+
+      {/* Informational category grid */}
       <div>
-        <p id="scam-type-label" className="text-sm font-semibold text-emerald-400 mb-2 uppercase tracking-wider">
-          {t("What would you like to check?", "What are you checking?")}
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+          {t("Common scam types we check", "Common scam types, mate")}
         </p>
-        <div role="radiogroup" aria-labelledby="scam-type-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {SCAM_TYPES.map((s) => (
-            <button
-              key={s.value}
-              role="radio"
-              aria-checked={scamType === s.value}
-              onClick={() => {
-                setScamType(s.value);
-                setResult(null);
-                setError(null);
-                setQrDecodeError(null);
-                setOcrError(null);
-                setOcrProgress(null);
-              }}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                scamType === s.value
-                  ? "bg-emerald-500 border-emerald-400 text-gray-900"
-                  : "bg-gray-800 border-gray-700 text-gray-300 hover:border-emerald-600 hover:text-emerald-400"
-              }`}
-            >
-              <span aria-hidden="true">{s.icon}</span>
-              <span>{s.label}</span>
-            </button>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {SCAM_CATEGORIES.map(({ icon, label, aussieLabel, desc, aussieDesc }) => (
+            <div key={label} className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2.5">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span aria-hidden="true">{icon}</span>
+                <span className="text-sm font-medium text-gray-200">{t(label, aussieLabel)}</span>
+              </div>
+              <p className="text-xs text-gray-500">{t(desc, aussieDesc)}</p>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Input */}
+      {/* Upload zone */}
       <div>
-        <label htmlFor="scam-content" className="block text-sm font-semibold text-emerald-400 mb-2 uppercase tracking-wider">
-          <span aria-hidden="true">{selectedType.icon}</span>{" "}{selectedType.label}
-        </label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => { const file = e.target.files?.[0]; if (file) handleImageUpload(file); }}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => { const file = e.target.files?.[0]; if (file) handleImageUpload(file); }}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadLoading}
+            className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <span aria-hidden="true" className="text-3xl">🖼️</span>
+            <span className="font-medium text-sm">{t("Upload screenshot", "Upload a screenshot")}</span>
+            <span className="text-xs text-gray-500">PNG, JPG, HEIC</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={uploadLoading}
+            className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <span aria-hidden="true" className="text-3xl">{uploadLoading ? "⏳" : "📷"}</span>
+            <span className="font-medium text-sm">
+              {uploadLoading ? t("Reading…", "Hang on…") : t("Take a photo", "Take a photo")}
+            </span>
+            <span className="text-xs text-gray-500">{t("QR codes auto-decoded", "QR codes auto-decoded, mate")}</span>
+          </button>
+        </div>
+        <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
+          {uploadError
+            ? <span className="text-red-400">{uploadError}</span>
+            : content && !uploadLoading
+              ? <span className="text-emerald-400">{t("Got it — review below and hit Check.", "Got it — have a squiz below and hit Check.")}</span>
+              : null}
+        </p>
+      </div>
 
-        {/* Screenshot upload — OCR */}
-        {scamType !== "qr" && (
-          <div className="mb-3">
-            <input
-              ref={ocrFileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={(e) => { const file = e.target.files?.[0]; if (file) handleOcrUpload(file); }}
-            />
-            <button
-              type="button"
-              onClick={() => ocrFileInputRef.current?.click()}
-              disabled={ocrLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <span aria-hidden="true" className="text-lg">📂</span>
-              <span>{ocrLoading
-                ? (ocrProgress ?? "Reading…")
-                : t("Have a screenshot? Upload it and we'll extract the text.", "Got a screenshot? Upload it and we'll read the text for ya")
-              }</span>
-            </button>
-            <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
-              {ocrError
-                ? <span className="text-red-400">{ocrError}</span>
-                : content && !ocrLoading
-                  ? <span className="text-emerald-400">{t("Text extracted — review it below and click Check.", "Text extracted — have a squiz below and hit Check when ready.")}</span>
-                  : null}
-            </p>
-          </div>
-        )}
+      {/* Divider */}
+      <div className="flex items-center gap-3" aria-hidden="true">
+        <div className="flex-1 h-px bg-gray-700" />
+        <span className="text-xs text-gray-500">{t("or paste below", "or paste it below")}</span>
+        <div className="flex-1 h-px bg-gray-700" />
+      </div>
 
-        {/* QR screenshot upload */}
-        {scamType === "qr" && (
-          <div className="mb-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={(e) => { const file = e.target.files?.[0]; if (file) handleQrUpload(file); }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={qrDecoding}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg text-sm text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <span aria-hidden="true" className="text-lg">📂</span>
-              <span>{qrDecoding
-                ? "Reading QR code…"
-                : t("Upload a screenshot — we'll decode the QR for you.", "Upload a screenshot — we'll read the QR for ya")
-              }</span>
-            </button>
-            <p aria-live="polite" className="mt-1.5 text-sm min-h-[1rem]">
-              {qrDecodeError
-                ? <span className="text-red-400">{qrDecodeError}</span>
-                : content && !qrDecoding
-                  ? <span className="text-emerald-400">{t("QR decoded — the URL is ready to check below.", "QR decoded — URL's ready to check below.")}</span>
-                  : null}
-            </p>
-          </div>
-        )}
-
+      {/* Text input */}
+      <div>
+        <label htmlFor="scam-content" className="sr-only">Suspicious content</label>
         <textarea
           id="scam-content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder={t(selectedType.normal, selectedType.aussie)}
-          rows={scamType === "url" || scamType === "phone" ? 2 : 5}
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
+          placeholder={t(
+            "Paste a URL, phone number, SMS, or email content here…",
+            "Paste the sus stuff here — URL, text, email, whatever you've got…"
+          )}
+          rows={5}
+          className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
         />
-        {scamType === "custom" && (
-          <p className="mt-1 text-sm text-gray-400">
-            {t(
-              "Don't worry if it doesn't fit a category — describe it and we'll do our best.",
-              "No worries if it doesn't fit a category — just describe it or paste whatever you've got."
-            )}
-          </p>
-        )}
       </div>
 
       {/* Submit */}
@@ -311,6 +232,7 @@ export default function ScamChecker() {
         </div>
       )}
 
+      {/* Result */}
       <div aria-live="polite" aria-atomic="true">
         {result && (
           <div className="space-y-4 animate-in fade-in duration-300">
@@ -329,6 +251,15 @@ export default function ScamChecker() {
                   ))}
                 </ul>
               </div>
+            )}
+            {(result.verdict === "likely_scam" || result.verdict === "suspicious") && onReport && (
+              <button
+                onClick={() => onReport(detectType(content), content, extractIdentifiers(content))}
+                className="w-full py-3 px-6 bg-red-800 hover:bg-red-700 text-white font-bold rounded-lg transition-all text-sm uppercase tracking-wide flex items-center justify-center gap-2"
+              >
+                <span aria-hidden="true">🚨</span>
+                {t("Report This Scam", "Report This Mongrel")}
+              </button>
             )}
           </div>
         )}
