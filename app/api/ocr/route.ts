@@ -10,7 +10,6 @@ const LANG_PATH = path.join(process.cwd(), "public", "tessdata");
 // Singleton worker — created on first request, reused after that.
 // Using global so Next.js hot-reload doesn't create duplicate workers in dev.
 declare global {
-  // eslint-disable-next-line no-var
   var _ocrWorker: ReturnType<typeof createWorker> | undefined;
 }
 

@@ -63,10 +63,7 @@ export function generateReportId(): string {
   return "RPT-" + randomBytes(4).toString("hex").toUpperCase();
 }
 
-// Identifier columns used for match-counting. The array acts as a whitelist
-// so column names are never derived from user input.
-const IDENTIFIER_COLS = ["scam_url", "scam_phone", "scam_email"] as const;
-type IdentifierCol = (typeof IDENTIFIER_COLS)[number];
+type IdentifierCol = "scam_url" | "scam_phone" | "scam_email";
 
 function getPrimaryIdentifier(report: Report): [IdentifierCol, string] | null {
   if (report.scamUrl)   return ["scam_url",   report.scamUrl];
