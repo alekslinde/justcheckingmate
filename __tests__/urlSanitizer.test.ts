@@ -5,6 +5,9 @@ import {
   normaliseForAnalysis,
   safeDisplayUrl,
   defangText,
+  defangEmail,
+  defangPhone,
+  extractIdentifiers,
 } from "@/lib/urlSanitizer";
 
 describe("defang", () => {
@@ -168,5 +171,111 @@ describe("defangText", () => {
     const result = defangText("See: https://example.com/?utm_source=x&q=1");
     expect(result).not.toContain("utm_source");
     expect(result).toContain("q=1");
+  });
+});
+
+describe("defangEmail", () => {
+  it("replaces @ with [@]", () => {
+    const result = defangEmail("user@evil.com");
+    expect(result).toContain("[@]");
+    // No bare @ should remain — only the bracketed form [@]
+    expect(result).not.toMatch(/(?<!\[)@(?!\])/);
+  });
+
+  it("replaces all dots with [.]", () => {
+    expect(defangEmail("user@evil.com")).toBe("user[@]evil[.]com");
+  });
+
+  it("handles subdomains and multi-part TLDs", () => {
+    expect(defangEmail("user.name@sub.evil.co.uk")).toBe("user[.]name[@]sub[.]evil[.]co[.]uk");
+  });
+
+  it("only replaces the first @ (preserves shape for malformed addresses)", () => {
+    const result = defangEmail("a@b@c.com");
+    expect(result).toBe("a[@]b@c[.]com");
+  });
+
+  it("handles an empty string without throwing", () => {
+    expect(defangEmail("")).toBe("");
+  });
+});
+
+describe("defangPhone", () => {
+  it("inserts invisible breaks between consecutive digits", () => {
+    const result = defangPhone("+61412345678");
+    // Strip every non-printable / non-ASCII character; visible number must be intact
+    const visible = result.replace(/[^\x20-\x7E]/g, "");
+    expect(visible).toBe("+61412345678");
+  });
+
+  it("makes the result longer than the input when consecutive digits are present", () => {
+    const phone = "+61412345678";
+    expect(defangPhone(phone).length).toBeGreaterThan(phone.length);
+  });
+
+  it("leaves strings with no consecutive digits unchanged", () => {
+    expect(defangPhone("+6 1 4")).toBe("+6 1 4");
+  });
+
+  it("handles an empty string without throwing", () => {
+    expect(defangPhone("")).toBe("");
+  });
+});
+
+describe("extractIdentifiers", () => {
+  it("extracts a bare URL", () => {
+    const { scamUrl, scamEmail, scamPhone } = extractIdentifiers("https://ato-refund.xyz/verify");
+    expect(scamUrl).toBe("https://ato-refund.xyz/verify");
+    expect(scamEmail).toBe("");
+    expect(scamPhone).toBe("");
+  });
+
+  it("extracts a URL embedded in SMS text", () => {
+    const { scamUrl } = extractIdentifiers(
+      "Your parcel is ready: https://au-post.fake/track?id=123 — click to confirm."
+    );
+    expect(scamUrl).toBe("https://au-post.fake/track?id=123");
+  });
+
+  it("strips trailing punctuation from an extracted URL", () => {
+    const { scamUrl } = extractIdentifiers("Visit https://evil.com/verify.");
+    expect(scamUrl).toBe("https://evil.com/verify");
+  });
+
+  it("extracts a bare email address", () => {
+    const { scamEmail } = extractIdentifiers("scammer@evil.com");
+    expect(scamEmail).toBe("scammer@evil.com");
+  });
+
+  it("extracts a From: address in email content", () => {
+    const { scamEmail } = extractIdentifiers(
+      "From: noreply@fake-ato.com\nSubject: Tax refund\nPlease verify your TFN."
+    );
+    expect(scamEmail).toBe("noreply@fake-ato.com");
+  });
+
+  it("extracts a phone number when the entire content is a phone number", () => {
+    const { scamPhone } = extractIdentifiers("+61 412 345 678");
+    expect(scamPhone).toBe("+61 412 345 678");
+  });
+
+  it("does NOT extract a phone number embedded inside longer text", () => {
+    const { scamPhone } = extractIdentifiers(
+      "Please call +61412345678 immediately to avoid penalty."
+    );
+    expect(scamPhone).toBe("");
+  });
+
+  it("extracts both URL and email from the same content", () => {
+    const { scamUrl, scamEmail } = extractIdentifiers(
+      "From: phish@bad.com\nClick: https://bad.com/steal"
+    );
+    expect(scamUrl).toBe("https://bad.com/steal");
+    expect(scamEmail).toBe("phish@bad.com");
+  });
+
+  it("returns all empty strings for plain text with no identifiers", () => {
+    const ids = extractIdentifiers("Call us urgently about your account.");
+    expect(ids).toEqual({ scamUrl: "", scamEmail: "", scamPhone: "" });
   });
 });
