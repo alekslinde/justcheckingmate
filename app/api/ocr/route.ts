@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import path from "path";
-import os from "os";
 
-// Language data is downloaded once to this dir and reused across requests.
-// Using os.tmpdir() keeps it out of the project tree and survives hot-reloads.
-const LANG_PATH = path.join(os.tmpdir(), "tessdata");
+// Language data is committed to public/tessdata/ and served from there.
+// process.cwd() resolves to the project root in both dev and production.
+const LANG_PATH = path.join(process.cwd(), "public", "tessdata");
 
 // Singleton worker — created on first request, reused after that.
 // Using global so Next.js hot-reload doesn't create duplicate workers in dev.
