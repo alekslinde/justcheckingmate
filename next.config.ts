@@ -30,6 +30,14 @@ const nextConfig: NextConfig = {
   // directly from node_modules at runtime.
   serverExternalPackages: ["sharp", "tesseract.js"],
 
+  // Tesseract.js reads the training data from the filesystem at runtime via a
+  // string path, so Next.js file tracing never detects the dependency.
+  // Without this, Vercel excludes eng.traineddata.gz from the function bundle
+  // and Tesseract falls back to a CDN download that exceeds the timeout.
+  outputFileTracingIncludes: {
+    "/api/ocr": ["./public/tessdata/**/*"],
+  },
+
   async headers() {
     return [
       {
