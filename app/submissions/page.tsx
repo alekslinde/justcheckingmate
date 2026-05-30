@@ -83,6 +83,7 @@ export default function SubmissionsPage() {
   // Debounce the search input before firing a fetch
   useEffect(() => {
     const t = setTimeout(() => {
+      setLoading(true);
       setSearch(searchInput.trim());
       setPage(1);
     }, 350);
@@ -92,7 +93,6 @@ export default function SubmissionsPage() {
   // Fetch whenever any filter changes
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
     const offset = (page - 1) * PAGE_SIZE;
     const since  = periodDays !== "0"
@@ -119,11 +119,12 @@ export default function SubmissionsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  function changeType(val: string)       { setType(val);       setPage(1); }
-  function changeSort(val: SortOption)   { setSort(val);       setPage(1); }
-  function changePeriod(val: string)     { setPeriodDays(val); setPage(1); }
+  function changeType(val: string)       { setLoading(true); setType(val);       setPage(1); }
+  function changeSort(val: SortOption)   { setLoading(true); setSort(val);       setPage(1); }
+  function changePeriod(val: string)     { setLoading(true); setPeriodDays(val); setPage(1); }
   function clearSearch()                 { setSearchInput(""); searchRef.current?.focus(); }
   function goTo(p: number) {
+    setLoading(true);
     setPage(Math.max(1, Math.min(p, totalPages)));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
