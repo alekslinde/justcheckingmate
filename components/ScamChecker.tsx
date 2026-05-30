@@ -64,23 +64,27 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
         return;
       }
 
-      // OCR fallback: run Tesseract in the browser to avoid serverless timeouts.
-      // langPath points to the training data committed under public/tessdata/,
-      // served from the same origin so no CDN dependency.
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng", 1, {
-        langPath: "/tessdata",
-        logger: () => {},
-      });
-      let ocrText = "";
+      // OCR via server route. outputFileTracingIncludes in next.config.ts
+      // ensures eng.traineddata.gz is bundled into the Vercel function so
+      // Tesseract never falls back to a CDN download that would hang.
+      const formData = new FormData();
+      formData.append("image", file);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60_000);
+      let res: Response;
       try {
-        const { data } = await worker.recognize(file);
-        ocrText = (data.text ?? "").trim();
+        res = await fetch("/api/ocr", { method: "POST", body: formData, signal: controller.signal });
       } finally {
-        await worker.terminate();
+        clearTimeout(timer);
       }
-      if (ocrText) {
-        setContent(ocrText);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? "OCR request failed");
+      }
+      const data = await res.json() as { text?: string };
+      const cleaned = (data.text ?? "").trim();
+      if (cleaned) {
+        setContent(cleaned);
         setResult(null);
         setError(null);
       } else {
@@ -91,13 +95,17 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
       }
     } catch (err) {
       console.error("[Upload] failed:", err);
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
       setUploadError(
-        err instanceof Error && err.message
-          ? err.message
-          : t(
-              "Couldn't process that image — try a clearer screenshot or paste the text manually.",
-              "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
-            )
+        isTimeout
+          ? t("OCR is taking too long — try again or paste the text manually.",
+              "OCR is taking too long — try again or paste the text in yourself.")
+          : err instanceof Error && err.message
+            ? err.message
+            : t(
+                "Couldn't process that image — try a clearer screenshot or paste the text manually.",
+                "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
+              )
       );
     } finally {
       setUploadLoading(false);
