@@ -81,3 +81,33 @@ export function safeDisplayUrl(raw: string): string {
 export function defangText(text: string): string {
   return text.replace(/https?:\/\/[^\s"'>]+/gi, (u) => safeDisplayUrl(u));
 }
+
+// ── Defang email addresses ────────────────────────────────────────────────────
+// user@domain.com → user[@]domain[.]com
+export function defangEmail(email: string): string {
+  return email.replace("@", "[@]").replace(/\./g, "[.]");
+}
+
+// ── Defang phone numbers ──────────────────────────────────────────────────────
+// Inserts zero-width joiners (U+2060) between consecutive digit pairs so
+// browsers and OS text-detection don't auto-link the number as a tel: URI,
+// while keeping the display visually identical to the original.
+export function defangPhone(phone: string): string {
+  return phone.replace(/(\d)(?=\d)/g, "$1⁠");
+}
+
+// ── Extract scam identifiers from free text ───────────────────────────────────
+// Pulls out the first URL, the first email address, and (only if the entire
+// trimmed string is a phone number) the phone number.  Intentionally conservative
+// — in-text phone extraction produces too many false positives.
+export function extractIdentifiers(text: string): { scamUrl: string; scamEmail: string; scamPhone: string } {
+  const t = text.trim();
+  const urlMatch   = t.match(/https?:\/\/[^\s<>"']+/i);
+  const emailMatch = t.match(/\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/);
+  const isPhone    = /^[\+\d][\d\s\-().]{5,25}[\d]$/.test(t);
+  return {
+    scamUrl:   urlMatch   ? urlMatch[0].replace(/[.,;:!?)]+$/, "") : "",
+    scamEmail: emailMatch ? emailMatch[0] : "",
+    scamPhone: isPhone    ? t : "",
+  };
+}
