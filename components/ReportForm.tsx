@@ -24,10 +24,13 @@ const PLACEHOLDERS: Record<ScamType, string> = {
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-export default function ReportForm() {
-  const [type, setType] = useState<ScamType>("url");
-  const [content, setContent] = useState("");
+export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string } = {}) {
+  const [type, setType] = useState<ScamType>(initialType ?? "url");
+  const [content, setContent] = useState(initialContent ?? "");
   const [description, setDescription] = useState("");
+  const [scamUrl, setScamUrl] = useState(initialScamUrl ?? "");
+  const [scamPhone, setScamPhone] = useState(initialScamPhone ?? "");
+  const [scamEmail, setScamEmail] = useState(initialScamEmail ?? "");
   const [contact, setContact] = useState("");
   const [hp, setHp] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -58,6 +61,9 @@ export default function ReportForm() {
           type,
           content,
           description,
+          scamUrl,
+          scamPhone,
+          scamEmail,
           contact,
           hp,
           loadedAt: loadedAt.current,
@@ -80,6 +86,9 @@ export default function ReportForm() {
   function reset() {
     setContent("");
     setDescription("");
+    setScamUrl("");
+    setScamPhone("");
+    setScamEmail("");
     setContact("");
     setReportId(null);
     setStatus("idle");
@@ -161,6 +170,17 @@ export default function ReportForm() {
         />
       </div>
 
+      <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 space-y-1.5">
+        <p className="text-sm text-emerald-400 font-semibold text-center">
+          For urgent matters, contact Scamwatch, your bank, or the{" "}
+          <abbr title="Australian Federal Police">AFP</abbr>{" "}
+          directly — this tool is not a substitute for official reporting channels.
+        </p>
+        <p className="text-sm text-gray-400 text-center">
+          Your report is valuable. Every submission helps raise awareness and protects others from the same scam.
+        </p>
+      </div>
+
       {/* Stats badge */}
       {totalReports !== null && (
         <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
@@ -226,6 +246,53 @@ export default function ReportForm() {
         </div>
       </div>
 
+      {/* Scam identifiers */}
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+          Scam identifiers{" "}
+          <span className="text-gray-400 normal-case font-normal">(optional)</span>
+        </legend>
+        <p className="text-xs text-gray-500">
+          Capture any specific contact points so others can recognise the same scam.
+        </p>
+        <div>
+          <label htmlFor="report-scam-url" className="block text-xs font-medium text-gray-400 mb-1">Scam URL / link</label>
+          <input
+            id="report-scam-url"
+            type="url"
+            value={scamUrl}
+            onChange={(e) => setScamUrl(e.target.value)}
+            placeholder="https://fake-ato-refund.xyz/verify"
+            maxLength={2000}
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+          />
+        </div>
+        <div>
+          <label htmlFor="report-scam-phone" className="block text-xs font-medium text-gray-400 mb-1">Scam phone number</label>
+          <input
+            id="report-scam-phone"
+            type="tel"
+            value={scamPhone}
+            onChange={(e) => setScamPhone(e.target.value)}
+            placeholder="+61 4xx xxx xxx"
+            maxLength={50}
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+          />
+        </div>
+        <div>
+          <label htmlFor="report-scam-email" className="block text-xs font-medium text-gray-400 mb-1">Scammer&apos;s email address</label>
+          <input
+            id="report-scam-email"
+            type="email"
+            value={scamEmail}
+            onChange={(e) => setScamEmail(e.target.value)}
+            placeholder="scammer@dodgy-domain.com"
+            maxLength={200}
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+          />
+        </div>
+      </fieldset>
+
       {/* Description */}
       <div>
         <label htmlFor="report-description" className="block text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">
@@ -281,16 +348,6 @@ export default function ReportForm() {
         {status === "submitting" ? "Lodging your report..." : "Report This Scam 🚨"}
       </button>
 
-      <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 space-y-1.5">
-        <p className="text-sm text-emerald-400 font-semibold text-center">
-          For urgent matters, contact Scamwatch, your bank, or the{" "}
-          <abbr title="Australian Federal Police">AFP</abbr>{" "}
-          directly — this tool is not a substitute for official reporting channels.
-        </p>
-        <p className="text-sm text-gray-400 text-center">
-          Your report is valuable. Every submission helps raise awareness and protects others from the same scam.
-        </p>
-      </div>
     </form>
   );
 }
