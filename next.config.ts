@@ -6,41 +6,38 @@ import type { NextConfig } from "next";
 // would block it before a single byte left the machine.
 //
 // connect-src 'self'  → fetch()/XHR can only call our own API routes
-// img-src 'self' data: → no external pixel trackers
+// img-src 'self' data: blob: → canvas preview, no external pixel trackers
 // frame-ancestors 'none' → can't be embedded in an iframe (clickjacking)
 // form-action 'self'  → form POSTs can only go to our own origin
+// worker-src blob:    → tesseract.js spawns Web Workers from blob: URLs
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js requires these
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",           // <-- no outbound fetch to external URLs
+  "connect-src 'self'",
   "frame-src 'none'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
+  "worker-src blob: 'self'",
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Keep native-module packages out of the Next.js bundle so they load
+  // directly from node_modules at runtime.
+  serverExternalPackages: ["sharp", "tesseract.js"],
+
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          // Prevents the Referer header being sent if a user navigates from
-          // our app to any external URL — scammer never sees our domain.
           { key: "Referrer-Policy", value: "no-referrer" },
-
-          // Stops Chrome/Firefox from speculatively resolving hostnames found
-          // in page content, which would send DNS queries to the scammer's
-          // nameserver even without the user clicking anything.
           { key: "X-DNS-Prefetch-Control", value: "off" },
-
-          // Hard block on outbound requests (see comment above).
           { key: "Content-Security-Policy", value: CSP },
-
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Permissions-Policy", value: "browsing-topics=()" },
