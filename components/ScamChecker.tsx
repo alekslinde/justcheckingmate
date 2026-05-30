@@ -67,7 +67,14 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
       // OCR fallback via server
       const formData = new FormData();
       formData.append("image", file);
-      const res = await fetch("/api/ocr", { method: "POST", body: formData });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/ocr", { method: "POST", body: formData, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "OCR failed");
       const cleaned = (data.text ?? "").trim();
@@ -165,8 +172,10 @@ export default function ScamChecker({ onReport }: { onReport?: (type: ScamType, 
             disabled={uploadLoading}
             className="flex flex-col items-center justify-center gap-2 px-4 py-6 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <span aria-hidden="true" className="text-3xl">🖼️</span>
-            <span className="font-medium text-sm">{t("Upload screenshot", "Upload a screenshot")}</span>
+            <span aria-hidden="true" className="text-3xl">{uploadLoading ? "⏳" : "🖼️"}</span>
+            <span className="font-medium text-sm">
+              {uploadLoading ? t("Reading…", "Hang on…") : t("Upload screenshot", "Upload a screenshot")}
+            </span>
             <span className="text-xs text-gray-500">PNG, JPG, HEIC</span>
           </button>
           <button
