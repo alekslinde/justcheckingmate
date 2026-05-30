@@ -21,9 +21,11 @@ function getWorker() {
   if (!global._ocrWorker) {
     global._ocrWorker = createWorker("eng", 1, {
       langPath: LANG_PATH,
-      // Suppress tesseract's internal progress/debug logging
+      // Suppress tesseract's internal progress/debug logging, but DO surface
+      // errors — a swallowed errorHandler turns a worker-init failure (e.g. a
+      // missing WASM core file) into a silent hang instead of a fast failure.
       logger: () => {},
-      errorHandler: () => {},
+      errorHandler: (err) => console.error("OCR worker error:", err),
     });
   }
   return global._ocrWorker;

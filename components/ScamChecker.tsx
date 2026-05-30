@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { CheckResult, ScamType } from "@/lib/scamDetector";
+import { detectType } from "@/lib/detectType";
 import { defangText, extractIdentifiers } from "@/lib/urlSanitizer";
 import VerdictBadge from "./VerdictBadge";
 import { useLang } from "@/lib/lang";
@@ -15,14 +16,6 @@ const SCAM_CATEGORIES = [
   { icon: "🤔", label: "Anything else",  aussieLabel: "Something sus?",  desc: "If it feels off — check it",        aussieDesc: "If it smells dodgy — chuck it in" },
 ];
 
-
-function detectType(text: string): ScamType {
-  const t = text.trim();
-  if (/^https?:\/\//i.test(t) || /^www\./i.test(t)) return "url";
-  if (/^\+?[\d][\d\s\-().]{6,}[\d]$/.test(t)) return "phone";
-  if (/^(from|to|subject|date)\s*:/im.test(t)) return "email";
-  return "sms";
-}
 
 type Identifiers = { scamUrl: string; scamPhone: string; scamEmail: string };
 
