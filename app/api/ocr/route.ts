@@ -3,6 +3,10 @@ import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import path from "path";
 
+// Tesseract OCR can take 30–60 s on a cold start.
+// Default Vercel function timeout (10 s) is too short.
+export const maxDuration = 60;
+
 // Language data is committed to public/tessdata/ and served from there.
 // process.cwd() resolves to the project root in both dev and production.
 const LANG_PATH = path.join(process.cwd(), "public", "tessdata");
