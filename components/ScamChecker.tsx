@@ -15,6 +15,41 @@ const SCAM_TYPES: { value: ScamType; label: string; normal: string; aussie: stri
   { value: "custom", label: "Something Else",   normal: "Describe what you received and we'll do our best to analyse it...", aussie: "Describe it or paste it in — we'll do our best, mate...", icon: "🤔" },
 ];
 
+// Convert any image the browser can display — including HEIC on iOS Safari —
+// into a JPEG File via the Canvas API before passing to tesseract.
+// iOS screenshots are PNG, but Photos library images can arrive as HEIC.
+// iOS Safari renders HEIC natively in <img>, so the canvas round-trip
+// converts any format to JPEG without needing any native module.
+async function normaliseToJpeg(file: File): Promise<File> {
+  const url = URL.createObjectURL(file);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX_W = 1800;
+      const scale = Math.min(1, MAX_W / img.naturalWidth);
+      const w = Math.floor(img.naturalWidth * scale);
+      const h = Math.floor(img.naturalHeight * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        (blob) => blob
+          ? resolve(new File([blob], "screenshot.jpg", { type: "image/jpeg" }))
+          : reject(new Error("Canvas export failed")),
+        "image/jpeg",
+        0.92,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not load image")); };
+    img.src = url;
+  });
+}
+
 export default function ScamChecker() {
   const { t } = useLang();
   const [scamType, setScamType] = useState<ScamType>("url");
@@ -68,6 +103,12 @@ export default function ScamChecker() {
     setOcrProgress("Loading OCR engine…");
     setOcrLoading(true);
     try {
+      // Normalise to JPEG via Canvas before passing to tesseract.
+      // Tesseract's WASM decoder rejects HEIC files with a generic error;
+      // iOS Safari can render HEIC natively in <img>, so the canvas round-trip
+      // converts any format (HEIC, HEIF, WebP, etc.) to a guaranteed JPEG.
+      const normalised = await normaliseToJpeg(file);
+
       const { createWorker } = await import("tesseract.js");
       const worker = await createWorker("eng", 1, {
         logger: (m: { status: string; progress: number }) => {
@@ -76,7 +117,7 @@ export default function ScamChecker() {
           }
         },
       });
-      const { data: { text } } = await worker.recognize(file);
+      const { data: { text } } = await worker.recognize(normalised);
       await worker.terminate();
       const cleaned = text.trim();
       if (cleaned) {
@@ -90,7 +131,10 @@ export default function ScamChecker() {
         ));
       }
     } catch {
-      setOcrError("Couldn't process that file. Make sure it's a PNG, JPG, or WebP image.");
+      setOcrError(t(
+        "Couldn't process that image — try a clearer screenshot or paste the text manually.",
+        "Couldn't process that image — try a clearer screenshot or paste the text in yourself."
+      ));
     } finally {
       setOcrLoading(false);
       setOcrProgress(null);
@@ -261,14 +305,12 @@ export default function ScamChecker() {
           : t("Check This Now 🔍", "Just Checking, Mate! 🔍")}
       </button>
 
-      {/* Error */}
       {error && (
         <div role="alert" className="bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
           {error}
         </div>
       )}
 
-      {/* Result */}
       <div aria-live="polite" aria-atomic="true">
         {result && (
           <div className="space-y-4 animate-in fade-in duration-300">
