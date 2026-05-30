@@ -30,12 +30,19 @@ const nextConfig: NextConfig = {
   // directly from node_modules at runtime.
   serverExternalPackages: ["sharp", "tesseract.js"],
 
-  // Tesseract.js reads the training data from the filesystem at runtime via a
-  // string path, so Next.js file tracing never detects the dependency.
-  // Without this, Vercel excludes eng.traineddata.gz from the function bundle
-  // and Tesseract falls back to a CDN download that exceeds the timeout.
+  // Tesseract resolves three runtime assets by string path, none of which
+  // Next.js file tracing can detect statically, so all must be declared here
+  // or Vercel omits them from the function bundle:
+  //   1. eng.traineddata.gz   — language data (process.cwd()/public/tessdata)
+  //   2. tesseract-core*.wasm — the WASM core, readFileSync'd by the JS shim
+  //      at runtime (the .js shims ARE traced, the .wasm binaries are not).
+  // Without the .wasm files the worker fails to initialise; the failure is
+  // otherwise silent and the request hangs until the client aborts.
   outputFileTracingIncludes: {
-    "/api/ocr": ["./public/tessdata/**/*"],
+    "/api/ocr": [
+      "./public/tessdata/**/*",
+      "./node_modules/tesseract.js-core/*.wasm",
+    ],
   },
 
   async headers() {
