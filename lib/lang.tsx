@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useSyncExternalStore } from "react";
+import { translate, type LangMode, type MessageKey } from "@/lib/i18n";
 
-export type LangMode = "normal" | "aussie";
+export type { LangMode, MessageKey } from "@/lib/i18n";
+
 const STORAGE_KEY = "jcm_lang";
 
 interface LangCtx { mode: LangMode; toggle: () => void; }
@@ -47,6 +49,9 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
 
 export function useLang() {
   const { mode, toggle } = useContext(LangContext);
-  function t(normal: string, aussie: string) { return mode === "aussie" ? aussie : normal; }
+  const t = useCallback(
+    (key: MessageKey, vars?: Record<string, string | number>) => translate(mode, key, vars),
+    [mode],
+  );
   return { mode, toggle, t };
 }

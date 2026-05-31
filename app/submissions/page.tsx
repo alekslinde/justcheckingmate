@@ -146,16 +146,10 @@ export default function SubmissionsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-gray-100">
+    <main>
       {/* Header */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
         <div className="max-w-2xl mx-auto px-4 py-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-400 transition-colors mb-4"
-          >
-            ← Back
-          </Link>
           <div className="flex items-center gap-3">
             <span className="text-3xl" aria-hidden="true">📋</span>
             <div>
@@ -198,21 +192,16 @@ export default function SubmissionsPage() {
         {/* Filters */}
         <div className="flex flex-wrap gap-2 items-center">
           {/* Sort */}
-          <div className="flex rounded-lg border border-gray-700 overflow-hidden text-sm">
-            {SORT_OPTIONS.map((opt, i) => (
-              <button
-                key={opt.value}
-                onClick={() => changeSort(opt.value)}
-                className={`px-3 py-1.5 transition-colors ${i > 0 ? "border-l border-gray-700" : ""} ${
-                  sort === opt.value
-                    ? "bg-gray-700 text-gray-100"
-                    : "bg-gray-900 text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                {opt.label}
-              </button>
+          <select
+            value={sort}
+            onChange={(e) => changeSort(e.target.value as SortOption)}
+            aria-label="Sort reports"
+            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
-          </div>
+          </select>
 
           <select
             value={type}
