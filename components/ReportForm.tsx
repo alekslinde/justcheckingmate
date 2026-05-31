@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
 import { parseEmailHeaders, analyseEmailIdentities, summariseAuth } from "@/lib/emailHeaders";
+import { useBugReport } from "./BugReportProvider";
 
 const REPORT_TYPES: { value: ScamType; label: string; icon: string }[] = [
   { value: "url",    label: "Dodgy Link / Website", icon: "🔗" },
@@ -29,6 +30,7 @@ interface EmailAuth { spf: string; dkim: string; dkimDomain: string; dmarc: stri
 const EMPTY_AUTH: EmailAuth = { spf: "", dkim: "", dkimDomain: "", dmarc: "" };
 
 export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
+  const { reportFailure } = useBugReport();
   const [type, setType] = useState<ScamType>(initialType ?? "url");
   const [content, setContent] = useState(initialContent ?? "");
   const [description, setDescription] = useState("");
@@ -122,9 +124,11 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         setTotalReports((n) => (n !== null ? n + 1 : n));
       } else {
         setStatus("error");
+        reportFailure("report", "Report submission was rejected by the server");
       }
-    } catch {
+    } catch (err) {
       setStatus("error");
+      reportFailure("report", err);
     }
   }
 

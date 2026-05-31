@@ -6,6 +6,7 @@ import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
 import { parseEmailHeaders } from "@/lib/emailHeaders";
 import { useLang } from "@/lib/lang";
+import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
 import ReportForm from "./ReportForm";
 
@@ -33,6 +34,7 @@ function kindToType(kind: AnalyzedIdentifier["kind"], content: string): ScamType
 
 export default function CheckFlow() {
   const { t } = useLang();
+  const { reportFailure } = useBugReport();
   const [step, setStep] = useState<Step>("input");
   const [content, setContent] = useState("");
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
@@ -95,6 +97,7 @@ export default function CheckFlow() {
             ? err.message
             : t("check.ocr.failed"),
       );
+      reportFailure("upload", err);
     } finally {
       setUploadLoading(false);
       if (imageRef.current) imageRef.current.value = "";
@@ -109,8 +112,9 @@ export default function CheckFlow() {
     try {
       const text = await file.text();
       setContent(text);
-    } catch {
+    } catch (err) {
       setUploadError(t("check.file.error"));
+      reportFailure("upload", err);
     } finally {
       if (emlRef.current) emlRef.current.value = "";
     }
@@ -130,8 +134,9 @@ export default function CheckFlow() {
       const data = await res.json() as { results: AnalyzedIdentifier[] };
       setResults(data.results ?? []);
       setStep("result");
-    } catch {
+    } catch (err) {
       setCheckError(t("check.serverError"));
+      reportFailure("check", err);
     } finally {
       setCheckLoading(false);
     }

@@ -32,6 +32,22 @@ async function setup(): Promise<void> {
       value INTEGER NOT NULL DEFAULT 0
     )
   `);
+  // Bug reports — diagnostics for failed/awkward actions, sent only with the
+  // user's explicit consent. Never contains the scam content or uploaded files.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS bug_reports (
+      id            TEXT    PRIMARY KEY,
+      action        TEXT    NOT NULL DEFAULT 'manual',
+      error_message TEXT    NOT NULL DEFAULT '',
+      description   TEXT    NOT NULL DEFAULT '',
+      contact       TEXT    NOT NULL DEFAULT '',
+      path          TEXT    NOT NULL DEFAULT '',
+      user_agent    TEXT    NOT NULL DEFAULT '',
+      viewport      TEXT    NOT NULL DEFAULT '',
+      app_language  TEXT    NOT NULL DEFAULT '',
+      submitted_at  INTEGER NOT NULL
+    )
+  `);
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('checks', 0)`);
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('reports', 0)`);
   // Migrations — ALTER TABLE ignores silently if column already exists
