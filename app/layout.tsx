@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LangProvider } from "@/lib/lang";
+import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/SiteFooter";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Just Checking, Mate 🦘 — Aussie Scam Detector",
-  description: "Australia's no-nonsense scam detector. Check links, texts, emails and calls — then feed the scammers some poison data.",
+  description: "Australia's no-nonsense scam detector. Check links, texts, emails and calls before you act.",
 };
 
 export default function RootLayout({
@@ -28,7 +30,13 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"><LangProvider>{children}</LangProvider></body>
+      <body className="min-h-full flex flex-col bg-gray-950 text-gray-100">
+        <LangProvider>
+          <SiteHeader />
+          <div className="flex-1 bg-gradient-to-b from-gray-900 to-gray-950">{children}</div>
+          <SiteFooter />
+        </LangProvider>
+      </body>
     </html>
   );
 }

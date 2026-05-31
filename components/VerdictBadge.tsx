@@ -2,39 +2,22 @@
 
 import { CheckResult } from "@/lib/scamDetector";
 import { defangText } from "@/lib/urlSanitizer";
-import { useLang } from "@/lib/lang";
+import { useLang, MessageKey } from "@/lib/lang";
 
+// Icon/colour styling per verdict; the label/sub copy comes from the message
+// dictionaries (keys verdict.<verdict>.label / .sub).
 const VERDICTS = {
-  safe: {
-    normal: { label: "Looks Good",                  sub: "You can breathe easy — no red flags found." },
-    aussie: { label: "Looks Alright, Mate",          sub: "She's apples!" },
-    icon: "✅",
-    bg: "bg-green-900/40", border: "border-green-700", text: "text-green-400", bar: "bg-green-500",
-  },
-  suspicious: {
-    normal: { label: "Proceed with Caution",         sub: "Worth being careful — something feels off." },
-    aussie: { label: "Something's a Bit Off",        sub: "Bit sus, wouldn't trust it." },
-    icon: "⚠️",
-    bg: "bg-yellow-900/40", border: "border-yellow-700", text: "text-yellow-400", bar: "bg-yellow-500",
-  },
-  likely_scam: {
-    normal: { label: "Likely a Scam — Do Not Engage", sub: "Don't engage. Block the sender and report it." },
-    aussie: { label: "Scam Alert — Don't Touch It",   sub: "Bloody scammers! Delete and block." },
-    icon: "🚨",
-    bg: "bg-red-900/40", border: "border-red-700", text: "text-red-400", bar: "bg-red-500",
-  },
-  unknown: {
-    normal: { label: "Unable to Determine",          sub: "Not enough to go on — trust your instincts." },
-    aussie: { label: "Couldn't Work It Out",         sub: "Not enough to go on, mate." },
-    icon: "🤷",
-    bg: "bg-gray-800", border: "border-gray-600", text: "text-gray-300", bar: "bg-gray-500",
-  },
+  safe:        { icon: "✅", bg: "bg-green-900/40",  border: "border-green-700",  text: "text-green-400",  bar: "bg-green-500" },
+  suspicious:  { icon: "⚠️", bg: "bg-yellow-900/40", border: "border-yellow-700", text: "text-yellow-400", bar: "bg-yellow-500" },
+  likely_scam: { icon: "🚨", bg: "bg-red-900/40",    border: "border-red-700",    text: "text-red-400",    bar: "bg-red-500" },
+  unknown:     { icon: "🤷", bg: "bg-gray-800",      border: "border-gray-600",   text: "text-gray-300",   bar: "bg-gray-500" },
 };
 
 export default function VerdictBadge({ result }: { result: CheckResult }) {
-  const { mode } = useLang();
+  const { t } = useLang();
   const v = VERDICTS[result.verdict];
-  const copy = v[mode];
+  const label = t(`verdict.${result.verdict}.label` as MessageKey);
+  const sub = t(`verdict.${result.verdict}.sub` as MessageKey);
 
   return (
     <div className={`${v.bg} border ${v.border} rounded-xl p-5 space-y-3`}>
@@ -42,8 +25,8 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
         <div className="flex items-center gap-3">
           <span className="text-3xl" aria-hidden="true">{v.icon}</span>
           <div>
-            <div className={`font-bold text-lg ${v.text}`}>{copy.label}</div>
-            <div className="text-sm text-gray-300 italic">&ldquo;{copy.sub}&rdquo;</div>
+            <div className={`font-bold text-lg ${v.text}`}>{label}</div>
+            <div className="text-sm text-gray-300 italic">&ldquo;{sub}&rdquo;</div>
           </div>
         </div>
         <div className="text-right">

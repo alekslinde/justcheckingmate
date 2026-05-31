@@ -1,4 +1,6 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
+import { extractIdentifiers, normaliseForAnalysis } from "@/lib/urlSanitizer";
+import { detectType } from "@/lib/detectType";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 
@@ -372,4 +374,75 @@ function scoreToResult(score: number, flags: string[], category: string): CheckR
   }
 
   return { verdict, score, flags, details, category };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Per-identifier orchestration
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Rather than blend everything into one verdict, pull each distinct identifier
+// out of the input and assess it on its own — so a pasted email yields a
+// separate card for the sender, each embedded link, and any phone number.
+
+export interface AnalyzedIdentifier {
+  kind: "url" | "email" | "phone" | "message";
+  value: string;          // raw identifier (or a snippet for "message"); defanged at display
+  result: CheckResult;
+}
+
+const MAX_CARDS = 5;
+const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
+
+export function analyzeContent(content: string): AnalyzedIdentifier[] {
+  const text = content.trim();
+  if (!text) return [];
+
+  const type = detectType(text);
+  const ids = extractIdentifiers(text);
+  const headers = parseEmailHeaders(text);
+  const out: AnalyzedIdentifier[] = [];
+
+  // Distinct URLs found anywhere in the input (trailing punctuation trimmed).
+  const urls = Array.from(
+    new Set((text.match(URL_GLOBAL) || []).map((u) => u.replace(/[.,;:!?)]+$/, ""))),
+  ).slice(0, 3);
+
+  // Overall "message" assessment, by detected type.
+  if (type === "email") {
+    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text) });
+  } else if (type === "sms") {
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text) });
+  } else if (type === "phone") {
+    out.push({ kind: "phone", value: text, result: checkPhone(text) });
+  } else if (type === "url") {
+    // A bare URL is assessed by the per-URL cards below; if the regex missed it
+    // (e.g. a "www." host with no scheme), assess the whole string as a URL.
+    if (urls.length === 0) out.push({ kind: "url", value: text, result: checkUrl(normaliseForAnalysis(text)) });
+  } else {
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text) });
+  }
+
+  // A card per embedded URL (normalised first to close percent-encoding tricks).
+  for (const u of urls) {
+    out.push({ kind: "url", value: u, result: checkUrl(normaliseForAnalysis(u)) });
+  }
+
+  // Phone card only when the whole input is a number (extractIdentifiers is
+  // deliberately conservative about in-text numbers).
+  if (ids.scamPhone && type !== "phone") {
+    out.push({ kind: "phone", value: ids.scamPhone, result: checkPhone(ids.scamPhone) });
+  }
+
+  // De-dup by kind+value, keep highest score first, always return ≥1 card.
+  const seen = new Set<string>();
+  const deduped = out.filter((c) => {
+    const key = `${c.kind}:${c.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (deduped.length === 0) {
+    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text) });
+  }
+  return deduped.sort((a, b) => b.result.score - a.result.score).slice(0, MAX_CARDS);
 }

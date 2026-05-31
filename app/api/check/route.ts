@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkUrl, checkSms, checkEmail, checkPhone, checkCustom, ScamType } from "@/lib/scamDetector";
-import { normaliseForAnalysis } from "@/lib/urlSanitizer";
+import { analyzeContent } from "@/lib/scamDetector";
 import { incrementCheckCount } from "@/lib/reportStore";
 
 // IMPORTANT: This route performs ONLY string analysis on the submitted content.
@@ -12,33 +11,18 @@ import { incrementCheckCount } from "@/lib/reportStore";
 
 export async function POST(req: NextRequest) {
   try {
-    const { type, content }: { type: ScamType; content: string } = await req.json();
+    const { content }: { content: string } = await req.json();
 
-    if (!type || !content?.trim()) {
-      return NextResponse.json({ error: "Missing type or content" }, { status: 400 });
+    if (!content?.trim()) {
+      return NextResponse.json({ error: "Missing content" }, { status: 400 });
     }
 
-    // For URL/QR types, normalise before analysis to close evasion tricks
-    // (percent-encoded hostnames, mixed case, etc.) without touching the network.
-    const analysisContent =
-      type === "url" || type === "qr"
-        ? normaliseForAnalysis(content)
-        : content;
-
-    let result;
-    switch (type) {
-      case "url":    result = checkUrl(analysisContent);    break;
-      case "sms":    result = checkSms(analysisContent);    break;
-      case "email":  result = checkEmail(analysisContent);  break;
-      case "phone":  result = checkPhone(analysisContent);  break;
-      case "qr":     result = checkUrl(analysisContent);    break;
-      case "custom": result = checkCustom(analysisContent); break;
-      default:
-        return NextResponse.json({ error: "Unknown scam type" }, { status: 400 });
-    }
+    // Pull each identifier out of the input and assess it on its own. All
+    // analysis is pure string work — no outbound request is ever made.
+    const results = analyzeContent(content);
 
     incrementCheckCount().catch(() => {});
-    return NextResponse.json(result);
+    return NextResponse.json({ results });
   } catch {
     return NextResponse.json({ error: "Something went sideways on our end" }, { status: 500 });
   }

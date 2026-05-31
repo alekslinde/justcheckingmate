@@ -5,6 +5,7 @@ import {
   checkEmail,
   checkPhone,
   checkCustom,
+  analyzeContent,
 } from "@/lib/scamDetector";
 
 // ── checkUrl ──────────────────────────────────────────────────────────────────
@@ -332,5 +333,57 @@ describe("verdict thresholds", () => {
     const result = checkUrl("http://commbank-secure-login.tk/verify");
     expect(result.verdict).toBe("likely_scam");
     expect(result.details).toMatch(/Crikey/);
+  });
+});
+
+// ── analyzeContent (per-identifier orchestration) ─────────────────────────────
+
+describe("analyzeContent", () => {
+  it("returns an empty array for blank input", () => {
+    expect(analyzeContent("   ")).toEqual([]);
+  });
+
+  it("returns a single url card for a bare URL", () => {
+    const cards = analyzeContent("https://bit.ly/scam");
+    expect(cards).toHaveLength(1);
+    expect(cards[0].kind).toBe("url");
+  });
+
+  it("produces separate cards for the sender and an embedded link in an email", () => {
+    const cards = analyzeContent(
+      'From: "myGov" <noreply@evil.tk>\nReply-To: scam@other.ru\n\nVerify at https://fake-ato.xyz/login now',
+    );
+    const kinds = cards.map((c) => c.kind);
+    expect(kinds).toContain("email");
+    expect(kinds).toContain("url");
+  });
+
+  it("de-duplicates repeated URLs", () => {
+    const cards = analyzeContent("see https://bit.ly/x and again https://bit.ly/x");
+    const urlCards = cards.filter((c) => c.kind === "url" && c.value === "https://bit.ly/x");
+    expect(urlCards).toHaveLength(1);
+  });
+
+  it("sorts cards by risk score, highest first", () => {
+    const cards = analyzeContent(
+      "Hi, click https://commbank-secure-login.tk/verify and also https://ato.gov.au",
+    );
+    for (let i = 1; i < cards.length; i++) {
+      expect(cards[i - 1].result.score).toBeGreaterThanOrEqual(cards[i].result.score);
+    }
+  });
+
+  it("always returns at least one card for non-empty input", () => {
+    expect(analyzeContent("just some harmless words").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("caps the number of cards", () => {
+    const many = "https://a.tk https://b.tk https://c.tk https://d.tk https://e.tk https://f.tk";
+    expect(analyzeContent(many).length).toBeLessThanOrEqual(5);
+  });
+
+  it("returns a phone card when the whole input is a number", () => {
+    const cards = analyzeContent("+61 412 345 678");
+    expect(cards[0].kind).toBe("phone");
   });
 });
