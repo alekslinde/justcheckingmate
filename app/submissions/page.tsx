@@ -266,7 +266,7 @@ export default function SubmissionsPage() {
                       className="block text-sm font-mono text-gray-200 break-all"
                     />
 
-                    {(r.scamUrl || r.scamPhone || r.scamEmail || r.scamReplyTo) && (
+                    {(r.scamUrl || r.scamPhone || r.scamEmail || r.scamReplyTo || r.emailAuth) && (
                       <div className="flex flex-col gap-1 pl-2 border-l-2 border-gray-700">
                         {r.scamUrl && (
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -291,6 +291,13 @@ export default function SubmissionsPage() {
                             <span aria-hidden="true" className="shrink-0">↩️</span>
                             <span className="text-gray-500 shrink-0">replies to</span>
                             <SafeDisplay value={r.scamReplyTo} className="font-mono text-amber-400/90 break-all" />
+                          </span>
+                        )}
+                        {r.emailAuth && (
+                          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                            <span aria-hidden="true" className="shrink-0">🔐</span>
+                            <span className="text-gray-500 shrink-0">auth</span>
+                            <SafeDisplay value={r.emailAuth} className="font-mono text-gray-300 break-all" />
                           </span>
                         )}
                       </div>

@@ -19,6 +19,7 @@ export interface Report {
   scamPhone: string;
   scamEmail: string;
   scamReplyTo: string;
+  emailAuth?: string; // compact SPF/DKIM/DMARC summary; absent for non-email reports
 }
 
 // ── Rate limiter ──────────────────────────────────────────────────────────────
@@ -101,12 +102,13 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
   await db.execute({
     sql: `INSERT INTO reports
             (id, type, content, description, contact, submitted_at, suspect,
-             scam_url, scam_phone, scam_email, scam_reply_to, report_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       report.id, report.type, report.content, report.description, report.contact,
       report.submittedAt, suspect ? 1 : 0,
-      report.scamUrl, report.scamPhone, report.scamEmail, report.scamReplyTo, reportCount,
+      report.scamUrl, report.scamPhone, report.scamEmail, report.scamReplyTo,
+      report.emailAuth ?? "", reportCount,
     ],
   });
 
@@ -145,6 +147,7 @@ export interface PublicReport {
   scamPhone: string;
   scamEmail: string;
   scamReplyTo: string;
+  emailAuth: string;
   matchCount: number;
 }
 
@@ -188,7 +191,7 @@ export async function getPublicReports(opts: {
 
   const result = await db.execute({
     sql: `SELECT id, type, content, description, submitted_at,
-                 scam_url, scam_phone, scam_email, scam_reply_to, report_count
+                 scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count
           FROM reports WHERE ${where}
           ORDER BY ${orderBy}
           LIMIT ? OFFSET ?`,
@@ -205,6 +208,8 @@ export async function getPublicReports(opts: {
     scamPhone:   (r.scam_phone as string) ? defangPhone(r.scam_phone as string) : "",
     scamEmail:   (r.scam_email as string) ? defangEmail(r.scam_email as string) : "",
     scamReplyTo: (r.scam_reply_to as string) ? defangEmail(r.scam_reply_to as string) : "",
+    // Already a composed, defanged summary at write time — render as stored.
+    emailAuth:   (r.email_auth as string) ?? "",
     matchCount:  Number(r.report_count ?? 1),
   }));
 }

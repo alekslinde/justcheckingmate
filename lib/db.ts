@@ -40,6 +40,9 @@ async function setup(): Promise<void> {
   await db.execute(`ALTER TABLE reports ADD COLUMN scam_email   TEXT    NOT NULL DEFAULT ''`).catch(() => {});
   await db.execute(`ALTER TABLE reports ADD COLUMN scam_reply_to TEXT   NOT NULL DEFAULT ''`).catch(() => {});
   await db.execute(`ALTER TABLE reports ADD COLUMN report_count INTEGER NOT NULL DEFAULT 1`).catch(() => {});
+  // Compact email-authentication summary (SPF/DKIM/DMARC), derived client-side
+  // from pasted headers — never the raw email. Empty for non-email reports.
+  await db.execute(`ALTER TABLE reports ADD COLUMN email_auth   TEXT    NOT NULL DEFAULT ''`).catch(() => {});
 }
 
 export async function getDb(): Promise<Client> {

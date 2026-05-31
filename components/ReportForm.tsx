@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
-import { parseEmailHeaders, analyseEmailIdentities } from "@/lib/emailHeaders";
+import { parseEmailHeaders, analyseEmailIdentities, summariseAuth } from "@/lib/emailHeaders";
 
 const REPORT_TYPES: { value: ScamType; label: string; icon: string }[] = [
   { value: "url",    label: "Dodgy Link / Website", icon: "🔗" },
@@ -25,7 +25,10 @@ const PLACEHOLDERS: Record<ScamType, string> = {
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string } = {}) {
+interface EmailAuth { spf: string; dkim: string; dkimDomain: string; dmarc: string }
+const EMPTY_AUTH: EmailAuth = { spf: "", dkim: "", dkimDomain: "", dmarc: "" };
+
+export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
   const [type, setType] = useState<ScamType>(initialType ?? "url");
   const [content, setContent] = useState(initialContent ?? "");
   const [description, setDescription] = useState("");
@@ -35,6 +38,11 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   const [scamReplyTo, setScamReplyTo] = useState(initialScamReplyTo ?? "");
   const [emailSource, setEmailSource] = useState("");
   const [parseNote, setParseNote] = useState<string | null>(null);
+  // Authentication verdicts pulled from pasted headers. Not directly editable —
+  // derived from the source and submitted as-is so the public report can show
+  // the SPF/DKIM/DMARC picture. Empty until a source is parsed.
+  const [auth, setAuth] = useState<EmailAuth>(initialAuth ?? EMPTY_AUTH);
+  const authSummary = summariseAuth(auth);
   const [contact, setContact] = useState("");
   const [hp, setHp] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -57,10 +65,11 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   // address and routing metadata on their device.
   function parseSource(raw: string) {
     setEmailSource(raw);
-    if (!raw.trim()) { setParseNote(null); return; }
+    if (!raw.trim()) { setParseNote(null); setAuth(EMPTY_AUTH); return; }
     const h = parseEmailHeaders(raw);
     if (h.fromAddress) setScamEmail(h.fromAddress);
     if (h.replyTo) setScamReplyTo(h.replyTo);
+    setAuth({ spf: h.spf, dkim: h.dkim, dkimDomain: h.dkimDomain, dmarc: h.dmarc });
     if (!h.fromAddress && !h.replyTo) {
       setParseNote("Couldn't find a From or Reply-To header in that — enter the addresses manually below.");
       return;
@@ -96,6 +105,10 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           scamPhone,
           scamEmail,
           scamReplyTo,
+          spf: auth.spf,
+          dkim: auth.dkim,
+          dkimDomain: auth.dkimDomain,
+          dmarc: auth.dmarc,
           contact,
           hp,
           loadedAt: loadedAt.current,
@@ -124,6 +137,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
     setScamReplyTo("");
     setEmailSource("");
     setParseNote(null);
+    setAuth(EMPTY_AUTH);
     setContact("");
     setReportId(null);
     setStatus("idle");
@@ -384,6 +398,13 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               {parseNote && (
                 <p className={`mt-1 text-xs ${parseNote.startsWith("⚠") ? "text-amber-400" : "text-gray-400"}`}>
                   {parseNote}
+                </p>
+              )}
+              {authSummary && (
+                <p className="mt-1 text-xs text-gray-400">
+                  <span className="text-gray-500">Authentication: </span>
+                  <span className="font-mono text-gray-300">{authSummary}</span>
+                  <span className="text-gray-500"> — attached to your report.</span>
                 </p>
               )}
             </div>

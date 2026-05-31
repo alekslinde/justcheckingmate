@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardSubmission } from "@/lib/submissionGuard";
 import { generateReportId, storeReport, getStats } from "@/lib/reportStore";
 import { stripTrackingParams } from "@/lib/urlSanitizer";
+import { summariseAuth } from "@/lib/emailHeaders";
 
 function getClientIp(req: NextRequest): string {
   // x-forwarded-for can contain a comma-separated list; take the first entry.
@@ -35,6 +36,16 @@ export async function POST(req: NextRequest) {
       : rawContent;
   const safeScamUrl = rawScamUrl ? stripTrackingParams(rawScamUrl) : "";
 
+  // Email-authentication verdicts are submitted as raw tokens; summariseAuth
+  // validates them against an allowlist and composes a defanged display string,
+  // so nothing the client sends here reaches storage unchecked.
+  const emailAuth = summariseAuth({
+    spf:        String(body.spf ?? "").slice(0, 20),
+    dkim:       String(body.dkim ?? "").slice(0, 20),
+    dkimDomain: String(body.dkimDomain ?? "").slice(0, 255),
+    dmarc:      String(body.dmarc ?? "").slice(0, 20),
+  });
+
   const guardResult = guardSubmission({
     type,
     content: safeContent,
@@ -67,6 +78,7 @@ export async function POST(req: NextRequest) {
       scamPhone:   String(body.scamPhone ?? "").slice(0, 50),
       scamEmail:   String(body.scamEmail ?? "").slice(0, 200),
       scamReplyTo: String(body.scamReplyTo ?? "").slice(0, 200),
+      emailAuth,
     },
     guardResult.verdict === "suspect",
   );

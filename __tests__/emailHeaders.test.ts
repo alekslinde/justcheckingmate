@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
+import { parseEmailHeaders, analyseEmailIdentities, summariseAuth, domainOf } from "@/lib/emailHeaders";
 
 describe("domainOf", () => {
   it("returns the lowercased domain after the last @", () => {
@@ -72,6 +72,67 @@ describe("parseEmailHeaders", () => {
   });
 });
 
+describe("parseEmailHeaders — authentication & origin", () => {
+  // Trimmed from a real myGov-impersonation phish: a Swedish .se domain on
+  // Microsoft 365, authenticated for itself, DMARC=none, DKIM by an onmicrosoft
+  // tenant unrelated to the From.
+  const phish = [
+    "Return-Path: <linus@uppent.se>",
+    "Authentication-Results: bimi.icloud.com; bimi=skipped reason=\"insufficient dmarc\"",
+    "Authentication-Results: dmarc.icloud.com; dmarc=none header.from=uppent.se",
+    "Authentication-Results: dkim-verifier.icloud.com; dkim=pass header.d=markona.onmicrosoft.com header.i=@markona.onmicrosoft.com",
+    "Received-SPF: pass (spf.icloud.com: domain of linus@uppent.se designates 52.102.163.63 as permitted sender) client-ip=52.102.163.63; helo=x.outbound.protection.outlook.com; envelope-from=linus@uppent.se",
+    "ARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=pass; dmarc=pass action=none header.from=uppent.se; dkim=pass header.d=uppent.se; arc=none",
+    "From: myGov <linus@uppent.se>",
+    "Subject: myGov Notification",
+    "Accept-Language: sv-SE, en-US",
+    "",
+    "Body.",
+  ].join("\n");
+
+  it("extracts SPF, DKIM (with signing domain) and DMARC verdicts", () => {
+    const h = parseEmailHeaders(phish);
+    expect(h.spf).toBe("pass");
+    expect(h.dkim).toBe("pass");
+    expect(h.dkimDomain).toBe("markona.onmicrosoft.com");
+    expect(h.dmarc).toBe("none");
+  });
+
+  it("ignores ARC-Authentication-Results (attacker-controlled)", () => {
+    // The ARC line claims dmarc=pass; the recipient-side verdict is dmarc=none.
+    const h = parseEmailHeaders(phish);
+    expect(h.dmarc).toBe("none");
+  });
+
+  it("does not treat 'insufficient dmarc' prose as a dmarc verdict", () => {
+    const h = parseEmailHeaders(phish);
+    expect(h.dmarc).not.toBe("skipped");
+    expect(h.dmarc).toBe("none");
+  });
+
+  it("extracts the origin IP, subject and locale", () => {
+    const h = parseEmailHeaders(phish);
+    expect(h.originIp).toBe("52.102.163.63");
+    expect(h.subject).toBe("myGov Notification");
+    expect(h.acceptLanguage).toBe("sv-SE");
+  });
+
+  it("falls back to the spf= token when there is no Received-SPF header", () => {
+    const h = parseEmailHeaders(
+      "Authentication-Results: mx.test; spf=fail smtp.mailfrom=a@b.com\n\nbody",
+    );
+    expect(h.spf).toBe("fail");
+  });
+
+  it("leaves auth fields empty when no auth headers are present", () => {
+    const h = parseEmailHeaders("From: a@b.com\n\nbody");
+    expect(h.spf).toBe("");
+    expect(h.dkim).toBe("");
+    expect(h.dmarc).toBe("");
+    expect(h.originIp).toBe("");
+  });
+});
+
 describe("analyseEmailIdentities", () => {
   it("flags a From/Reply-To domain mismatch", () => {
     const r = analyseEmailIdentities({
@@ -127,5 +188,116 @@ describe("analyseEmailIdentities", () => {
   it("returns no flags when only one identity is present", () => {
     expect(analyseEmailIdentities({ fromAddress: "a@b.com" }).flags).toHaveLength(0);
     expect(analyseEmailIdentities({}).flags).toHaveLength(0);
+  });
+
+  it("flags an SPF failure", () => {
+    const r = analyseEmailIdentities({ fromAddress: "a@bank.com", spf: "fail" });
+    expect(r.flags.join(" ")).toMatch(/spf failed/i);
+    expect(r.score).toBeGreaterThan(0);
+  });
+
+  it("flags a DMARC failure", () => {
+    const r = analyseEmailIdentities({ fromAddress: "a@bank.com", dmarc: "fail" });
+    expect(r.flags.join(" ")).toMatch(/dmarc failed/i);
+  });
+
+  it("flags dmarc=none when the display name impersonates a brand", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "myGov",
+      fromAddress: "linus@uppent.se",
+      dmarc: "none",
+    });
+    expect(r.flags.join(" ")).toMatch(/no dmarc enforcement/i);
+  });
+
+  it("does NOT flag dmarc=none without brand impersonation", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "Linus",
+      fromAddress: "linus@uppent.se",
+      dmarc: "none",
+    });
+    expect(r.flags.join(" ")).not.toMatch(/dmarc/i);
+  });
+
+  it("flags DKIM signed by an unrelated domain", () => {
+    const r = analyseEmailIdentities({
+      fromAddress: "linus@uppent.se",
+      dkim: "pass",
+      dkimDomain: "markona.onmicrosoft.com",
+    });
+    expect(r.flags.join(" ")).toMatch(/dkim is signed by/i);
+  });
+
+  it("does NOT flag DKIM when the signing domain is aligned", () => {
+    const r = analyseEmailIdentities({
+      fromAddress: "noreply@bank.com",
+      dkim: "pass",
+      dkimDomain: "mail.bank.com",
+    });
+    expect(r.flags.join(" ")).not.toMatch(/dkim/i);
+  });
+
+  it("flags a non-English locale on a brand impersonation", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "myGov",
+      fromAddress: "linus@uppent.se",
+      acceptLanguage: "sv-SE",
+    });
+    expect(r.flags.join(" ")).toMatch(/non-english locale/i);
+  });
+
+  it("does NOT flag an English locale", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "myGov",
+      fromAddress: "linus@uppent.se",
+      acceptLanguage: "en-AU",
+    });
+    expect(r.flags.join(" ")).not.toMatch(/locale/i);
+  });
+
+  it("stacks the auth signals for the full phishing sample", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "myGov",
+      fromAddress: "linus@uppent.se",
+      dmarc: "none",
+      dkim: "pass",
+      dkimDomain: "markona.onmicrosoft.com",
+      acceptLanguage: "sv-SE",
+    });
+    // display masking + dmarc=none + unrelated DKIM + non-English locale
+    expect(r.flags.length).toBeGreaterThanOrEqual(4);
+    expect(r.score).toBeGreaterThan(80);
+  });
+});
+
+describe("summariseAuth", () => {
+  it("composes a compact SPF · DKIM · DMARC line with a defanged signing domain", () => {
+    expect(
+      summariseAuth({ spf: "pass", dkim: "pass", dkimDomain: "markona.onmicrosoft.com", dmarc: "none" }),
+    ).toBe("SPF pass · DKIM pass (markona[.]onmicrosoft[.]com) · DMARC none");
+  });
+
+  it("omits mechanisms with no verdict", () => {
+    expect(summariseAuth({ spf: "pass" })).toBe("SPF pass");
+    expect(summariseAuth({ dmarc: "fail" })).toBe("DMARC fail");
+  });
+
+  it("drops unknown/injected verdict tokens", () => {
+    expect(summariseAuth({ spf: "<script>", dkim: "pass", dmarc: "garbage" })).toBe("DKIM pass");
+  });
+
+  it("strips unexpected characters from the signing domain", () => {
+    expect(summariseAuth({ dkim: "pass", dkimDomain: "evil.com<script>" })).toBe(
+      "DKIM pass (evil[.]comscript)",
+    );
+  });
+
+  it("returns empty string when there are no usable verdicts", () => {
+    expect(summariseAuth({})).toBe("");
+    expect(summariseAuth({ spf: "", dkim: "", dmarc: "" })).toBe("");
+  });
+
+  it("renders DKIM without parens when the signing domain is absent", () => {
+    expect(summariseAuth({ dkim: "pass" })).toBe("DKIM pass");
   });
 });

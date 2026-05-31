@@ -14,6 +14,18 @@ export interface EmailHeaders {
   replyTo: string; // Reply-To address, if present
   returnPath: string; // Return-Path / envelope sender, if present
   sender: string; // Sender header address, if present
+  subject: string; // Subject line, if present
+
+  // Receiving-server authentication verdicts (from Authentication-Results /
+  // Received-SPF). Lowercased single words: "pass" | "fail" | "softfail" |
+  // "neutral" | "none" | "" (absent). These reflect what the recipient's mail
+  // provider concluded, NOT the sender's own ARC claims, which scammers control.
+  spf: string;
+  dkim: string;
+  dkimDomain: string; // DKIM signing domain (header.d), e.g. tenant.onmicrosoft.com
+  dmarc: string;
+  originIp: string; // sending server IP (Received-SPF client-ip)
+  acceptLanguage: string; // first locale the message was composed in, e.g. "sv-SE"
 }
 
 // Brand/identity words that, when they appear in a display name but not in the
@@ -71,10 +83,31 @@ export function parseEmailHeaders(raw: string): EmailHeaders {
     return "";
   };
 
+  // Some headers (notably Authentication-Results) legitimately appear multiple
+  // times — one per mechanism (spf, dkim, dmarc, ...). Collect them all.
+  const getAll = (name: string): string[] => {
+    const re = new RegExp(`^${name}\\s*:\\s*(.*)$`, "i");
+    return lines.map((l) => l.match(re)?.[1].trim()).filter((v): v is string => !!v);
+  };
+
   const fromRaw = get("from");
   const replyToRaw = get("reply-to");
   const returnPathRaw = get("return-path");
   const senderRaw = get("sender");
+
+  // Authentication verdicts. We deliberately read the recipient-side
+  // `Authentication-Results` (and `Received-SPF`) — NOT `ARC-Authentication-
+  // Results`, which carries the sending side's own claims and is attacker-
+  // controlled. The leading `^Authentication-Results` anchor excludes the
+  // `ARC-` prefixed variant.
+  const receivedSpf = get("received-spf");
+  const authText = [...getAll("authentication-results"), receivedSpf].join(" ; ");
+  const tokenAfter = (key: string): string =>
+    authText.match(new RegExp(`\\b${key}=([a-z]+)`, "i"))?.[1].toLowerCase() ?? "";
+
+  // SPF: prefer the explicit Received-SPF leading verdict, else the spf= token.
+  const spf =
+    receivedSpf.match(/^\s*([a-z]+)/i)?.[1].toLowerCase() || tokenAfter("spf");
 
   return {
     fromDisplay: displayNameIn(fromRaw),
@@ -82,7 +115,47 @@ export function parseEmailHeaders(raw: string): EmailHeaders {
     replyTo: addressIn(replyToRaw),
     returnPath: addressIn(returnPathRaw),
     sender: addressIn(senderRaw),
+    subject: get("subject"),
+    spf,
+    dkim: tokenAfter("dkim"),
+    dkimDomain: (authText.match(/header\.d=([^\s;]+)/i)?.[1] ?? "").toLowerCase(),
+    dmarc: tokenAfter("dmarc"),
+    originIp: receivedSpf.match(/client-ip=([0-9a-fA-F:.]+)/i)?.[1] ?? "",
+    acceptLanguage: get("accept-language").split(",")[0].trim(),
   };
+}
+
+// Verdict words a receiving server can legitimately report. Anything outside
+// this set (e.g. attacker-injected free text) is dropped, so the summary we
+// store and display is always one of these known tokens.
+const KNOWN_VERDICTS = new Set([
+  "pass", "fail", "softfail", "neutral", "none", "temperror", "permerror", "bestguesspass",
+]);
+
+// Compose a compact, display-safe one-line summary of the email authentication
+// verdicts, e.g. "SPF pass · DKIM pass (markona[.]onmicrosoft[.]com) · DMARC none".
+// Only allowlisted verdict words survive, and the DKIM domain is defanged so it
+// can't auto-link. Returns "" when there's nothing meaningful to show.
+export function summariseAuth(h: Partial<EmailHeaders>): string {
+  const verdict = (v: string | undefined): string => {
+    const t = (v ?? "").toLowerCase();
+    return KNOWN_VERDICTS.has(t) ? t : "";
+  };
+
+  const parts: string[] = [];
+  const spf = verdict(h.spf);
+  const dkim = verdict(h.dkim);
+  const dmarc = verdict(h.dmarc);
+
+  if (spf) parts.push(`SPF ${spf}`);
+  if (dkim) {
+    // Sanitise the signing domain to a bare hostname, then defang the dots.
+    const dom = (h.dkimDomain ?? "").toLowerCase().replace(/[^a-z0-9.\-]/g, "");
+    parts.push(dom ? `DKIM ${dkim} (${dom.replace(/\./g, "[.]")})` : `DKIM ${dkim}`);
+  }
+  if (dmarc) parts.push(`DMARC ${dmarc}`);
+
+  return parts.join(" · ");
 }
 
 export interface IdentityAnalysis {
@@ -106,6 +179,11 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
   const replyDom = domainOf(replyTo);
   const returnDom = domainOf(returnPath);
 
+  // Brand the visible name lays claim to (if any) — reused by several checks.
+  const brand = fromDisplay
+    ? IMPERSONATED_BRANDS.find((b) => fromDisplay.includes(b))
+    : undefined;
+
   // 1. From ≠ Reply-To (different domains) — replies route elsewhere.
   if (fromDom && replyDom && fromDom !== replyDom) {
     flags.push(
@@ -117,7 +195,6 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
   // 2. Display-name masking — the visible name names a brand the actual sending
   //    domain doesn't belong to.
   if (fromDisplay && fromDom) {
-    const brand = IMPERSONATED_BRANDS.find((b) => fromDisplay.includes(b));
     const govLike = fromDom.endsWith(".gov.au") || fromDom.endsWith(".com.au");
     if (brand && !fromDom.includes(brand.replace(/\s+/g, "")) && !govLike) {
       flags.push(
@@ -142,6 +219,61 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
       `Return-Path (${returnPath}) doesn't match the From domain — common in spoofed mail`,
     );
     score += 20;
+  }
+
+  // ── Authentication verdicts ────────────────────────────────────────────────
+  const spf = (h.spf ?? "").toLowerCase();
+  const dkim = (h.dkim ?? "").toLowerCase();
+  const dmarc = (h.dmarc ?? "").toLowerCase();
+  const dkimDom = (h.dkimDomain ?? "").toLowerCase();
+  const acceptLanguage = h.acceptLanguage ?? "";
+
+  // 4. Hard authentication failures — the receiving server says the sending
+  //    machine isn't authorised for this domain. Strong spoof signal.
+  if (spf === "fail" || spf === "softfail") {
+    flags.push(
+      `SPF ${spf === "fail" ? "failed" : "soft-failed"} — the sending server isn't authorised to send for ${fromDom || "this domain"}`,
+    );
+    score += 35;
+  }
+  if (dmarc === "fail") {
+    flags.push(
+      `DMARC failed — the message isn't aligned with ${fromDom || "the From domain"}, a hallmark of spoofing`,
+    );
+    score += 40;
+  }
+
+  // 5. DMARC=none on an impersonating domain. The mail "passes" checks, but only
+  //    because the lookalike domain publishes no enforcement — so nothing stops
+  //    these lookalikes. Easily mistaken for a clean result, hence worth saying.
+  if (dmarc === "none" && brand) {
+    flags.push(
+      `The sending domain ${fromDom} publishes no DMARC enforcement (dmarc=none), so it can freely send "${h.fromDisplay}" lookalikes — the real ${brand} is protected, this isn't`,
+    );
+    score += 25;
+  }
+
+  // 6. DKIM signed by an unrelated domain. A "dkim=pass" looks reassuring, but
+  //    here the signature was applied by a domain with no relationship to the
+  //    sender — i.e. authorised by someone other than the brand it claims.
+  const aligned =
+    dkimDom === fromDom ||
+    (!!fromDom && dkimDom.endsWith(`.${fromDom}`)) ||
+    (!!dkimDom && fromDom.endsWith(`.${dkimDom}`));
+  if (dkim === "pass" && dkimDom && fromDom && !aligned) {
+    flags.push(
+      `DKIM is signed by ${dkimDom}, a domain unrelated to the sender ${fromDom} — the mail was authorised by someone other than ${fromDom}`,
+    );
+    score += 15;
+  }
+
+  // 7. Cross-border locale. Composed in a non-English locale while posing as a
+  //    brand whose customers expect English — e.g. an Australian gov service.
+  if (brand && acceptLanguage && !acceptLanguage.toLowerCase().startsWith("en")) {
+    flags.push(
+      `The email was composed in a non-English locale (${acceptLanguage}) while posing as ${brand} — inconsistent with a genuine Australian sender`,
+    );
+    score += 15;
   }
 
   return { flags, score };

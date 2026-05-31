@@ -154,12 +154,19 @@ export default function CheckFlow() {
         </button>
         <div className="p-6">
           <ReportForm
-            initialType={primary ? kindToType(primary.kind, content) : detectType(content)}
+            initialType={
+              // A parsed From address means this is email source — report it as
+              // such so the sender/reply-to/authentication fields all show.
+              headers.fromAddress
+                ? "email"
+                : primary ? kindToType(primary.kind, content) : detectType(content)
+            }
             initialContent={content}
             initialScamUrl={ids.scamUrl}
             initialScamPhone={ids.scamPhone}
             initialScamEmail={headers.fromAddress || ids.scamEmail}
             initialScamReplyTo={headers.replyTo}
+            initialAuth={{ spf: headers.spf, dkim: headers.dkim, dkimDomain: headers.dkimDomain, dmarc: headers.dmarc }}
           />
         </div>
       </div>
