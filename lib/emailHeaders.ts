@@ -184,6 +184,16 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
     ? IMPERSONATED_BRANDS.find((b) => fromDisplay.includes(b))
     : undefined;
 
+  // True only when the display name claims a brand the real sending domain
+  // doesn't belong to — i.e. genuine impersonation. The domain must NOT contain
+  // the brand and must not be an AU gov/business domain, so a legitimate sender
+  // whose own domain carries the brand (or merely a substring of it, e.g.
+  // "allianz" ⊃ "anz") isn't flagged. Shared by the masking, dmarc=none and
+  // locale checks so they can't disagree.
+  const govLike = fromDom.endsWith(".gov.au") || fromDom.endsWith(".com.au");
+  const impersonatesBrand =
+    !!brand && !!fromDom && !fromDom.includes(brand.replace(/\s+/g, "")) && !govLike;
+
   // 1. From ≠ Reply-To (different domains) — replies route elsewhere.
   if (fromDom && replyDom && fromDom !== replyDom) {
     flags.push(
@@ -195,8 +205,7 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
   // 2. Display-name masking — the visible name names a brand the actual sending
   //    domain doesn't belong to.
   if (fromDisplay && fromDom) {
-    const govLike = fromDom.endsWith(".gov.au") || fromDom.endsWith(".com.au");
-    if (brand && !fromDom.includes(brand.replace(/\s+/g, "")) && !govLike) {
+    if (impersonatesBrand) {
       flags.push(
         `Sender name claims to be "${h.fromDisplay}" but the real address is ${fromAddress} — the display name is masking the true sender`,
       );
@@ -246,7 +255,7 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
   // 5. DMARC=none on an impersonating domain. The mail "passes" checks, but only
   //    because the lookalike domain publishes no enforcement — so nothing stops
   //    these lookalikes. Easily mistaken for a clean result, hence worth saying.
-  if (dmarc === "none" && brand) {
+  if (dmarc === "none" && impersonatesBrand) {
     flags.push(
       `The sending domain ${fromDom} publishes no DMARC enforcement (dmarc=none), so it can freely send "${h.fromDisplay}" lookalikes — the real ${brand} is protected, this isn't`,
     );
@@ -269,7 +278,7 @@ export function analyseEmailIdentities(h: Partial<EmailHeaders>): IdentityAnalys
 
   // 7. Cross-border locale. Composed in a non-English locale while posing as a
   //    brand whose customers expect English — e.g. an Australian gov service.
-  if (brand && acceptLanguage && !acceptLanguage.toLowerCase().startsWith("en")) {
+  if (impersonatesBrand && acceptLanguage && !acceptLanguage.toLowerCase().startsWith("en")) {
     flags.push(
       `The email was composed in a non-English locale (${acceptLanguage}) while posing as ${brand} — inconsistent with a genuine Australian sender`,
     );

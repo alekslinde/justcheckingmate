@@ -107,10 +107,10 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           scamPhone,
           scamEmail,
           scamReplyTo,
-          spf: auth.spf,
-          dkim: auth.dkim,
-          dkimDomain: auth.dkimDomain,
-          dmarc: auth.dmarc,
+          // Authentication verdicts only make sense for an email report; gating
+          // on type means switching away from "email" never carries stale auth
+          // onto a URL/phone/etc. report.
+          ...(type === "email" ? auth : EMPTY_AUTH),
           contact,
           hp,
           loadedAt: loadedAt.current,

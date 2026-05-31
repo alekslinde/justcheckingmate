@@ -255,6 +255,27 @@ describe("analyseEmailIdentities", () => {
     expect(r.flags.join(" ")).not.toMatch(/locale/i);
   });
 
+  it("does NOT flag dmarc=none when the sender's own domain carries the brand substring", () => {
+    // "Allianz" contains the brand token "anz" but is sent from allianz.de —
+    // a legitimate sender, not an impersonator.
+    const r = analyseEmailIdentities({
+      fromDisplay: "Allianz",
+      fromAddress: "noreply@allianz.de",
+      dmarc: "none",
+    });
+    expect(r.flags.join(" ")).not.toMatch(/dmarc|enforcement/i);
+  });
+
+  it("does NOT flag a non-English locale when the sender's own domain carries the brand substring", () => {
+    // "Snapple" contains "apple" but is sent from snapple.com.
+    const r = analyseEmailIdentities({
+      fromDisplay: "Snapple",
+      fromAddress: "news@snapple.com",
+      acceptLanguage: "fr-FR",
+    });
+    expect(r.flags.join(" ")).not.toMatch(/locale/i);
+  });
+
   it("stacks the auth signals for the full phishing sample", () => {
     const r = analyseEmailIdentities({
       fromDisplay: "myGov",
