@@ -212,6 +212,11 @@ export default function CheckFlow() {
   // ── Input step ──────────────────────────────────────────────────────────────
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+      <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-500 leading-snug">
+        <span aria-hidden="true">🔒</span>
+        We don&apos;t store your uploads or share them with anyone — and we never open the links in your scam.
+      </p>
+      
       {/* Hidden file inputs */}
       <input ref={imageRef} type="file" accept="image/*" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }} />
@@ -220,7 +225,7 @@ export default function CheckFlow() {
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           type="button"
           onClick={() => imageRef.current?.click()}
@@ -252,6 +257,8 @@ export default function CheckFlow() {
           <span className="text-[10px] text-gray-500 text-center leading-tight">{t("check.uploadEmlDesc")}</span>
         </button>
       </div>
+
+      
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
 
