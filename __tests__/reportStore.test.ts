@@ -155,6 +155,7 @@ describe("storeReport", () => {
       scamUrl:   "https://au-post.fake/track",
       scamPhone: "+61412345678",
       scamEmail: "noreply@fake-ato.com",
+      scamReplyTo: "replies@elsewhere.ru",
     };
     await storeReport(report, false);
 
@@ -164,6 +165,31 @@ describe("storeReport", () => {
     expect(insertCall[0].args).toContain("https://au-post.fake/track");
     expect(insertCall[0].args).toContain("+61412345678");
     expect(insertCall[0].args).toContain("noreply@fake-ato.com");
+  });
+
+  it("persists scam_reply_to in the INSERT column list and args", async () => {
+    mockExecute.mockResolvedValueOnce({ rows: [{ n: 0 }] }); // COUNT → 0 existing
+
+    const report = {
+      id: "RPT-REPLY01",
+      type: "email",
+      content: "From: \"myGov\" <x@evil.tk>",
+      description: "",
+      contact: "",
+      submittedAt: Date.now(),
+      ip: "1.2.3.4",
+      scamUrl: "",
+      scamPhone: "",
+      scamEmail: "x@evil.tk",
+      scamReplyTo: "scammer@other.ru",
+    };
+    await storeReport(report, false);
+
+    const insertCall = mockExecute.mock.calls.find(
+      (c) => (c[0] as { sql: string }).sql.includes("INSERT INTO reports")
+    )!;
+    expect(insertCall[0].sql).toContain("scam_reply_to");
+    expect(insertCall[0].args).toContain("scammer@other.ru");
   });
 
   it("sets report_count to 1 for the first report with a given identifier", async () => {
@@ -423,6 +449,16 @@ describe("getPublicReports", () => {
 
     const reports = await getPublicReports();
     expect(reports[0].scamEmail).toBe("phish[@]fake-ato[.]com");
+  });
+
+  it("defangs scam_reply_to in returned reports", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ ...baseRow, scam_reply_to: "replies@elsewhere.ru" }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const reports = await getPublicReports();
+    expect(reports[0].scamReplyTo).toBe("replies[@]elsewhere[.]ru");
   });
 
   it("applies defangPhone to scam_phone in returned reports", async () => {

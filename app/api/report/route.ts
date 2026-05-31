@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       scamUrl:     safeScamUrl,
       scamPhone:   String(body.scamPhone ?? "").slice(0, 50),
       scamEmail:   String(body.scamEmail ?? "").slice(0, 200),
+      scamReplyTo: String(body.scamReplyTo ?? "").slice(0, 200),
     },
     guardResult.verdict === "suspect",
   );

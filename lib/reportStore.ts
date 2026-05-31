@@ -18,6 +18,7 @@ export interface Report {
   scamUrl: string;
   scamPhone: string;
   scamEmail: string;
+  scamReplyTo: string;
 }
 
 // ── Rate limiter ──────────────────────────────────────────────────────────────
@@ -100,12 +101,12 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
   await db.execute({
     sql: `INSERT INTO reports
             (id, type, content, description, contact, submitted_at, suspect,
-             scam_url, scam_phone, scam_email, report_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             scam_url, scam_phone, scam_email, scam_reply_to, report_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       report.id, report.type, report.content, report.description, report.contact,
       report.submittedAt, suspect ? 1 : 0,
-      report.scamUrl, report.scamPhone, report.scamEmail, reportCount,
+      report.scamUrl, report.scamPhone, report.scamEmail, report.scamReplyTo, reportCount,
     ],
   });
 
@@ -143,6 +144,7 @@ export interface PublicReport {
   scamUrl: string;
   scamPhone: string;
   scamEmail: string;
+  scamReplyTo: string;
   matchCount: number;
 }
 
@@ -186,7 +188,7 @@ export async function getPublicReports(opts: {
 
   const result = await db.execute({
     sql: `SELECT id, type, content, description, submitted_at,
-                 scam_url, scam_phone, scam_email, report_count
+                 scam_url, scam_phone, scam_email, scam_reply_to, report_count
           FROM reports WHERE ${where}
           ORDER BY ${orderBy}
           LIMIT ? OFFSET ?`,
@@ -202,6 +204,7 @@ export async function getPublicReports(opts: {
     scamUrl:     (r.scam_url as string)   ? defang(r.scam_url as string)        : "",
     scamPhone:   (r.scam_phone as string) ? defangPhone(r.scam_phone as string) : "",
     scamEmail:   (r.scam_email as string) ? defangEmail(r.scam_email as string) : "",
+    scamReplyTo: (r.scam_reply_to as string) ? defangEmail(r.scam_reply_to as string) : "",
     matchCount:  Number(r.report_count ?? 1),
   }));
 }

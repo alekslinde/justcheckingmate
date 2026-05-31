@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
+import { parseEmailHeaders, analyseEmailIdentities } from "@/lib/emailHeaders";
 
 const REPORT_TYPES: { value: ScamType; label: string; icon: string }[] = [
   { value: "url",    label: "Dodgy Link / Website", icon: "🔗" },
@@ -24,13 +25,16 @@ const PLACEHOLDERS: Record<ScamType, string> = {
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string } = {}) {
+export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string } = {}) {
   const [type, setType] = useState<ScamType>(initialType ?? "url");
   const [content, setContent] = useState(initialContent ?? "");
   const [description, setDescription] = useState("");
   const [scamUrl, setScamUrl] = useState(initialScamUrl ?? "");
   const [scamPhone, setScamPhone] = useState(initialScamPhone ?? "");
   const [scamEmail, setScamEmail] = useState(initialScamEmail ?? "");
+  const [scamReplyTo, setScamReplyTo] = useState(initialScamReplyTo ?? "");
+  const [emailSource, setEmailSource] = useState("");
+  const [parseNote, setParseNote] = useState<string | null>(null);
   const [contact, setContact] = useState("");
   const [hp, setHp] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -46,6 +50,33 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       .then((d) => setTotalReports(d.totalReports))
       .catch(() => null);
   }, []);
+
+  // Parse pasted email source / a dropped .eml entirely client-side and
+  // auto-fill the From and Reply-To fields. The raw source is NEVER submitted —
+  // only the two extracted scammer addresses are. This keeps the reporter's own
+  // address and routing metadata on their device.
+  function parseSource(raw: string) {
+    setEmailSource(raw);
+    if (!raw.trim()) { setParseNote(null); return; }
+    const h = parseEmailHeaders(raw);
+    if (h.fromAddress) setScamEmail(h.fromAddress);
+    if (h.replyTo) setScamReplyTo(h.replyTo);
+    if (!h.fromAddress && !h.replyTo) {
+      setParseNote("Couldn't find a From or Reply-To header in that — enter the addresses manually below.");
+      return;
+    }
+    const { flags } = analyseEmailIdentities(h);
+    setParseNote(
+      flags.length > 0
+        ? `⚠ ${flags[0]}`
+        : "Pulled out the sender details — review them below before sending.",
+    );
+  }
+
+  async function handleEmlFile(file: File) {
+    const text = await file.text();
+    parseSource(text);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +95,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           scamUrl,
           scamPhone,
           scamEmail,
+          scamReplyTo,
           contact,
           hp,
           loadedAt: loadedAt.current,
@@ -89,6 +121,9 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
     setScamUrl("");
     setScamPhone("");
     setScamEmail("");
+    setScamReplyTo("");
+    setEmailSource("");
+    setParseNote(null);
     setContact("");
     setReportId(null);
     setStatus("idle");
@@ -280,7 +315,9 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           />
         </div>
         <div>
-          <label htmlFor="report-scam-email" className="block text-xs font-medium text-gray-400 mb-1">Scammer&apos;s email address</label>
+          <label htmlFor="report-scam-email" className="block text-xs font-medium text-gray-400 mb-1">
+            {type === "email" ? "Sender address shown (From)" : "Scammer's email address"}
+          </label>
           <input
             id="report-scam-email"
             type="email"
@@ -291,6 +328,67 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
           />
         </div>
+
+        {type === "email" && (
+          <>
+            <div>
+              <label htmlFor="report-scam-reply-to" className="block text-xs font-medium text-gray-400 mb-1">
+                Address it actually replies to (Reply-To)
+              </label>
+              <input
+                id="report-scam-reply-to"
+                type="email"
+                value={scamReplyTo}
+                onChange={(e) => setScamReplyTo(e.target.value)}
+                placeholder="different-address@elsewhere.ru"
+                maxLength={200}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+              />
+              {scamEmail && scamReplyTo &&
+                scamEmail.split("@")[1]?.toLowerCase() !== scamReplyTo.split("@")[1]?.toLowerCase() && (
+                <p className="mt-1 text-xs text-amber-400">
+                  ⚠ Reply-To goes to a different domain than the sender — a classic spoofing sign.
+                </p>
+              )}
+            </div>
+
+            <details className="text-xs text-gray-400">
+              <summary className="cursor-pointer text-emerald-400/90 hover:text-emerald-300">
+                How do I find these on my phone?
+              </summary>
+              <ul className="mt-2 space-y-1 list-disc pl-5 text-gray-400">
+                <li><strong>Sender (From):</strong> tap the sender&apos;s name at the top of the email — it expands to show the real address behind the display name.</li>
+                <li><strong>Reply-To:</strong> tap <em>Reply</em> (don&apos;t send!) and look at the address it fills into the To: field. If it differs from the sender, that&apos;s the Reply-To.</li>
+                <li>On a computer you can also paste the full email source or drop a <code>.eml</code> file below to fill these in automatically.</li>
+              </ul>
+            </details>
+
+            <div>
+              <label htmlFor="report-email-source" className="block text-xs font-medium text-gray-400 mb-1">
+                Optional: paste full email source or drop a .eml file
+              </label>
+              <textarea
+                id="report-email-source"
+                value={emailSource}
+                onChange={(e) => parseSource(e.target.value)}
+                placeholder="Paste raw headers here (From:, Reply-To:, ...) — we read them on your device and only submit the addresses, never the full email."
+                rows={3}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-xs font-mono resize-y"
+              />
+              <input
+                type="file"
+                accept=".eml,message/rfc822,text/plain"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlFile(f); }}
+                className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1.5 file:text-gray-300 hover:file:bg-gray-700"
+              />
+              {parseNote && (
+                <p className={`mt-1 text-xs ${parseNote.startsWith("⚠") ? "text-amber-400" : "text-gray-400"}`}>
+                  {parseNote}
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </fieldset>
 
       {/* Description */}

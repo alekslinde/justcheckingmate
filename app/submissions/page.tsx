@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { PublicReport, SortOption } from "@/lib/reportStore";
 import { timeAgo, truncate } from "@/lib/formatters";
@@ -40,12 +40,31 @@ const SEARCH_PLACEHOLDERS = [
 const PAGE_SIZE = 25;
 const SORT_KEY  = "submissions_sort";
 
-function savedSort(): SortOption {
-  if (typeof window === "undefined") return "desc";
+// The sort preference lives in localStorage, exposed as an external store.
+// useSyncExternalStore renders the server snapshot ("desc") during SSR and the
+// first client render, then the real saved value — avoiding a hydration
+// mismatch without a setState-in-effect (which the lint rules forbid).
+const SORT_VALUES = ["desc", "asc", "most", "least"] as const;
+const sortListeners = new Set<() => void>();
+
+function subscribeSort(cb: () => void): () => void {
+  sortListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => { sortListeners.delete(cb); window.removeEventListener("storage", cb); };
+}
+
+function getSortSnapshot(): SortOption {
   const v = localStorage.getItem(SORT_KEY);
-  return (["desc", "asc", "most", "least"] as const).includes(v as SortOption)
-    ? (v as SortOption)
-    : "desc";
+  return (SORT_VALUES as readonly string[]).includes(v ?? "") ? (v as SortOption) : "desc";
+}
+
+function getServerSortSnapshot(): SortOption {
+  return "desc";
+}
+
+function writeSort(next: SortOption): void {
+  localStorage.setItem(SORT_KEY, next);
+  sortListeners.forEach((l) => l());
 }
 
 function pageNumbers(current: number, total: number): (number | "…")[] {
@@ -63,16 +82,13 @@ export default function SubmissionsPage() {
   const [total, setTotal]               = useState(0);
   const [loading, setLoading]           = useState(true);
   const [type, setType]                 = useState("all");
-  const [sort, setSort]                 = useState<SortOption>(savedSort);
+  const sort = useSyncExternalStore(subscribeSort, getSortSnapshot, getServerSortSnapshot);
   const [periodDays, setPeriodDays]     = useState("0");
   const [page, setPage]                 = useState(1);
   const [searchInput, setSearchInput]   = useState("");
   const [search, setSearch]             = useState("");
   const [phIdx, setPhIdx]               = useState(0);
   const searchRef                       = useRef<HTMLInputElement>(null);
-
-  // Persist sort
-  useEffect(() => { localStorage.setItem(SORT_KEY, sort); }, [sort]);
 
   // Rotate search placeholder every 2.5 s
   useEffect(() => {
@@ -120,7 +136,7 @@ export default function SubmissionsPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function changeType(val: string)       { setLoading(true); setType(val);       setPage(1); }
-  function changeSort(val: SortOption)   { setLoading(true); setSort(val);       setPage(1); }
+  function changeSort(val: SortOption)   { setLoading(true); writeSort(val);     setPage(1); }
   function changePeriod(val: string)     { setLoading(true); setPeriodDays(val); setPage(1); }
   function clearSearch()                 { setSearchInput(""); searchRef.current?.focus(); }
   function goTo(p: number) {
@@ -261,7 +277,7 @@ export default function SubmissionsPage() {
                       className="block text-sm font-mono text-gray-200 break-all"
                     />
 
-                    {(r.scamUrl || r.scamPhone || r.scamEmail) && (
+                    {(r.scamUrl || r.scamPhone || r.scamEmail || r.scamReplyTo) && (
                       <div className="flex flex-col gap-1 pl-2 border-l-2 border-gray-700">
                         {r.scamUrl && (
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -279,6 +295,13 @@ export default function SubmissionsPage() {
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
                             <span aria-hidden="true" className="shrink-0">📧</span>
                             <SafeDisplay value={r.scamEmail} className="font-mono text-amber-400/90 break-all" />
+                          </span>
+                        )}
+                        {r.scamReplyTo && (
+                          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                            <span aria-hidden="true" className="shrink-0">↩️</span>
+                            <span className="text-gray-500 shrink-0">replies to</span>
+                            <SafeDisplay value={r.scamReplyTo} className="font-mono text-amber-400/90 break-all" />
                           </span>
                         )}
                       </div>
