@@ -12,7 +12,7 @@
 // reviews them and taps "Send report". The scam content and any uploaded files
 // are deliberately excluded from what we collect.
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/lang";
 import type { BugAction } from "@/lib/bugStore";
 
@@ -55,21 +55,32 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [auto, setAuto] = useState(false);
   const [diag, setDiag] = useState<Diagnostics>({ action: "manual", error: "" });
+  // Bumped each time a report is opened. Used as the modal's key so a new
+  // report (e.g. a failure firing while the modal is already open, even on its
+  // "sent" screen) remounts the modal with fresh inputs rather than stranding
+  // the user on stale state.
+  const [session, setSession] = useState(0);
 
   const reportFailure = useCallback((action: BugAction, error?: unknown) => {
     setDiag({ action, error: errorToText(error) });
     setAuto(true);
     setOpen(true);
+    setSession((n) => n + 1);
   }, []);
 
   const openManual = useCallback(() => {
     setDiag({ action: "manual", error: "" });
     setAuto(false);
     setOpen(true);
+    setSession((n) => n + 1);
   }, []);
 
+  // reportFailure/openManual are stable, so this value never changes identity —
+  // consumers don't re-render when the modal opens/closes.
+  const ctx = useMemo(() => ({ reportFailure, openManual }), [reportFailure, openManual]);
+
   return (
-    <Ctx.Provider value={{ reportFailure, openManual }}>
+    <Ctx.Provider value={ctx}>
       {children}
       <button
         type="button"
@@ -81,7 +92,7 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
         <span className="hidden sm:inline">Report a bug</span>
       </button>
       {open && (
-        <BugModal diag={diag} auto={auto} onClose={() => setOpen(false)} />
+        <BugModal key={session} diag={diag} auto={auto} onClose={() => setOpen(false)} />
       )}
     </Ctx.Provider>
   );
