@@ -192,7 +192,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             rel="noopener noreferrer"
             className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
           >
-            Scamwatch (scamwatch.gov.au)
+            Scamwatch (scamwatch.gov.au){" "}<span aria-label="opens in a new tab" aria-hidden="true">↗</span>
           </a>{" "}
           or call{" "}
           <a
@@ -325,6 +325,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           <input
             id="report-scam-phone"
             type="tel"
+            autoComplete="tel"
             value={scamPhone}
             onChange={(e) => setScamPhone(e.target.value)}
             placeholder="+61 4xx xxx xxx"
@@ -442,12 +443,13 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         <input
           id="report-contact"
           type="email"
+          autoComplete="email"
           aria-describedby="contact-hint"
           value={contact}
           onChange={(e) => setContact(e.target.value)}
           placeholder="you@example.com.au"
           maxLength={200}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-sm"
+          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-base"
         />
         <p id="contact-hint" className="mt-1 text-sm text-gray-400">
           Never shared. Only used if we need to follow up on your report.
