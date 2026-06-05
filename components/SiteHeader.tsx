@@ -8,10 +8,8 @@ export default function SiteHeader() {
            style={{ minHeight: "52px" }}>
         <Link
           href="/"
-          className="flex items-center gap-1.5 font-black text-emerald-400 tracking-tight py-3"
+          className="flex items-center gap-1.5 font-black text-emerald-400 tracking-tight py-3 text-sm"
         >
-          <span className="text-lg" aria-hidden="true">🦘</span>
-          {/* Always visible — hidden name confuses first-time mobile users */}
           <span>Just Checking, Mate</span>
         </Link>
         <nav className="flex items-center gap-1">
@@ -26,7 +24,7 @@ export default function SiteHeader() {
             href="/submissions"
             className="min-h-[44px] flex items-center px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
           >
-            Reported Scams
+            Reports
           </Link>
           <LangToggle />
         </nav>
