@@ -1,8 +1,10 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
 import { extractIdentifiers, normaliseForAnalysis } from "@/lib/urlSanitizer";
 import { detectType } from "@/lib/detectType";
+import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
+export type { PhoneIntel };
 
 export interface CheckResult {
   verdict: "safe" | "suspicious" | "likely_scam" | "unknown";
@@ -10,6 +12,7 @@ export interface CheckResult {
   flags: string[];
   details: string;
   category?: string;
+  phoneIntel?: PhoneIntel;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -276,45 +279,63 @@ export function checkEmail(text: string): CheckResult {
 // ────────────────────────────────────────────────────────────────────────────
 
 export function checkPhone(number: string): CheckResult {
+  const intel = analysePhone(number);
   const flags: string[] = [];
   let score = 0;
-  const cleaned = number.replace(/[\s\-().+]/g, "");
 
-  // International prefix from known scam-heavy countries (not exhaustive, indicative)
-  const riskyPrefixes = ["237", "216", "234", "256", "260", "263", "381", "385", "386", "387", "389", "420", "421"];
-  if (riskyPrefixes.some((p) => cleaned.startsWith(p))) {
-    flags.push("International prefix associated with frequent scam calls");
-    score += 30;
+  // Translate intel into score/flags
+  const riskScores: Record<PhoneIntel["spoofingRisk"], number> = {
+    low: 15, medium: 30, high: 55, very_high: 75,
+  };
+  score += riskScores[intel.spoofingRisk];
+
+  if (intel.lineType === "premium") {
+    flags.push("Premium rate number (190x) — never call or text back, you'll be charged");
+    score += 20;
   }
 
-  // Fake Australian numbers
-  if (cleaned.startsWith("61") || cleaned.startsWith("0")) {
-    const local = cleaned.startsWith("61") ? cleaned.slice(2) : cleaned.slice(1);
-    // Premium rate numbers in AU
-    if (local.startsWith("190")) {
-      flags.push("190x number — premium rate, will cost you a lot to call back");
-      score += 50;
-    }
-    // Spoofed sequential numbers
-    if (/^(\d)\1{6,}/.test(local)) {
-      flags.push("Repetitive digit pattern — likely a spoofed/fake number");
-      score += 40;
-    }
+  if (intel.lineType === "voip_likely") {
+    flags.push("VoIP / virtual number — trivially easy to spoof; real caller identity is hidden");
+    score += 10;
   }
 
-  // Caller ID spoofing indicator
-  if (cleaned.length < 6) {
-    flags.push("Very short number — likely caller ID spoofing");
-    score += 45;
+  if (intel.wangiriRisk) {
+    flags.push("Wangiri scam: one-ring trick from a premium-rate international number — do NOT call back");
+    score += 20;
+  }
+
+  if (intel.highScamCountry && !intel.wangiriRisk) {
+    flags.push(`Call originates from ${intel.country} — frequently used as a base for scam operations targeting Australia`);
+  }
+
+  if (intel.lineType === "freecall") {
+    flags.push("1800 numbers are routinely spoofed by scammers impersonating banks and government agencies");
+  }
+
+  if (intel.lineType === "shared_cost") {
+    flags.push("1300/13xx numbers are commonly spoofed by scammers impersonating the ATO, myGov, and Centrelink");
+  }
+
+  if (intel.lineType === "fixed") {
+    flags.push("Fixed-line area code — easy to spoof; a local-looking number doesn't mean a local caller");
   }
 
   if (flags.length === 0) {
-    flags.push("Number format looks okay, but phone scams are hard to detect by number alone — always be cautious");
-    score = 20;
+    flags.push("No obvious red flags from the number format alone — caller ID can always be spoofed, so stay cautious");
+    score = Math.max(score, 15);
+  }
+
+  // Add spoofing notes as flags if not already covered
+  for (const note of intel.spoofingNotes) {
+    if (!flags.some((f) => f.includes(note.slice(0, 20)))) {
+      flags.push(note);
+    }
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Phone Number");
+  const result = scoreToResult(score, flags, "Phone Number");
+  result.phoneIntel = intel;
+  return result;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
