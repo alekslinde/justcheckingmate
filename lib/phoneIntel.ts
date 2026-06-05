@@ -372,14 +372,14 @@ export function analysePhone(raw: string): PhoneIntel {
 
     // Free call 1800
     if (norm.startsWith("01800")) {
-      spoofingNotes.push("1800 numbers are commonly spoofed by scammers impersonating banks and government agencies — verify by calling the official number from the organisation's real website");
+      spoofingNotes.push("Free-call 1800 numbers are commonly faked by scammers pretending to be banks or government — always verify by calling the number from the organisation's official website");
       bump("medium");
       return { lineType: "freecall", region: "National — free call", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: `1800 ${norm.slice(5, 8)} ${norm.slice(8)}` };
     }
 
     // Shared cost 1300 / 13xx
     if (norm.startsWith("01300") || /^0?13\d{2,4}$/.test(norm)) {
-      spoofingNotes.push("1300/13xx numbers are commonly spoofed by scammers impersonating government agencies — verify via official channels");
+      spoofingNotes.push("1300/13xx numbers are commonly faked by scammers pretending to be the ATO, myGov, or Centrelink — verify by calling the number from the government website");
       bump("medium");
       return { lineType: "shared_cost", region: "National — shared cost", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: norm.startsWith("0") ? norm.slice(1) : norm };
     }
@@ -389,7 +389,7 @@ export function analysePhone(raw: string): PhoneIntel {
       const prefix4 = norm.slice(0, 4);
       const isVoip = AU_VOIP_MOBILE_PREFIXES.has(prefix4);
       if (isVoip) {
-        spoofingNotes.push("This number range is commonly allocated to VoIP and virtual number services — spoofing is trivial from these providers");
+        spoofingNotes.push("This number range is commonly used by internet phone and virtual number services — the caller's real identity is easily hidden");
         bump("medium");
       }
       return {
@@ -409,7 +409,7 @@ export function analysePhone(raw: string): PhoneIntel {
     // Geographic fixed line (STD)
     const stdCode = norm.slice(0, 2);
     if (AU_STD[stdCode] && norm.length === 10) {
-      spoofingNotes.push("Fixed-line numbers are trivially easy to spoof — scammers commonly display a local area code to appear legitimate");
+      spoofingNotes.push("Landline numbers are easy to fake — a local area code doesn't mean the caller is actually nearby or who they claim to be");
       bump("medium");
       return {
         lineType: "fixed",
@@ -425,7 +425,7 @@ export function analysePhone(raw: string): PhoneIntel {
     }
 
     // Unrecognised AU format
-    spoofingNotes.push("Number doesn't match any known Australian number format — it may be fabricated or heavily spoofed");
+    spoofingNotes.push("Number doesn't match any known Australian phone format — it may be fabricated or disguised");
     bump("high");
     return { lineType: "unknown", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: norm };
   }

@@ -18,26 +18,22 @@ export default function StatsBar() {
       .catch(() => {});
   }, []);
 
-  // Don't render until we have data — avoids a flash of zeros
   if (!stats) return null;
 
   const { checks, reports } = stats;
-  const hasActivity = checks > 0 || reports > 0;
+  if (checks === 0 && reports === 0) return null;
 
-  if (hasActivity) {
-    return (
-      <div className="flex items-center justify-center gap-6 text-sm text-gray-300 pb-1">
-        <span>
-          <span className="text-emerald-400 font-bold">{fmt(checks)}</span>
-          {" "}scam{checks === 1 ? "" : "s"} checked
-        </span>
-        <span className="text-gray-600" aria-hidden="true">·</span>
-        <span>
-          <span className="text-emerald-400 font-bold">{fmt(reports)}</span>
-          {" "}report{reports === 1 ? "" : "s"} submitted
-        </span>
-      </div>
-    );
-  }
-
+  return (
+    <div className="flex items-center justify-center gap-6 text-sm text-gray-300 pb-1">
+      <span>
+        <span className="text-emerald-400 font-bold">{fmt(checks)}</span>
+        {" "}scam{checks === 1 ? "" : "s"} checked
+      </span>
+      <span className="text-gray-600" aria-hidden="true">·</span>
+      <span>
+        <span className="text-emerald-400 font-bold">{fmt(reports)}</span>
+        {" "}report{reports === 1 ? "" : "s"} submitted
+      </span>
+    </div>
+  );
 }

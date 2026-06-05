@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
@@ -46,6 +46,20 @@ export default function CheckFlow() {
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const emlRef = useRef<HTMLInputElement>(null);
+
+  // Push a history entry on step transitions so Android/browser Back returns
+  // to the previous step instead of navigating away from the site.
+  useEffect(() => {
+    function onPopState() {
+      setStep((current) => {
+        if (current === "report") return "result";
+        if (current === "result") return "input";
+        return "input";
+      });
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Image → QR decode (client-side) first, OCR fallback via /api/ocr.
   async function handleImageUpload(file: File) {
@@ -134,6 +148,7 @@ export default function CheckFlow() {
       const data = await res.json() as { results: AnalyzedIdentifier[] };
       setResults(data.results ?? []);
       setStep("result");
+      history.pushState({ step: "result" }, "");
     } catch (err) {
       setCheckError(t("check.serverError"));
       reportFailure("check", err);
@@ -210,8 +225,8 @@ export default function CheckFlow() {
           )}
 
           <button
-            onClick={() => setStep("report")}
-            className="w-full py-3 px-6 bg-red-800 hover:bg-red-700 text-white font-bold rounded-lg transition-all text-sm uppercase tracking-wide flex items-center justify-center gap-2"
+            onClick={() => { setStep("report"); history.pushState({ step: "report" }, ""); }}
+            className="w-full py-3 px-6 bg-red-800 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2"
           >
             <span aria-hidden="true">🚨</span>
             {t("check.report")}
@@ -242,31 +257,32 @@ export default function CheckFlow() {
           type="button"
           onClick={() => imageRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex flex-col items-center justify-center gap-2 px-3 py-6 min-h-[88px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span aria-hidden="true" className="text-2xl">{uploadLoading ? "⏳" : "🖼️"}</span>
-          <span className="font-medium text-xs text-center">{t("check.uploadImage")}</span>
-          <span className="text-[10px] text-gray-500 text-center leading-tight">{t("check.uploadImageDesc")}</span>
+          <span className="font-medium text-sm text-center">{t("check.uploadImage")}</span>
+          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadImageDesc")}</span>
         </button>
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex flex-col items-center justify-center gap-2 px-3 py-6 min-h-[88px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span aria-hidden="true" className="text-2xl">📷</span>
-          <span className="font-medium text-xs text-center">{t("check.takePhoto")}</span>
-          <span className="text-[10px] text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
+          <span className="font-medium text-sm text-center">{t("check.takePhoto")}</span>
+          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
         </button>
+        {/* .eml upload — labelled for clarity; described as advanced to de-prioritise for most users */}
         <button
           type="button"
           onClick={() => emlRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex flex-col items-center justify-center gap-2 px-3 py-6 min-h-[88px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span aria-hidden="true" className="text-2xl">📨</span>
-          <span className="font-medium text-xs text-center">{t("check.uploadEml")}</span>
-          <span className="text-[10px] text-gray-500 text-center leading-tight">{t("check.uploadEmlDesc")}</span>
+          <span className="font-medium text-sm text-center">{t("check.uploadEml")}</span>
+          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadEmlDesc")}</span>
         </button>
       </div>
 
@@ -288,15 +304,19 @@ export default function CheckFlow() {
           onChange={(e) => setContent(e.target.value)}
           placeholder={t("check.placeholder")}
           rows={5}
-          className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
+          className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-base font-mono"
         />
+        {/* Paste guidance for users who aren't sure how to copy on mobile */}
+        {!content && (
+          <p className="mt-1.5 text-xs text-gray-500">{t("check.pasteHint")}</p>
+        )}
       </div>
 
       <button
         onClick={runCheck}
         disabled={checkLoading || !content.trim()}
         aria-busy={checkLoading}
-        className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold rounded-lg transition-all text-base uppercase tracking-wide"
+        className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold rounded-lg transition-colors text-base uppercase tracking-wide"
       >
         {checkLoading ? t("check.analysing") : t("check.submit")}
       </button>

@@ -6,10 +6,10 @@ export default function Home() {
     <main className="max-w-2xl mx-auto px-4 py-8 space-y-5">
       <div className="text-center space-y-2">
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
-          Check a scam in seconds
+          Got a suspicious message or call?
         </h1>
-        <p className="text-sm text-gray-400">
-          Paste a link, text, email or number — or upload a screenshot — and we&apos;ll analyse it.
+        <p className="text-base text-gray-300">
+          Paste it below and we&apos;ll check it for you — links, texts, emails, and phone numbers.
         </p>
         <StatsBar />
       </div>
