@@ -6,6 +6,8 @@ import { PublicReport, SortOption } from "@/lib/reportStore";
 import { timeAgo, truncate } from "@/lib/formatters";
 import SafeDisplay from "@/components/SafeDisplay";
 
+type ViewMode = "grouped" | "individual";
+
 const TYPE_OPTIONS = [
   { value: "all",    label: "All",            icon: "🔍" },
   { value: "url",    label: "Dodgy Link",     icon: "🔗" },
@@ -34,13 +36,16 @@ const SEARCH_PLACEHOLDER = "Search by keyword, phone number, email or URL…";
 
 const PAGE_SIZE = 25;
 const SORT_KEY  = "submissions_sort";
+const VIEW_KEY  = "submissions_view";
 
-// The sort preference lives in localStorage, exposed as an external store.
-// useSyncExternalStore renders the server snapshot ("desc") during SSR and the
-// first client render, then the real saved value — avoiding a hydration
-// mismatch without a setState-in-effect (which the lint rules forbid).
+// Sort and view preferences live in localStorage, exposed as external stores.
+// useSyncExternalStore renders the server snapshot during SSR/first client render,
+// then the real saved value — avoiding a hydration mismatch.
 const SORT_VALUES = ["desc", "asc", "most", "least"] as const;
+const VIEW_VALUES: ViewMode[] = ["grouped", "individual"];
+
 const sortListeners = new Set<() => void>();
+const viewListeners = new Set<() => void>();
 
 function subscribeSort(cb: () => void): () => void {
   sortListeners.add(cb);
@@ -53,13 +58,29 @@ function getSortSnapshot(): SortOption {
   return (SORT_VALUES as readonly string[]).includes(v ?? "") ? (v as SortOption) : "desc";
 }
 
-function getServerSortSnapshot(): SortOption {
-  return "desc";
-}
+function getServerSortSnapshot(): SortOption { return "desc"; }
 
 function writeSort(next: SortOption): void {
   localStorage.setItem(SORT_KEY, next);
   sortListeners.forEach((l) => l());
+}
+
+function subscribeView(cb: () => void): () => void {
+  viewListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => { viewListeners.delete(cb); window.removeEventListener("storage", cb); };
+}
+
+function getViewSnapshot(): ViewMode {
+  const v = localStorage.getItem(VIEW_KEY);
+  return (VIEW_VALUES as string[]).includes(v ?? "") ? (v as ViewMode) : "grouped";
+}
+
+function getServerViewSnapshot(): ViewMode { return "grouped"; }
+
+function writeView(next: ViewMode): void {
+  localStorage.setItem(VIEW_KEY, next);
+  viewListeners.forEach((l) => l());
 }
 
 function pageNumbers(current: number, total: number): (number | "…")[] {
@@ -78,6 +99,7 @@ export default function SubmissionsPage() {
   const [loading, setLoading]           = useState(true);
   const [type, setType]                 = useState("all");
   const sort = useSyncExternalStore(subscribeSort, getSortSnapshot, getServerSortSnapshot);
+  const view = useSyncExternalStore(subscribeView, getViewSnapshot, getServerViewSnapshot);
   const [periodDays, setPeriodDays]     = useState("0");
   const [page, setPage]                 = useState(1);
   const [searchInput, setSearchInput]   = useState("");
@@ -104,6 +126,7 @@ export default function SubmissionsPage() {
       : undefined;
 
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), sort });
+    if (view === "grouped") params.set("grouped", "true");
     if (type !== "all") params.set("type", type);
     if (since)          params.set("since", String(since));
     if (search)         params.set("search", search);
@@ -119,12 +142,13 @@ export default function SubmissionsPage() {
       .catch(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [type, sort, periodDays, page, search]);
+  }, [type, sort, view, periodDays, page, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function changeType(val: string)       { setLoading(true); setType(val);       setPage(1); }
   function changeSort(val: SortOption)   { setLoading(true); writeSort(val);     setPage(1); }
+  function changeView(val: ViewMode)     { setLoading(true); writeView(val);     setPage(1); }
   function changePeriod(val: string)     { setLoading(true); setPeriodDays(val); setPage(1); }
   function clearSearch()                 { setSearchInput(""); searchRef.current?.focus(); }
   function goTo(p: number) {
@@ -177,8 +201,34 @@ export default function SubmissionsPage() {
           )}
         </div>
 
-        {/* Filters */}
+        {/* View toggle + Filters */}
         <div className="flex flex-wrap gap-2 items-center">
+          {/* Grouped / Individual toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-gray-700 shrink-0" role="group" aria-label="View mode">
+            <button
+              onClick={() => changeView("grouped")}
+              aria-pressed={view === "grouped"}
+              className={`px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors ${
+                view === "grouped"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-gray-900 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              Grouped
+            </button>
+            <button
+              onClick={() => changeView("individual")}
+              aria-pressed={view === "individual"}
+              className={`px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors border-l border-gray-700 ${
+                view === "individual"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-gray-900 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              All reports
+            </button>
+          </div>
+
           {/* Sort */}
           <select
             value={sort}
@@ -215,7 +265,9 @@ export default function SubmissionsPage() {
 
           {!loading && total > 0 && (
             <span className="text-sm text-gray-500 ml-auto">
-              {total.toLocaleString()} {total === 1 ? "report" : "reports"}
+              {total.toLocaleString()} {view === "grouped"
+                ? (total === 1 ? "source" : "sources")
+                : (total === 1 ? "report" : "reports")}
             </span>
           )}
         </div>
@@ -236,6 +288,7 @@ export default function SubmissionsPage() {
             <ul className="divide-y divide-gray-800">
               {reports.map((r) => {
                 const opt = TYPE_OPTIONS.find((o) => o.value === r.type) ?? TYPE_OPTIONS[TYPE_OPTIONS.length - 1];
+                const isGrouped = view === "grouped";
                 return (
                   <li key={r.id} className="px-5 py-4 space-y-2">
                     <div className="flex items-center justify-between gap-3">
@@ -243,18 +296,21 @@ export default function SubmissionsPage() {
                         <span aria-hidden="true" className="shrink-0">{opt.icon}</span>
                         <span>{opt.label}</span>
                         {r.matchCount > 1 && (
-                          <span className="shrink-0 bg-red-900/40 text-red-400 border border-red-800/60 text-xs font-semibold px-2 py-0.5 rounded-full">
-                            {r.matchCount}× reported
+                          <span className={`shrink-0 border text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            isGrouped
+                              ? "bg-red-900/60 text-red-300 border-red-700"
+                              : "bg-red-900/40 text-red-400 border-red-800/60"
+                          }`}>
+                            {isGrouped
+                              ? `${r.matchCount} reports`
+                              : `${r.matchCount}× reported`}
                           </span>
                         )}
                       </span>
-                      <span className="text-sm text-gray-500 shrink-0">{timeAgo(r.submittedAt)}</span>
+                      <span className="text-sm text-gray-500 shrink-0">
+                        {isGrouped ? "Last " : ""}{timeAgo(r.submittedAt)}
+                      </span>
                     </div>
-
-                    <SafeDisplay
-                      value={truncate(r.content, 200)}
-                      className="block text-sm font-mono text-gray-200 break-all"
-                    />
 
                     {(r.scamUrl || r.scamPhone || r.scamEmail || r.scamReplyTo || r.emailAuth) && (
                       <div className="flex flex-col gap-1 pl-2 border-l-2 border-gray-700">
@@ -293,10 +349,20 @@ export default function SubmissionsPage() {
                       </div>
                     )}
 
+                    {!isGrouped && (
+                      <SafeDisplay
+                        value={truncate(r.content, 200)}
+                        className="block text-sm font-mono text-gray-200 break-all"
+                      />
+                    )}
+
                     {r.description && (
                       <p className="text-sm text-gray-400 italic">{truncate(r.description, 200)}</p>
                     )}
-                    <p className="text-xs text-gray-500 font-mono">{r.id}</p>
+
+                    {!isGrouped && (
+                      <p className="text-xs text-gray-500 font-mono">{r.id}</p>
+                    )}
                   </li>
                 );
               })}
