@@ -133,6 +133,7 @@ describe("storeReport", () => {
       scamUrl: "",
       scamPhone: "",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, false);
     expect(mockExecute).toHaveBeenCalledWith(
@@ -206,6 +207,7 @@ describe("storeReport", () => {
       scamUrl: "https://evil.com",
       scamPhone: "",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, false);
 
@@ -229,6 +231,7 @@ describe("storeReport", () => {
       scamUrl: "https://evil.com",
       scamPhone: "",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, false);
 
@@ -257,6 +260,7 @@ describe("storeReport", () => {
       scamUrl: "https://evil.com",
       scamPhone: "",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, true); // suspect
 
@@ -280,6 +284,7 @@ describe("storeReport", () => {
       scamUrl: "",
       scamPhone: "+61412345678",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, false);
 
@@ -302,6 +307,7 @@ describe("storeReport", () => {
       scamUrl: "",
       scamPhone: "",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, false);
     const calls = mockExecute.mock.calls.map((c) => c[0]);
@@ -320,6 +326,7 @@ describe("storeReport", () => {
       scamUrl: "",
       scamPhone: "",
       scamEmail: "",
+      scamReplyTo: "",
     };
     await storeReport(report, true);
     const calls = mockExecute.mock.calls.map((c) => c[0]);
