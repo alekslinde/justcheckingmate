@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useLang } from "@/lib/lang";
 import LangToggle from "./LangToggle";
 
 export default function SiteHeader() {
+  const { t } = useLang();
   return (
     <header className="border-b border-gray-800 bg-gray-900">
       <div className="max-w-2xl mx-auto px-4 flex items-center justify-between gap-4"
@@ -18,13 +22,19 @@ export default function SiteHeader() {
             href="/learn"
             className="min-h-[44px] flex items-center px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
           >
-            Learn
+            {t("nav.learn")}
           </Link>
           <Link
             href="/submissions"
             className="min-h-[44px] flex items-center px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
           >
-            Reports
+            {t("nav.reports")}
+          </Link>
+          <Link
+            href="/about"
+            className="min-h-[44px] flex items-center px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
+          >
+            {t("nav.about")}
           </Link>
           <LangToggle />
         </nav>

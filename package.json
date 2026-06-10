@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "NODE_OPTIONS=--disable-warning=DEP0205 vitest run",
-    "test:watch": "NODE_OPTIONS=--disable-warning=DEP0205 vitest"
+    "test:watch": "NODE_OPTIONS=--disable-warning=DEP0205 vitest",
+    "seed": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/seed-db.ts",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

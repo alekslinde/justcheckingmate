@@ -4,24 +4,26 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
 import { parseEmailHeaders, analyseEmailIdentities, summariseAuth } from "@/lib/emailHeaders";
+import { useLang, MessageKey } from "@/lib/lang";
+import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
 
-const REPORT_TYPES: { value: ScamType; label: string; icon: string }[] = [
-  { value: "url",    label: "Dodgy Link / Website", icon: "🔗" },
-  { value: "sms",    label: "Scam Text / SMS",      icon: "📱" },
-  { value: "email",  label: "Phishing Email",        icon: "📧" },
-  { value: "phone",  label: "Scam Phone Number",     icon: "📞" },
-  { value: "qr",     label: "Dodgy QR Code",         icon: "📷" },
-  { value: "custom", label: "Something Else",        icon: "🤔" },
+const REPORT_TYPES: { value: ScamType; labelKey: MessageKey; icon: string }[] = [
+  { value: "url",    labelKey: "report.type.url",    icon: "🔗" },
+  { value: "sms",    labelKey: "report.type.sms",    icon: "📱" },
+  { value: "email",  labelKey: "report.type.email",  icon: "📧" },
+  { value: "phone",  labelKey: "report.type.phone",  icon: "📞" },
+  { value: "qr",     labelKey: "report.type.qr",     icon: "📷" },
+  { value: "custom", labelKey: "report.type.custom", icon: "🤔" },
 ];
 
-const PLACEHOLDERS: Record<ScamType, string> = {
-  url:    "Paste the URL, e.g. https://my-g0v-ato.tk/verify",
-  sms:    "Paste the full SMS message text...",
-  email:  "Paste the email content or the sender's address...",
-  phone:  "Enter the phone number, e.g. +61 412 345 678",
-  qr:     "Paste the URL the QR code resolves to...",
-  custom: "Describe or paste whatever you received...",
+const PLACEHOLDER_KEYS: Record<ScamType, MessageKey> = {
+  url:    "report.placeholder.url",
+  sms:    "report.placeholder.sms",
+  email:  "report.placeholder.email",
+  phone:  "report.placeholder.phone",
+  qr:     "report.placeholder.qr",
+  custom: "report.placeholder.custom",
 };
 
 type Status = "idle" | "submitting" | "success" | "error";
@@ -30,6 +32,7 @@ interface EmailAuth { spf: string; dkim: string; dkimDomain: string; dmarc: stri
 const EMPTY_AUTH: EmailAuth = { spf: "", dkim: "", dkimDomain: "", dmarc: "" };
 
 export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
+  const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [type, setType] = useState<ScamType>(initialType ?? "url");
   const [content, setContent] = useState(initialContent ?? "");
@@ -73,15 +76,11 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
     if (h.replyTo) setScamReplyTo(h.replyTo);
     setAuth({ spf: h.spf, dkim: h.dkim, dkimDomain: h.dkimDomain, dmarc: h.dmarc });
     if (!h.fromAddress && !h.replyTo) {
-      setParseNote("Couldn't find a From or Reply-To header in that — enter the addresses manually below.");
+      setParseNote(t("report.parse.notFound"));
       return;
     }
     const { flags } = analyseEmailIdentities(h);
-    setParseNote(
-      flags.length > 0
-        ? `⚠ ${flags[0]}`
-        : "Pulled out the sender details — review them below before sending.",
-    );
+    setParseNote(flags.length > 0 ? `⚠ ${flags[0]}` : t("report.parse.ok"));
   }
 
   async function handleEmlFile(file: File) {
@@ -153,20 +152,27 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       <div className="space-y-5 text-center py-4">
         <div className="text-5xl" aria-hidden="true">🦘</div>
         <div>
-          <h3 className="font-bold text-green-400 text-lg mb-1">Thank you — you&apos;ve helped protect others.</h3>
-          <p className="text-gray-300 text-sm">
-            Your report has been logged. Every submission helps warn others about this scam.
-          </p>
+          <h3 className="font-bold text-green-400 text-lg mb-1">{t("report.success.title")}</h3>
+          <p className="text-gray-300 text-sm">{t("report.success.body")}</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 inline-block mx-auto">
-          <div className="text-sm text-gray-400 mb-0.5">Report reference</div>
+          <div className="text-sm text-gray-400 mb-0.5">{t("report.success.reference")}</div>
           <div className="font-mono text-emerald-400 font-bold">{reportId}</div>
+          {/* The reference is genuinely usable: the submissions search matches ids */}
+          {reportId && (
+            <Link
+              href={`/submissions?q=${encodeURIComponent(reportId)}`}
+              className="block mt-1 text-xs text-emerald-400/90 hover:text-emerald-300 underline underline-offset-2"
+            >
+              {t("report.success.findIt")}
+            </Link>
+          )}
         </div>
         {totalReports !== null && (
           <p className="text-sm text-gray-400">
-            {totalReports.toLocaleString()} reports submitted by Australians like you.{" "}
+            {t("report.success.total", { n: totalReports.toLocaleString() })}{" "}
             <Link href="/submissions" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
-              View all →
+              {t("report.success.viewAll")}
             </Link>
           </p>
         )}
@@ -175,31 +181,31 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             onClick={reset}
             className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-all"
           >
-            Report another
+            {t("report.success.another")}
           </button>
           <Link
             href="/submissions"
             className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-sm rounded-lg transition-all"
           >
-            View community submissions →
+            {t("report.success.community")}
           </Link>
         </div>
         <div className="text-sm text-gray-400 pt-2 border-t border-gray-800">
-          For immediate help, report to{" "}
+          {t("report.success.official.pre")}{" "}
           <a
             href="https://www.scamwatch.gov.au"
             target="_blank"
             rel="noopener noreferrer"
             className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
           >
-            Scamwatch (scamwatch.gov.au){" "}<span aria-label="opens in a new tab" aria-hidden="true">↗</span>
+            Scamwatch (scamwatch.gov.au)<span className="sr-only"> ({t("a11y.newTab")})</span><span aria-hidden="true"> ↗</span>
           </a>{" "}
-          or call{" "}
+          {t("report.success.official.or")}{" "}
           <a
             href="tel:1800595160"
             className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
           >
-            IDCARE on 1800 595 160
+            {t("report.success.idcare")}
           </a>
         </div>
       </div>
@@ -224,54 +230,51 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       </div>
 
       <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 space-y-1.5">
-        <p className="text-sm text-emerald-400 font-semibold text-center">
-          For urgent matters, contact Scamwatch, your bank, or the{" "}
-          <abbr title="Australian Federal Police">AFP</abbr>{" "}
-          directly — this tool is not a substitute for official reporting channels.
-        </p>
-        <p className="text-sm text-gray-400 text-center">
-          Your report is valuable. Every submission helps raise awareness and protects others from the same scam.
-        </p>
+        <p className="text-sm text-emerald-400 font-semibold text-center">{t("report.urgent")}</p>
+        <p className="text-sm text-gray-400 text-center">{t("report.valuable")}</p>
       </div>
 
       {/* Stats badge */}
       {totalReports !== null && (
         <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
           <span className="text-emerald-400" aria-hidden="true">📊</span>
-          <span>
-            <strong className="text-gray-100">{totalReports.toLocaleString()}</strong> scams reported by Australians so far
-          </span>
+          <span>{bold(t("report.stats", { n: totalReports.toLocaleString() }))}</span>
         </div>
       )}
 
       {/* Required field note */}
       <p className="text-sm text-gray-400">
-        Fields marked <span aria-hidden="true" className="text-red-400">*</span>
-        <span className="sr-only">with an asterisk</span> are required.
+        {t("report.required.pre")} <span aria-hidden="true" className="text-red-400">*</span>
+        <span className="sr-only">{t("report.required.srAsterisk")}</span> {t("report.required.post")}
       </p>
 
-      {/* Type — radio group */}
+      {/* Type — native radios styled as cards, so arrow keys and grouping work
+          without re-implementing the ARIA radio pattern by hand. */}
       <fieldset>
         <legend className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
-          What are you reporting?
+          {t("report.type.legend")}
         </legend>
-        <div role="radiogroup" aria-labelledby="report-type-legend" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {REPORT_TYPES.map((t) => (
-            <button
-              type="button"
-              key={t.value}
-              role="radio"
-              aria-checked={type === t.value}
-              onClick={() => setType(t.value)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
-                type === t.value
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {REPORT_TYPES.map((rt) => (
+            <label
+              key={rt.value}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-300 ${
+                type === rt.value
                   ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
                   : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500 hover:text-gray-100"
               }`}
             >
-              <span aria-hidden="true">{t.icon}</span>
-              <span>{t.label}</span>
-            </button>
+              <input
+                type="radio"
+                name="report-type"
+                value={rt.value}
+                checked={type === rt.value}
+                onChange={() => setType(rt.value)}
+                className="sr-only"
+              />
+              <span aria-hidden="true">{rt.icon}</span>
+              <span>{t(rt.labelKey)}</span>
+            </label>
           ))}
         </div>
       </fieldset>
@@ -279,30 +282,30 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       {/* For email type: show a summary of what was already parsed from the headers */}
       {type === "email" && (scamEmail || scamReplyTo || authSummary) && (
         <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-4 py-3 space-y-1.5 text-xs">
-          <p className="text-emerald-400 font-semibold">Extracted from your email</p>
+          <p className="text-emerald-400 font-semibold">{t("report.extracted.heading")}</p>
           {scamEmail && (
             <p className="text-gray-300 font-mono">
-              <span className="text-gray-500">From: </span>{scamEmail}
+              <span className="text-gray-500">{t("report.extracted.from")} </span>{scamEmail}
             </p>
           )}
           {scamReplyTo && (
             <p className="text-gray-300 font-mono">
-              <span className="text-gray-500">Reply-To: </span>{scamReplyTo}
+              <span className="text-gray-500">{t("report.extracted.replyTo")} </span>{scamReplyTo}
             </p>
           )}
           {authSummary && (
             <p className="text-gray-300 font-mono">
-              <span className="text-gray-500">Auth: </span>{authSummary}
+              <span className="text-gray-500">{t("report.extracted.auth")} </span>{authSummary}
             </p>
           )}
-          <p className="text-gray-500">Review or edit the fields below before submitting.</p>
+          <p className="text-gray-500">{t("report.extracted.review")}</p>
         </div>
       )}
 
       {/* Scam content */}
       <div>
         <label htmlFor="report-content" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
-          The scam content{" "}
+          {t("report.content.label")}{" "}
           <span aria-hidden="true" className="text-red-400">*</span>
         </label>
         <textarea
@@ -312,12 +315,14 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           aria-describedby="content-count"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder={PLACEHOLDERS[type]}
+          placeholder={t(PLACEHOLDER_KEYS[type])}
           rows={type === "url" || type === "phone" ? 2 : 4}
           maxLength={2000}
           className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
         />
-        <div id="content-count" aria-live="polite" className="text-right text-sm text-gray-400 mt-0.5">
+        {/* Deliberately not aria-live — announcing every keystroke is noise;
+            the count is reachable via aria-describedby on the field. */}
+        <div id="content-count" className="text-right text-sm text-gray-400 mt-0.5">
           {content.length}/2000
         </div>
       </div>
@@ -326,13 +331,13 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       {type === "custom" && (
         <div>
           <label htmlFor="report-description-custom" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
-            What happened?
+            {t("report.desc.label")}
           </label>
           <textarea
             id="report-description-custom"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe what happened — what did you receive, how were you contacted, what did they ask for?"
+            placeholder={t("report.desc.placeholder.custom")}
             rows={4}
             maxLength={1000}
             className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm"
@@ -343,17 +348,15 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       {/* Scam identifiers — shown selectively based on report type */}
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-          Scam identifiers{" "}
-          <span className="text-gray-400 normal-case font-normal">(optional)</span>
+          {t("report.ids.legend")}{" "}
+          <span className="text-gray-400 normal-case font-normal">{t("report.optional")}</span>
         </legend>
-        <p className="text-xs text-gray-500">
-          Capture any specific contact points so others can recognise the same scam.
-        </p>
+        <p className="text-xs text-gray-500">{t("report.ids.hint")}</p>
 
         {/* URL — shown for url, sms, qr, email (links in phishing), custom */}
         {type !== "phone" && (
           <div>
-            <label htmlFor="report-scam-url" className="block text-xs font-medium text-gray-400 mb-1">Scam URL / link</label>
+            <label htmlFor="report-scam-url" className="block text-xs font-medium text-gray-400 mb-1">{t("report.ids.url")}</label>
             <input
               id="report-scam-url"
               type="url"
@@ -369,11 +372,10 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         {/* Phone — shown for phone, sms, custom */}
         {(type === "phone" || type === "sms" || type === "custom") && (
           <div>
-            <label htmlFor="report-scam-phone" className="block text-xs font-medium text-gray-400 mb-1">Scam phone number</label>
+            <label htmlFor="report-scam-phone" className="block text-xs font-medium text-gray-400 mb-1">{t("report.ids.phone")}</label>
             <input
               id="report-scam-phone"
               type="tel"
-              autoComplete="tel"
               value={scamPhone}
               onChange={(e) => setScamPhone(e.target.value)}
               placeholder="+61 4xx xxx xxx"
@@ -387,7 +389,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         {(type === "email" || type === "sms" || type === "custom") && (
           <div>
             <label htmlFor="report-scam-email" className="block text-xs font-medium text-gray-400 mb-1">
-              {type === "email" ? "Sender address shown (From)" : "Scammer's email address"}
+              {type === "email" ? t("report.ids.emailFrom") : t("report.ids.email")}
             </label>
             <input
               id="report-scam-email"
@@ -405,7 +407,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           <>
             <div>
               <label htmlFor="report-scam-reply-to" className="block text-xs font-medium text-gray-400 mb-1">
-                Address it actually replies to (Reply-To)
+                {t("report.ids.replyTo")}
               </label>
               <input
                 id="report-scam-reply-to"
@@ -419,37 +421,38 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               {scamEmail && scamReplyTo &&
                 scamEmail.split("@")[1]?.toLowerCase() !== scamReplyTo.split("@")[1]?.toLowerCase() && (
                 <p className="mt-1 text-xs text-amber-400">
-                  ⚠ Reply-To goes to a different domain than the sender — a classic spoofing sign.
+                  ⚠ {t("report.ids.replyMismatch")}
                 </p>
               )}
             </div>
 
             <details className="text-xs text-gray-400">
               <summary className="cursor-pointer text-emerald-400/90 hover:text-emerald-300">
-                How do I find these on my phone?
+                {t("report.email.how.summary")}
               </summary>
               <ul className="mt-2 space-y-1 list-disc pl-5 text-gray-400">
-                <li><strong>Sender (From):</strong> tap the sender&apos;s name at the top of the email — it expands to show the real address behind the display name.</li>
-                <li><strong>Reply-To:</strong> tap <em>Reply</em> (don&apos;t send!) and look at the address it fills into the To: field. If it differs from the sender, that&apos;s the Reply-To.</li>
-                <li>On a computer you can also paste the full email source or drop a <code>.eml</code> file below to fill these in automatically.</li>
+                <li>{bold(t("report.email.how.from"))}</li>
+                <li>{bold(t("report.email.how.replyTo"))}</li>
+                <li>{t("report.email.how.desktop")}</li>
               </ul>
             </details>
 
             <div>
               <label htmlFor="report-email-source" className="block text-xs font-medium text-gray-400 mb-1">
-                Optional: paste full email source or drop a .eml file
+                {t("report.email.source.label")}
               </label>
               <textarea
                 id="report-email-source"
                 value={emailSource}
                 onChange={(e) => parseSource(e.target.value)}
-                placeholder="Paste raw headers here (From:, Reply-To:, ...) — we read them on your device and only submit the addresses, never the full email."
+                placeholder={t("report.email.source.placeholder")}
                 rows={3}
                 className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-xs font-mono resize-y"
               />
               <input
                 type="file"
                 accept=".eml,message/rfc822,text/plain"
+                aria-label={t("report.email.source.file")}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlFile(f); }}
                 className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1.5 file:text-gray-300 hover:file:bg-gray-700"
               />
@@ -460,9 +463,9 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               )}
               {authSummary && (
                 <p className="mt-1 text-xs text-gray-400">
-                  <span className="text-gray-500">Authentication: </span>
+                  <span className="text-gray-500">{t("report.email.auth.label")} </span>
                   <span className="font-mono text-gray-300">{authSummary}</span>
-                  <span className="text-gray-500"> — attached to your report.</span>
+                  <span className="text-gray-500"> {t("report.email.auth.attached")}</span>
                 </p>
               )}
             </div>
@@ -474,14 +477,14 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       {type !== "custom" && (
         <div>
           <label htmlFor="report-description" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
-            What happened?{" "}
-            <span className="text-gray-400 normal-case font-normal">(optional but helpful)</span>
+            {t("report.desc.label")}{" "}
+            <span className="text-gray-400 normal-case font-normal">{t("report.desc.optional")}</span>
           </label>
           <textarea
             id="report-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="E.g. Got a text claiming to be from the ATO asking me to verify my TFN. Almost fell for it..."
+            placeholder={t("report.desc.placeholder")}
             rows={3}
             maxLength={1000}
             className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm"
@@ -492,8 +495,8 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       {/* Contact */}
       <div>
         <label htmlFor="report-contact" className="block text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">
-          Your email{" "}
-          <span className="text-gray-400 normal-case font-normal">(optional — only for follow-up)</span>
+          {t("report.contact.label")}{" "}
+          <span className="text-gray-400 normal-case font-normal">{t("report.contact.optional")}</span>
         </label>
         <input
           id="report-contact"
@@ -507,14 +510,17 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-base"
         />
         <p id="contact-hint" className="mt-1 text-sm text-gray-400">
-          Never shared. Only used if we need to follow up on your report.
+          {t("report.contact.hint")}{" "}
+          <Link href="/about" className="underline underline-offset-2 hover:text-gray-300">
+            {t("report.contact.aboutLink")}
+          </Link>
         </p>
       </div>
 
       {/* Error */}
       {status === "error" && (
         <div role="alert" className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-red-300 text-sm">
-          Strewth, something went wrong. Give it another crack.
+          {t("report.error")}
         </div>
       )}
 
@@ -525,7 +531,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         aria-busy={status === "submitting"}
         className="w-full py-3 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-800 disabled:text-gray-400 text-gray-900 font-bold rounded-lg transition-all text-sm uppercase tracking-wide"
       >
-        {status === "submitting" ? "Lodging your report..." : "Report This Scam 🚨"}
+        {status === "submitting" ? t("report.submitting") : t("report.submit")}
       </button>
 
     </form>

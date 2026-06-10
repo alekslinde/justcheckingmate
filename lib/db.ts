@@ -59,6 +59,9 @@ async function setup(): Promise<void> {
   // Compact email-authentication summary (SPF/DKIM/DMARC), derived client-side
   // from pasted headers — never the raw email. Empty for non-email reports.
   await db.execute(`ALTER TABLE reports ADD COLUMN email_auth   TEXT    NOT NULL DEFAULT ''`).catch(() => {});
+  // Coarse submission location (state for AU, country otherwise) derived from
+  // geo headers at submission time. The reporter's IP is never stored.
+  await db.execute(`ALTER TABLE reports ADD COLUMN location     TEXT    NOT NULL DEFAULT ''`).catch(() => {});
 }
 
 export async function getDb(): Promise<Client> {

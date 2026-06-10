@@ -3,6 +3,7 @@
 import { CheckResult, PhoneIntel } from "@/lib/scamDetector";
 import { defangText } from "@/lib/urlSanitizer";
 import { useLang, MessageKey } from "@/lib/lang";
+import { bold } from "@/lib/richText";
 
 const VERDICTS = {
   safe:        { icon: "✅", bg: "bg-green-900/40",  border: "border-green-700",  text: "text-green-400",  bar: "bg-green-500" },
@@ -52,56 +53,57 @@ function ActionSteps({ verdict }: { verdict: "suspicious" | "likely_scam" }) {
 
 // ── Phone intelligence panel ──────────────────────────────────────────────────
 
-const LINE_TYPE_META: Record<PhoneIntel["lineType"], { icon: string; label: string }> = {
-  mobile:       { icon: "📱", label: "Mobile phone" },
-  fixed:        { icon: "☎️",  label: "Fixed landline" },
-  voip_likely:  { icon: "🌐", label: "Internet phone (easy to fake)" },
-  premium:      { icon: "💸", label: "Premium rate — costs extra to call" },
-  freecall:     { icon: "📞", label: "Free call (1800)" },
-  shared_cost:  { icon: "📞", label: "Shared cost (1300 / 13xx)" },
-  emergency:    { icon: "🚨", label: "Emergency services" },
-  unknown:      { icon: "❓", label: "Unknown type" },
+const LINE_TYPE_META: Record<PhoneIntel["lineType"], { icon: string; labelKey: MessageKey }> = {
+  mobile:       { icon: "📱", labelKey: "phone.lineType.mobile" },
+  fixed:        { icon: "☎️",  labelKey: "phone.lineType.fixed" },
+  voip_likely:  { icon: "🌐", labelKey: "phone.lineType.voip" },
+  premium:      { icon: "💸", labelKey: "phone.lineType.premium" },
+  freecall:     { icon: "📞", labelKey: "phone.lineType.freecall" },
+  shared_cost:  { icon: "📞", labelKey: "phone.lineType.shared" },
+  emergency:    { icon: "🚨", labelKey: "phone.lineType.emergency" },
+  unknown:      { icon: "❓", labelKey: "phone.lineType.unknown" },
 };
 
-const SPOOFING_RISK_STYLE: Record<PhoneIntel["spoofingRisk"], { label: string; cls: string }> = {
-  low:       { label: "Low",                cls: "text-green-400" },
-  medium:    { label: "Moderate",           cls: "text-yellow-400" },
-  high:      { label: "High",               cls: "text-orange-400" },
-  very_high: { label: "Very likely fake",   cls: "text-red-400" },
+const SPOOFING_RISK_STYLE: Record<PhoneIntel["spoofingRisk"], { labelKey: MessageKey; cls: string }> = {
+  low:       { labelKey: "phone.risk.low",      cls: "text-green-400" },
+  medium:    { labelKey: "phone.risk.medium",   cls: "text-yellow-400" },
+  high:      { labelKey: "phone.risk.high",     cls: "text-orange-400" },
+  very_high: { labelKey: "phone.risk.veryHigh", cls: "text-red-400" },
 };
 
 function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
+  const { t } = useLang();
   const lt   = LINE_TYPE_META[intel.lineType];
   const risk = SPOOFING_RISK_STYLE[intel.spoofingRisk];
 
   return (
     <div className="border-t border-gray-700 pt-4 space-y-3">
       <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-        Phone details
+        {t("phone.heading")}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide">Type</div>
-          <div className="text-gray-200 text-sm">{lt.icon} {lt.label}</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.type")}</div>
+          <div className="text-gray-200 text-sm">{lt.icon} {t(lt.labelKey)}</div>
         </div>
         <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide">Country</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.country")}</div>
           <div className="text-gray-200 text-sm">{intel.country}</div>
         </div>
         {intel.region && (
           <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wide">Area</div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.area")}</div>
             <div className="text-gray-200 text-sm">{intel.region}</div>
           </div>
         )}
         <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide">Fake number risk</div>
-          <div className={`font-semibold text-sm ${risk.cls}`}>{risk.label}</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.fakeRisk")}</div>
+          <div className={`font-semibold text-sm ${risk.cls}`}>{t(risk.labelKey)}</div>
         </div>
         {intel.normalised && (
           <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5 col-span-2">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wide">Number (formatted)</div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.formatted")}</div>
             <div className="text-gray-200 text-sm font-mono">{intel.normalised}</div>
           </div>
         )}
@@ -109,27 +111,27 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
 
       {intel.wangiriRisk && (
         <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-sm text-red-300 space-y-1">
-          <div className="font-bold">One-ring scam warning</div>
-          <p>
-            Scammers call once and hang up. When you call back you&apos;re charged international
-            premium rates. <strong>Do not call back under any circumstances.</strong>
-          </p>
+          <div className="font-bold">{t("phone.wangiri.title")}</div>
+          <p>{bold(t("phone.wangiri.body"))}</p>
         </div>
       )}
 
       <div className="bg-gray-800/40 rounded-lg p-3 text-sm text-gray-400 space-y-1.5">
         <div className="font-semibold text-gray-300 flex items-center gap-1.5">
-          <span aria-hidden="true">ℹ️</span> Can scammers fake a phone number?
+          <span aria-hidden="true">ℹ️</span> {t("phone.spoof.title")}
         </div>
+        <p>{t("phone.spoof.body")}</p>
         <p>
-          Yes — scammers can display any number they want as the caller ID. It costs them
-          nothing and is very common. The real source is only known to the phone company
-          and can only be traced by police.
-        </p>
-        <p>
-          If you&apos;ve been scammed, report it to{" "}
-          <span className="text-emerald-400">Scamwatch (scamwatch.gov.au)</span>{" "}
-          and your telco — they can help trace and block the source.
+          {t("phone.spoof.report.pre")}{" "}
+          <a
+            href="https://www.scamwatch.gov.au"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+          >
+            Scamwatch (scamwatch.gov.au)<span className="sr-only"> ({t("a11y.newTab")})</span><span aria-hidden="true"> ↗</span>
+          </a>{" "}
+          {t("phone.spoof.report.post")}
         </p>
       </div>
     </div>
@@ -156,14 +158,14 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
         </div>
       </div>
 
-      {/* Risk bar — score relegated to small label alongside it */}
+      {/* Risk bar — a static measurement, so meter (not progressbar) semantics */}
       <div className="space-y-1">
         <div
-          role="progressbar"
+          role="meter"
           aria-valuenow={result.score}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Risk score: ${result.score} out of 100`}
+          aria-label={t("verdict.riskScore", { n: result.score })}
           className="w-full bg-gray-800 rounded-full h-2.5"
         >
           <div
@@ -172,9 +174,9 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
           />
         </div>
         <div className="flex justify-between text-xs text-gray-500" aria-hidden="true">
-          <span>Low risk</span>
-          <span>Risk score: {result.score}/100</span>
-          <span>High risk</span>
+          <span>{t("verdict.lowRisk")}</span>
+          <span>{t("verdict.riskScore", { n: result.score })}</span>
+          <span>{t("verdict.highRisk")}</span>
         </div>
       </div>
 

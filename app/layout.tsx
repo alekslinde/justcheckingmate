@@ -16,9 +16,36 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Production URL for absolute OG/Twitter URLs: explicit override first, then
+// the Vercel-provided production domain, then localhost for dev.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
+const TITLE = "Just Checking, Mate 🦘 — Aussie Scam Detector";
+const DESCRIPTION =
+  "Australia's no-nonsense scam detector. Check links, texts, emails and calls before you act.";
+
 export const metadata: Metadata = {
-  title: "Just Checking, Mate 🦘 — Aussie Scam Detector",
-  description: "Australia's no-nonsense scam detector. Check links, texts, emails and calls before you act.",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: "Just Checking, Mate",
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    siteName: "Just Checking, Mate",
+    locale: "en_AU",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {

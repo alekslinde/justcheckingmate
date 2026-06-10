@@ -129,7 +129,7 @@ describe("storeReport", () => {
       description: "Looks dodgy",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "",
       scamPhone: "",
       scamEmail: "",
@@ -152,7 +152,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl:   "https://au-post.fake/track",
       scamPhone: "+61412345678",
       scamEmail: "noreply@fake-ato.com",
@@ -178,7 +178,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "",
       scamPhone: "",
       scamEmail: "x@evil.tk",
@@ -203,7 +203,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "https://evil.com",
       scamPhone: "",
       scamEmail: "",
@@ -227,7 +227,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "https://evil.com",
       scamPhone: "",
       scamEmail: "",
@@ -256,7 +256,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "https://evil.com",
       scamPhone: "",
       scamEmail: "",
@@ -280,7 +280,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "",
       scamPhone: "+61412345678",
       scamEmail: "",
@@ -303,7 +303,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "",
       scamPhone: "",
       scamEmail: "",
@@ -322,7 +322,7 @@ describe("storeReport", () => {
       description: "",
       contact: "",
       submittedAt: Date.now(),
-      ip: "1.2.3.4",
+      location: "NSW, Australia",
       scamUrl: "",
       scamPhone: "",
       scamEmail: "",
@@ -548,7 +548,7 @@ describe("getPublicReports", () => {
     expect(call.args).toContain("%fake-ato%");
   });
 
-  it("searches across content, scam_url, scam_phone, and scam_email", async () => {
+  it("searches across content, scam_url, scam_phone, scam_email, and id", async () => {
     const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
@@ -558,8 +558,9 @@ describe("getPublicReports", () => {
     expect(sql).toContain("scam_url LIKE ?");
     expect(sql).toContain("scam_phone LIKE ?");
     expect(sql).toContain("scam_email LIKE ?");
+    expect(sql).toContain("id LIKE ?");
     // Same search term passed for each column
-    expect(args.filter((a) => a === "%evil%")).toHaveLength(4);
+    expect(args.filter((a) => a === "%evil%")).toHaveLength(5);
   });
 
   it("omits the search clause when search is empty or whitespace", async () => {
