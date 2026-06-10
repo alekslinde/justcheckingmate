@@ -24,7 +24,18 @@
 .DS_Store
 *.pem
 .vscode/
+
+# local database files (SQLite + WAL/SHM sidecars)
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Tesseract OCR model — large binary, downloaded at runtime
+*.traineddata
+
+# dev/audit scripts that aren't part of the app
+audit.mjs
 
 # debug
 npm-debug.log*

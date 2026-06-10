@@ -3,6 +3,7 @@ import { guardSubmission } from "@/lib/submissionGuard";
 import { generateReportId, storeReport, getStats } from "@/lib/reportStore";
 import { stripTrackingParams } from "@/lib/urlSanitizer";
 import { summariseAuth } from "@/lib/emailHeaders";
+import { scrubPii, stripReporterHeaders } from "@/lib/piiScrubber";
 
 function getClientIp(req: NextRequest): string {
   // x-forwarded-for can contain a comma-separated list; take the first entry.
@@ -30,10 +31,17 @@ export async function POST(req: NextRequest) {
 
   // For URL/QR reports strip tracking parameters before storing — keeping them
   // would let the scammer correlate which of their campaigns got reported.
-  const safeContent =
+  // For email reports, drop headers that identify the reporter's mailbox before
+  // storing — Delivered-To, X-Original-To, X-Forwarded-To, X-Google-Original-To,
+  // and X-Received all contain the reporter's own address or routing path.
+  // After header stripping, run PII scrubbing on the remaining content.
+  const safeContent = scrubPii(
     (type === "url" || type === "qr")
       ? stripTrackingParams(rawContent)
-      : rawContent;
+      : type === "email"
+        ? stripReporterHeaders(rawContent)
+        : rawContent
+  );
   const safeScamUrl = rawScamUrl ? stripTrackingParams(rawScamUrl) : "";
 
   // Email-authentication verdicts are submitted as raw tokens; summariseAuth
@@ -70,7 +78,7 @@ export async function POST(req: NextRequest) {
       id: reportId,
       type,
       content:     safeContent.slice(0, 2000),
-      description: String(body.description ?? "").slice(0, 1000),
+      description: scrubPii(String(body.description ?? "").slice(0, 1000)),
       contact:     String(body.contact ?? "").slice(0, 200),
       submittedAt: Date.now(),
       ip:          getClientIp(req),

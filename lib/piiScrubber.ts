@@ -28,3 +28,11 @@ export function scrubPii(text: string): string {
   }
   return result;
 }
+
+// Headers in forwarded/pasted email that identify the reporter's own mailbox
+// or delivery path. Stripped before the content is stored or published.
+const REPORTER_HEADER_RE = /^(delivered-to|x-original-to|x-forwarded-to|x-google-original-to|x-received)[^\n]*/gim;
+
+export function stripReporterHeaders(raw: string): string {
+  return raw.replace(REPORTER_HEADER_RE, "");
+}
