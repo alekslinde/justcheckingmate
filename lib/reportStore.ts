@@ -7,6 +7,10 @@ import { scrubPii } from "./piiScrubber";
 import { defang, defangEmail, defangPhone, defangText } from "./urlSanitizer";
 import { getDb } from "./db";
 
+// Privacy contract: this shape is exactly what reaches the database. The
+// reporter's IP is deliberately NOT part of it — IPs are used transiently for
+// rate limiting (see checkAndRecordRateLimit) and never persisted. `location`
+// is the coarse region string derived in lib/geo.ts.
 export interface Report {
   id: string;
   type: string;
@@ -14,7 +18,7 @@ export interface Report {
   description: string;
   contact: string;
   submittedAt: number;
-  ip: string;
+  location: string;
   scamUrl: string;
   scamPhone: string;
   scamEmail: string;
@@ -102,13 +106,13 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
   await db.execute({
     sql: `INSERT INTO reports
             (id, type, content, description, contact, submitted_at, suspect,
-             scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count, location)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       report.id, report.type, report.content, report.description, report.contact,
       report.submittedAt, suspect ? 1 : 0,
       report.scamUrl, report.scamPhone, report.scamEmail, report.scamReplyTo,
-      report.emailAuth ?? "", reportCount,
+      report.emailAuth ?? "", reportCount, report.location,
     ],
   });
 
@@ -148,6 +152,7 @@ export interface PublicReport {
   scamEmail: string;
   scamReplyTo: string;
   emailAuth: string;
+  location: string;
   matchCount: number;
 }
 
@@ -166,10 +171,12 @@ function buildConditions({ type, since, search }: FeedOpts) {
   if (since)                  { conditions.push("submitted_at >= ?"); args.push(since); }
   if (search?.trim()) {
     const term = `%${search.trim()}%`;
+    // id is included so a reporter can look up their own submission by the
+    // reference shown on the success screen.
     conditions.push(
-      "(content LIKE ? OR scam_url LIKE ? OR scam_phone LIKE ? OR scam_email LIKE ?)"
+      "(content LIKE ? OR scam_url LIKE ? OR scam_phone LIKE ? OR scam_email LIKE ? OR id LIKE ?)"
     );
-    args.push(term, term, term, term);
+    args.push(term, term, term, term, term);
   }
   return { where: conditions.join(" AND "), args };
 }
@@ -191,7 +198,7 @@ export async function getPublicReports(opts: {
 
   const result = await db.execute({
     sql: `SELECT id, type, content, description, submitted_at,
-                 scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count
+                 scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count, location
           FROM reports WHERE ${where}
           ORDER BY ${orderBy}
           LIMIT ? OFFSET ?`,
@@ -210,6 +217,7 @@ export async function getPublicReports(opts: {
     scamReplyTo: (r.scam_reply_to as string) ? defangEmail(r.scam_reply_to as string) : "",
     // Already a composed, defanged summary at write time — render as stored.
     emailAuth:   (r.email_auth as string) ?? "",
+    location:    (r.location as string) ?? "",
     matchCount:  Number(r.report_count ?? 1),
   }));
 }
@@ -257,6 +265,7 @@ export async function getGroupedReports(opts: {
             MAX(scam_email)  as scam_email,
             MAX(scam_reply_to) as scam_reply_to,
             MAX(email_auth)  as email_auth,
+            MAX(location)    as location,
             COUNT(*)         as report_count
           FROM reports WHERE ${where}
           GROUP BY ${GROUP_KEY_EXPR}
@@ -276,6 +285,7 @@ export async function getGroupedReports(opts: {
     scamEmail:   (r.scam_email as string) ? defangEmail(r.scam_email as string) : "",
     scamReplyTo: (r.scam_reply_to as string) ? defangEmail(r.scam_reply_to as string) : "",
     emailAuth:   (r.email_auth as string) ?? "",
+    location:    (r.location as string) ?? "",
     matchCount:  Number(r.report_count ?? 1),
   }));
 }

@@ -84,8 +84,9 @@ const hours = (n: number) => NOW - n * 3_600_000;
 const days  = (n: number) => NOW - n * 86_400_000;
 
 // One entry per report type, each showcasing a different field combination.
-// matchCount > 1 exercises the "N reports" badge.
-export const MOCK_REPORTS: PublicReport[] = [
+// matchCount > 1 exercises the "N reports" badge. Locations are assigned in a
+// deterministic cycle below (including one blank to exercise the no-location case).
+const RAW_MOCKS: Omit<PublicReport, "location">[] = [
   // ── URL / Dodgy Link ─────────────────────────────────────────────────────────
   {
     id: "RPT-MOCK01",
@@ -334,5 +335,15 @@ export const MOCK_REPORTS: PublicReport[] = [
     matchCount: 1,
   },
 ];
+
+const MOCK_LOCATIONS = [
+  "NSW, Australia", "VIC, Australia", "QLD, Australia", "WA, Australia",
+  "SA, Australia", "", "ACT, Australia", "TAS, Australia", "NT, Australia",
+];
+
+export const MOCK_REPORTS: PublicReport[] = RAW_MOCKS.map((r, i) => ({
+  ...r,
+  location: MOCK_LOCATIONS[i % MOCK_LOCATIONS.length],
+}));
 
 export const MOCK_TOTAL = MOCK_REPORTS.length;

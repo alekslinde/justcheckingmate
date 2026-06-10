@@ -4,7 +4,11 @@ import { generateReportId, storeReport, getStats } from "@/lib/reportStore";
 import { stripTrackingParams } from "@/lib/urlSanitizer";
 import { summariseAuth } from "@/lib/emailHeaders";
 import { scrubPii, stripReporterHeaders } from "@/lib/piiScrubber";
+import { locationFromHeaders } from "@/lib/geo";
 
+// The client IP is used ONLY for transient, in-memory rate limiting inside
+// guardSubmission. It is never written to the database — the only geographic
+// trace a report carries is the coarse region string from locationFromHeaders.
 function getClientIp(req: NextRequest): string {
   // x-forwarded-for can contain a comma-separated list; take the first entry.
   // Treat obviously spoofed values as "unknown".
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
       description: scrubPii(String(body.description ?? "").slice(0, 1000)),
       contact:     String(body.contact ?? "").slice(0, 200),
       submittedAt: Date.now(),
-      ip:          getClientIp(req),
+      location:    locationFromHeaders(req.headers),
       scamUrl:     safeScamUrl,
       scamPhone:   String(body.scamPhone ?? "").slice(0, 50),
       scamEmail:   String(body.scamEmail ?? "").slice(0, 200),

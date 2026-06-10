@@ -80,6 +80,12 @@ body {
   }
 }
 
+/* Lock background scroll while a modal dialog is open (native <dialog> traps
+   focus and inerts the page, but doesn't stop the body scrolling behind it) */
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
 /* Visually hidden but announced to screen readers */
 .sr-only {
   position: absolute;

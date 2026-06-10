@@ -12,8 +12,8 @@
 // reviews them and taps "Send report". The scam content and any uploaded files
 // are deliberately excluded from what we collect.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useLang } from "@/lib/lang";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useLang, MessageKey } from "@/lib/lang";
 import type { BugAction } from "@/lib/bugStore";
 
 interface BugReportCtx {
@@ -39,11 +39,11 @@ function errorToText(e: unknown): string {
   }
 }
 
-const ACTION_LABEL: Record<BugAction, string> = {
-  upload: "Uploading an image or .eml",
-  check: "Checking for scams",
-  report: "Submitting a report",
-  manual: "General feedback",
+const ACTION_LABEL_KEY: Record<BugAction, MessageKey> = {
+  upload: "bug.action.upload",
+  check: "bug.action.check",
+  report: "bug.action.report",
+  manual: "bug.action.manual",
 };
 
 interface Diagnostics {
@@ -52,6 +52,7 @@ interface Diagnostics {
 }
 
 export function BugReportProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [auto, setAuto] = useState(false);
   const [diag, setDiag] = useState<Diagnostics>({ action: "manual", error: "" });
@@ -89,7 +90,7 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
         aria-haspopup="dialog"
       >
         <span aria-hidden="true">🐞</span>
-        <span className="hidden sm:inline">Report a bug</span>
+        <span className="hidden sm:inline">{t("bug.button")}</span>
       </button>
       {open && (
         <BugModal key={session} diag={diag} auto={auto} onClose={() => setOpen(false)} />
@@ -114,6 +115,9 @@ function collectEnv() {
   };
 }
 
+// Native <dialog> + showModal(): focus is trapped, the background becomes
+// inert, Escape fires `cancel`, and focus returns to the opener on close —
+// none of which we have to reimplement.
 function BugModal({
   diag,
   auto,
@@ -123,7 +127,8 @@ function BugModal({
   auto: boolean;
   onClose: () => void;
 }) {
-  const { mode } = useLang();
+  const { mode, t } = useLang();
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [env] = useState(collectEnv);
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState("");
@@ -131,14 +136,9 @@ function BugModal({
   const [status, setStatus] = useState<Status>("idle");
   const [bugId, setBugId] = useState<string | null>(null);
 
-  // Close on Escape.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && status !== "sending") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, status]);
+    dialogRef.current?.showModal();
+  }, []);
 
   async function send() {
     setStatus("sending");
@@ -171,38 +171,39 @@ function BugModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4"
-      onClick={() => status !== "sending" && onClose()}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="bug-modal-title"
+      onCancel={(e) => { if (status === "sending") e.preventDefault(); }}
+      onClose={onClose}
+      onClick={(e) => {
+        // Clicks on the backdrop land on the <dialog> element itself.
+        if (e.target === dialogRef.current && status !== "sending") {
+          dialogRef.current?.close();
+        }
+      }}
+      className="m-auto w-[calc(100%-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-0 text-gray-100 backdrop:bg-black/60"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bug-modal-title"
-        onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-gray-800 bg-gray-900 p-6 space-y-4"
-      >
+      <div className="p-6 space-y-4">
         {status === "sent" ? (
           <div className="space-y-4 text-center py-2">
             <div className="text-4xl" aria-hidden="true">🙏</div>
             <h2 id="bug-modal-title" className="text-lg font-bold text-emerald-400">
-              Thanks — that helps us improve
+              {t("bug.sent.title")}
             </h2>
-            <p className="text-sm text-gray-300">
-              Your report has been logged. Every one helps us make Just Checking, Mate more reliable.
-            </p>
+            <p className="text-sm text-gray-300">{t("bug.sent.body")}</p>
             {bugId && (
               <div className="inline-block rounded-lg border border-gray-800 bg-gray-950 px-4 py-2">
-                <div className="text-xs text-gray-400">Reference</div>
+                <div className="text-xs text-gray-400">{t("bug.sent.reference")}</div>
                 <div className="font-mono font-bold text-emerald-400">{bugId}</div>
               </div>
             )}
             <div>
               <button
-                onClick={onClose}
+                onClick={() => dialogRef.current?.close()}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors"
               >
-                Close
+                {t("bug.close")}
               </button>
             </div>
           </div>
@@ -211,18 +212,16 @@ function BugModal({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 id="bug-modal-title" className="text-lg font-bold text-gray-100">
-                  {auto ? "Something went wrong" : "Report a bug"}
+                  {auto ? t("bug.title.auto") : t("bug.title.manual")}
                 </h2>
                 <p className="text-sm text-gray-400 mt-0.5">
-                  {auto
-                    ? "We hit a problem. With your permission we'll send the details below so we can fix it."
-                    : "Tell us what's not working. We'll include the details below to help us track it down."}
+                  {auto ? t("bug.intro.auto") : t("bug.intro.manual")}
                 </p>
               </div>
               <button
-                onClick={onClose}
+                onClick={() => dialogRef.current?.close()}
                 disabled={status === "sending"}
-                aria-label="Close"
+                aria-label={t("bug.close")}
                 className="shrink-0 text-gray-500 hover:text-gray-300 text-xl leading-none disabled:opacity-40"
               >
                 ×
@@ -244,13 +243,13 @@ function BugModal({
 
             <div>
               <label htmlFor="bug-description" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                What happened? <span className="normal-case font-normal text-gray-500">(optional)</span>
+                {t("bug.what.label")} <span className="normal-case font-normal text-gray-500">{t("bug.optional")}</span>
               </label>
               <textarea
                 id="bug-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="E.g. I tried to upload a screenshot and it just spun forever."
+                placeholder={t("bug.what.placeholder")}
                 rows={3}
                 maxLength={1000}
                 className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 resize-y"
@@ -259,7 +258,7 @@ function BugModal({
 
             <div>
               <label htmlFor="bug-contact" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                Your email <span className="normal-case font-normal text-gray-500">(optional — only if you want a reply)</span>
+                {t("bug.contact.label")} <span className="normal-case font-normal text-gray-500">{t("bug.contact.optional")}</span>
               </label>
               <input
                 id="bug-contact"
@@ -276,34 +275,32 @@ function BugModal({
                 is informed. */}
             <details className="rounded-lg border border-gray-800 bg-gray-950" open>
               <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                Details we&apos;ll include
+                {t("bug.details.summary")}
               </summary>
               <dl className="px-3 pb-3 space-y-1.5 text-xs">
-                <Row label="Action" value={ACTION_LABEL[diag.action]} />
-                {diag.error && <Row label="Error" value={diag.error} mono />}
-                <Row label="Page" value={env.path} mono />
-                <Row label="Screen" value={env.viewport} mono />
-                <Row label="Browser" value={env.userAgent} mono />
+                <Row label={t("bug.details.action")} value={t(ACTION_LABEL_KEY[diag.action])} />
+                {diag.error && <Row label={t("bug.details.error")} value={diag.error} mono />}
+                <Row label={t("bug.details.page")} value={env.path} mono />
+                <Row label={t("bug.details.screen")} value={env.viewport} mono />
+                <Row label={t("bug.details.browser")} value={env.userAgent} mono />
               </dl>
             </details>
 
-            <p className="text-xs text-gray-500">
-              🔒 We never include the scam content you pasted or uploaded, or any files — only the details shown above.
-            </p>
+            <p className="text-xs text-gray-500">🔒 {t("bug.privacy")}</p>
 
             {status === "error" && (
               <div role="alert" className="rounded-lg border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-300">
-                Couldn&apos;t send that just now. Give it another crack in a moment.
+                {t("bug.error")}
               </div>
             )}
 
             <div className="flex flex-wrap justify-end gap-2 pt-1">
               <button
-                onClick={onClose}
+                onClick={() => dialogRef.current?.close()}
                 disabled={status === "sending"}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-40"
               >
-                Not now
+                {t("bug.notNow")}
               </button>
               <button
                 onClick={send}
@@ -311,13 +308,13 @@ function BugModal({
                 aria-busy={status === "sending"}
                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold text-sm rounded-lg transition-colors disabled:bg-gray-700 disabled:text-gray-400"
               >
-                {status === "sending" ? "Sending…" : "Send report"}
+                {status === "sending" ? t("bug.sending") : t("bug.send")}
               </button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }
 
