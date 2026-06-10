@@ -4,6 +4,7 @@ import {
   getGroupedReports, getGroupedReportsCount,
   SortOption,
 } from "@/lib/reportStore";
+import { MOCK_REPORTS } from "@/lib/mockReports";
 
 const VALID_SORTS = new Set<SortOption>(["desc", "asc", "most", "least"]);
 
@@ -21,10 +22,29 @@ export async function GET(req: NextRequest) {
   const fetchReports = grouped ? getGroupedReports  : getPublicReports;
   const fetchCount   = grouped ? getGroupedReportsCount : getPublicReportsCount;
 
-  const [reports, total] = await Promise.all([
+  const [dbReports, dbTotal] = await Promise.all([
     fetchReports({ limit, offset, type, sort, since, search }),
     fetchCount({ type, since, search }),
   ]);
 
-  return NextResponse.json({ reports, total });
+  // In development, fall back to mock data when the DB has no reports so the
+  // submissions page is always populated for testing.
+  if (process.env.NODE_ENV === "development" && dbTotal === 0) {
+    let mock = MOCK_REPORTS;
+    if (type && type !== "all") mock = mock.filter((r) => r.type === type);
+    if (search) {
+      const q = search.toLowerCase();
+      mock = mock.filter((r) =>
+        r.content.toLowerCase().includes(q) ||
+        r.scamUrl.toLowerCase().includes(q) ||
+        r.scamPhone.toLowerCase().includes(q) ||
+        r.scamEmail.toLowerCase().includes(q),
+      );
+    }
+    const total = mock.length;
+    const reports = mock.slice(offset, offset + limit);
+    return NextResponse.json({ reports, total });
+  }
+
+  return NextResponse.json({ reports: dbReports, total: dbTotal });
 }

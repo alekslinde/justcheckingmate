@@ -62,7 +62,7 @@ const LEGIT_AU_DOMAINS = [
 // URL checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkUrl(raw: string): CheckResult {
+export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
   const flags: string[] = [];
   let score = 0;
   let urlObj: URL | null = null;
@@ -91,6 +91,12 @@ export function checkUrl(raw: string): CheckResult {
       flags: ["Verified Australian government domain"],
       details: "This looks like a legit Aussie government website. Still be cautious about what you're entering.",
     };
+  }
+
+  // URLhaus live blocklist — hostname confirmed malicious by abuse.ch reporters
+  if (blocklist?.has(hostname)) {
+    flags.push("This domain is on the URLhaus live malware/phishing blocklist — reported by security researchers as actively malicious");
+    score += 70;
   }
 
   // Known URL shorteners
@@ -161,7 +167,7 @@ export function checkUrl(raw: string): CheckResult {
 // SMS checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkSms(text: string): CheckResult {
+export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -190,7 +196,7 @@ export function checkSms(text: string): CheckResult {
     flags.push(`Contains link: ${urlMatch[0].slice(0, 50)}...`);
     score += 15;
     // Check the embedded URL too
-    const urlCheck = checkUrl(urlMatch[0]);
+    const urlCheck = checkUrl(urlMatch[0], blocklist);
     if (urlCheck.score > 40) {
       flags.push("...and that link looks dodgy too");
       score += 20;
@@ -225,13 +231,13 @@ export function checkSms(text: string): CheckResult {
 // Email checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkEmail(text: string): CheckResult {
+export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
 
   // Reuse SMS signals for body content
-  const smsCheck = checkSms(text);
+  const smsCheck = checkSms(text, blocklist);
   flags.push(...smsCheck.flags);
   score += Math.floor(smsCheck.score * 0.7); // Email gets a bit more lenience
 
@@ -342,7 +348,7 @@ export function checkPhone(number: string): CheckResult {
 // Custom / free-text checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkCustom(text: string): CheckResult {
+export function checkCustom(text: string, blocklist?: Set<string>): CheckResult {
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -359,7 +365,7 @@ export function checkCustom(text: string): CheckResult {
   const urls = text.match(/https?:\/\/[^\s]+/gi);
   if (urls) {
     flags.push(`Contains ${urls.length} link(s) — checked separately`);
-    const worst = urls.map((u) => checkUrl(u)).sort((a, b) => b.score - a.score)[0];
+    const worst = urls.map((u) => checkUrl(u, blocklist)).sort((a, b) => b.score - a.score)[0];
     score += Math.floor(worst.score * 0.5);
   }
 
@@ -414,7 +420,7 @@ export interface AnalyzedIdentifier {
 const MAX_CARDS = 5;
 const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
-export function analyzeContent(content: string): AnalyzedIdentifier[] {
+export function analyzeContent(content: string, blocklist?: Set<string>): AnalyzedIdentifier[] {
   const text = content.trim();
   if (!text) return [];
 
@@ -430,22 +436,22 @@ export function analyzeContent(content: string): AnalyzedIdentifier[] {
 
   // Overall "message" assessment, by detected type.
   if (type === "email") {
-    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text) });
+    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text, blocklist) });
   } else if (type === "sms") {
-    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text) });
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text, blocklist) });
   } else if (type === "phone") {
     out.push({ kind: "phone", value: text, result: checkPhone(text) });
   } else if (type === "url") {
     // A bare URL is assessed by the per-URL cards below; if the regex missed it
     // (e.g. a "www." host with no scheme), assess the whole string as a URL.
-    if (urls.length === 0) out.push({ kind: "url", value: text, result: checkUrl(normaliseForAnalysis(text)) });
+    if (urls.length === 0) out.push({ kind: "url", value: text, result: checkUrl(normaliseForAnalysis(text), blocklist) });
   } else {
-    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text) });
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
   }
 
   // A card per embedded URL (normalised first to close percent-encoding tricks).
   for (const u of urls) {
-    out.push({ kind: "url", value: u, result: checkUrl(normaliseForAnalysis(u)) });
+    out.push({ kind: "url", value: u, result: checkUrl(normaliseForAnalysis(u), blocklist) });
   }
 
   // Phone card only when the whole input is a number (extractIdentifiers is
@@ -463,7 +469,7 @@ export function analyzeContent(content: string): AnalyzedIdentifier[] {
     return true;
   });
   if (deduped.length === 0) {
-    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text) });
+    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
   }
   return deduped.sort((a, b) => b.result.score - a.result.score).slice(0, MAX_CARDS);
 }
