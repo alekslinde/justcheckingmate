@@ -276,6 +276,29 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         </div>
       </fieldset>
 
+      {/* For email type: show a summary of what was already parsed from the headers */}
+      {type === "email" && (scamEmail || scamReplyTo || authSummary) && (
+        <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-4 py-3 space-y-1.5 text-xs">
+          <p className="text-emerald-400 font-semibold">Extracted from your email</p>
+          {scamEmail && (
+            <p className="text-gray-300 font-mono">
+              <span className="text-gray-500">From: </span>{scamEmail}
+            </p>
+          )}
+          {scamReplyTo && (
+            <p className="text-gray-300 font-mono">
+              <span className="text-gray-500">Reply-To: </span>{scamReplyTo}
+            </p>
+          )}
+          {authSummary && (
+            <p className="text-gray-300 font-mono">
+              <span className="text-gray-500">Auth: </span>{authSummary}
+            </p>
+          )}
+          <p className="text-gray-500">Review or edit the fields below before submitting.</p>
+        </div>
+      )}
+
       {/* Scam content */}
       <div>
         <label htmlFor="report-content" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
@@ -299,7 +322,25 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         </div>
       </div>
 
-      {/* Scam identifiers */}
+      {/* For custom reports, description comes first — it's the primary signal */}
+      {type === "custom" && (
+        <div>
+          <label htmlFor="report-description-custom" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
+            What happened?
+          </label>
+          <textarea
+            id="report-description-custom"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe what happened — what did you receive, how were you contacted, what did they ask for?"
+            rows={4}
+            maxLength={1000}
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm"
+          />
+        </div>
+      )}
+
+      {/* Scam identifiers — shown selectively based on report type */}
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
           Scam identifiers{" "}
@@ -308,45 +349,57 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         <p className="text-xs text-gray-500">
           Capture any specific contact points so others can recognise the same scam.
         </p>
-        <div>
-          <label htmlFor="report-scam-url" className="block text-xs font-medium text-gray-400 mb-1">Scam URL / link</label>
-          <input
-            id="report-scam-url"
-            type="url"
-            value={scamUrl}
-            onChange={(e) => setScamUrl(e.target.value)}
-            placeholder="https://fake-ato-refund.xyz/verify"
-            maxLength={2000}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
-          />
-        </div>
-        <div>
-          <label htmlFor="report-scam-phone" className="block text-xs font-medium text-gray-400 mb-1">Scam phone number</label>
-          <input
-            id="report-scam-phone"
-            type="tel"
-            autoComplete="tel"
-            value={scamPhone}
-            onChange={(e) => setScamPhone(e.target.value)}
-            placeholder="+61 4xx xxx xxx"
-            maxLength={50}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
-          />
-        </div>
-        <div>
-          <label htmlFor="report-scam-email" className="block text-xs font-medium text-gray-400 mb-1">
-            {type === "email" ? "Sender address shown (From)" : "Scammer's email address"}
-          </label>
-          <input
-            id="report-scam-email"
-            type="email"
-            value={scamEmail}
-            onChange={(e) => setScamEmail(e.target.value)}
-            placeholder="scammer@dodgy-domain.com"
-            maxLength={200}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
-          />
-        </div>
+
+        {/* URL — shown for url, sms, qr, email (links in phishing), custom */}
+        {type !== "phone" && (
+          <div>
+            <label htmlFor="report-scam-url" className="block text-xs font-medium text-gray-400 mb-1">Scam URL / link</label>
+            <input
+              id="report-scam-url"
+              type="url"
+              value={scamUrl}
+              onChange={(e) => setScamUrl(e.target.value)}
+              placeholder="https://fake-ato-refund.xyz/verify"
+              maxLength={2000}
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+            />
+          </div>
+        )}
+
+        {/* Phone — shown for phone, sms, custom */}
+        {(type === "phone" || type === "sms" || type === "custom") && (
+          <div>
+            <label htmlFor="report-scam-phone" className="block text-xs font-medium text-gray-400 mb-1">Scam phone number</label>
+            <input
+              id="report-scam-phone"
+              type="tel"
+              autoComplete="tel"
+              value={scamPhone}
+              onChange={(e) => setScamPhone(e.target.value)}
+              placeholder="+61 4xx xxx xxx"
+              maxLength={50}
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+            />
+          </div>
+        )}
+
+        {/* Email — shown for email, sms (sender addr), custom; hidden for url/phone/qr */}
+        {(type === "email" || type === "sms" || type === "custom") && (
+          <div>
+            <label htmlFor="report-scam-email" className="block text-xs font-medium text-gray-400 mb-1">
+              {type === "email" ? "Sender address shown (From)" : "Scammer's email address"}
+            </label>
+            <input
+              id="report-scam-email"
+              type="email"
+              value={scamEmail}
+              onChange={(e) => setScamEmail(e.target.value)}
+              placeholder="scammer@dodgy-domain.com"
+              maxLength={200}
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+            />
+          </div>
+        )}
 
         {type === "email" && (
           <>
@@ -417,22 +470,24 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         )}
       </fieldset>
 
-      {/* Description */}
-      <div>
-        <label htmlFor="report-description" className="block text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">
-          What happened?{" "}
-          <span className="text-gray-400 normal-case font-normal">(optional but helpful)</span>
-        </label>
-        <textarea
-          id="report-description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="E.g. Got a text claiming to be from the ATO asking me to verify my TFN. Almost fell for it..."
-          rows={3}
-          maxLength={1000}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 resize-y text-sm"
-        />
-      </div>
+      {/* Description — hidden for custom (rendered above identifiers instead) */}
+      {type !== "custom" && (
+        <div>
+          <label htmlFor="report-description" className="block text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-2">
+            What happened?{" "}
+            <span className="text-gray-400 normal-case font-normal">(optional but helpful)</span>
+          </label>
+          <textarea
+            id="report-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="E.g. Got a text claiming to be from the ATO asking me to verify my TFN. Almost fell for it..."
+            rows={3}
+            maxLength={1000}
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm"
+          />
+        </div>
+      )}
 
       {/* Contact */}
       <div>

@@ -6,6 +6,25 @@ import { PublicReport, SortOption } from "@/lib/reportStore";
 import { timeAgo, truncate } from "@/lib/formatters";
 import SafeDisplay from "@/components/SafeDisplay";
 
+function CopyId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <button
+      onClick={copy}
+      className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-400 transition-colors font-mono"
+      title="Copy report ID"
+    >
+      {copied ? "✓ copied" : id}
+    </button>
+  );
+}
+
 type ViewMode = "grouped" | "individual";
 
 const TYPE_OPTIONS = [
@@ -202,8 +221,8 @@ export default function SubmissionsPage() {
         </div>
 
         {/* View toggle + Filters */}
-        <div className="flex flex-wrap gap-2 items-center">
-          {/* Grouped / Individual toggle */}
+        {/* Row 1: view toggle + sort + count */}
+        <div className="flex gap-2 items-center">
           <div className="flex rounded-lg overflow-hidden border border-gray-700 shrink-0" role="group" aria-label="View mode">
             <button
               onClick={() => changeView("grouped")}
@@ -229,7 +248,6 @@ export default function SubmissionsPage() {
             </button>
           </div>
 
-          {/* Sort */}
           <select
             value={sort}
             onChange={(e) => changeSort(e.target.value as SortOption)}
@@ -241,11 +259,22 @@ export default function SubmissionsPage() {
             ))}
           </select>
 
+          {!loading && total > 0 && (
+            <span className="text-sm text-gray-500 ml-auto shrink-0">
+              {total.toLocaleString()} {view === "grouped"
+                ? (total === 1 ? "source" : "sources")
+                : (total === 1 ? "report" : "reports")}
+            </span>
+          )}
+        </div>
+
+        {/* Row 2: type + period filters */}
+        <div className="flex gap-2">
           <select
             value={type}
             onChange={(e) => changeType(e.target.value)}
             aria-label="Filter by scam type"
-            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
           >
             {TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
@@ -256,20 +285,12 @@ export default function SubmissionsPage() {
             value={periodDays}
             onChange={(e) => changePeriod(e.target.value)}
             aria-label="Filter by time period"
-            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
+            className="flex-1 bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
           >
             {PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-
-          {!loading && total > 0 && (
-            <span className="text-sm text-gray-500 ml-auto">
-              {total.toLocaleString()} {view === "grouped"
-                ? (total === 1 ? "source" : "sources")
-                : (total === 1 ? "report" : "reports")}
-            </span>
-          )}
         </div>
 
         {/* Results */}
@@ -284,11 +305,25 @@ export default function SubmissionsPage() {
             </p>
           </div>
         ) : (
-          <div className={`bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden transition-opacity ${loading ? "opacity-50" : ""}`}>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <ul className="divide-y divide-gray-800">
               {reports.map((r) => {
                 const opt = TYPE_OPTIONS.find((o) => o.value === r.type) ?? TYPE_OPTIONS[TYPE_OPTIONS.length - 1];
                 const isGrouped = view === "grouped";
+
+                // For email reports in individual view, the content is raw headers — show subject or a short excerpt instead.
+                const displayContent = (() => {
+                  if (r.type === "email" && !isGrouped) {
+                    const subjectMatch = r.content.match(/^Subject:\s*(.+)$/im);
+                    if (subjectMatch) return `Subject: ${subjectMatch[1].trim()}`;
+                    return truncate(r.content.replace(/\S+:\s*.+\n?/g, "").trim() || r.content, 120);
+                  }
+                  return truncate(r.content, 200);
+                })();
+
+                // Primary identifier — what's most useful to show at a glance.
+                const primaryId = r.scamUrl || r.scamPhone || r.scamEmail;
+
                 return (
                   <li key={r.id} className="px-5 py-4 space-y-2">
                     <div className="flex items-center justify-between gap-3">
@@ -312,21 +347,36 @@ export default function SubmissionsPage() {
                       </span>
                     </div>
 
-                    {(r.scamUrl || r.scamPhone || r.scamEmail || r.scamReplyTo || r.emailAuth) && (
+                    {/* Primary identifier — always shown so grouped view is scannable */}
+                    {primaryId && (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <SafeDisplay value={primaryId} className="font-mono text-sm text-amber-400/90 break-all min-w-0" />
+                        <Link
+                          href="/"
+                          className="shrink-0 text-xs text-emerald-500 hover:text-emerald-300 transition-colors whitespace-nowrap"
+                          title="Check this in the scam checker"
+                        >
+                          Check →
+                        </Link>
+                      </div>
+                    )}
+
+                    {/* Secondary identifiers (reply-to, auth) — always shown */}
+                    {(r.scamReplyTo || r.emailAuth || (!primaryId && (r.scamUrl || r.scamPhone || r.scamEmail))) && (
                       <div className="flex flex-col gap-1 pl-2 border-l-2 border-gray-700">
-                        {r.scamUrl && (
+                        {!primaryId && r.scamUrl && (
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
                             <span aria-hidden="true" className="shrink-0">🔗</span>
                             <SafeDisplay value={r.scamUrl} className="font-mono text-amber-400/90 break-all" />
                           </span>
                         )}
-                        {r.scamPhone && (
+                        {!primaryId && r.scamPhone && (
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
                             <span aria-hidden="true" className="shrink-0">📞</span>
                             <SafeDisplay value={r.scamPhone} className="font-mono text-amber-400/90" />
                           </span>
                         )}
-                        {r.scamEmail && (
+                        {!primaryId && r.scamEmail && (
                           <span className="flex items-center gap-1.5 text-xs text-gray-400">
                             <span aria-hidden="true" className="shrink-0">📧</span>
                             <SafeDisplay value={r.scamEmail} className="font-mono text-amber-400/90 break-all" />
@@ -351,7 +401,7 @@ export default function SubmissionsPage() {
 
                     {!isGrouped && (
                       <SafeDisplay
-                        value={truncate(r.content, 200)}
+                        value={displayContent}
                         className="block text-sm font-mono text-gray-200 break-all"
                       />
                     )}
@@ -361,7 +411,7 @@ export default function SubmissionsPage() {
                     )}
 
                     {!isGrouped && (
-                      <p className="text-xs text-gray-500 font-mono">{r.id}</p>
+                      <CopyId id={r.id} />
                     )}
                   </li>
                 );
@@ -408,9 +458,9 @@ export default function SubmissionsPage() {
           </div>
         )}
 
-        <p className="text-center text-sm text-gray-500 pb-4">
+        <p className="text-center text-sm text-gray-400 pb-4">
           Reports are community-submitted and unverified.{" "}
-          <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2">
+          <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium">
             Check or report a scam →
           </Link>
         </p>

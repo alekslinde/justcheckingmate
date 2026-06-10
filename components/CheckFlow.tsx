@@ -224,13 +224,22 @@ export default function CheckFlow() {
             })
           )}
 
-          <button
-            onClick={() => { setStep("report"); history.pushState({ step: "report" }, ""); }}
-            className="w-full py-3 px-6 bg-red-800 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2"
-          >
-            <span aria-hidden="true">🚨</span>
-            {t("check.report")}
-          </button>
+          {(() => {
+            const isClean = results.length > 0 && results.every((r) => r.result.verdict === "safe");
+            return (
+              <button
+                onClick={() => { setStep("report"); history.pushState({ step: "report" }, ""); }}
+                className={`w-full py-3 px-6 font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2 ${
+                  isClean
+                    ? "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                    : "bg-red-800 hover:bg-red-700 text-white"
+                }`}
+              >
+                <span aria-hidden="true">🚨</span>
+                {isClean ? t("check.report") + " anyway" : t("check.report")}
+              </button>
+            );
+          })()}
         </div>
       </div>
     );
