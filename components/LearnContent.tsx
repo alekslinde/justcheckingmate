@@ -2,6 +2,7 @@
 
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
+import { AUTH_LEGEND, StaticAuthPill } from "@/components/AuthBadges";
 
 const SCAM_TYPE_ICONS = ["🔗", "📱", "📧", "📞", "📷"];
 const TACTIC_ICONS = ["⏰", "🎭", "🎁", "🔐", "💸", "❤️"];
@@ -74,6 +75,27 @@ export default function LearnContent() {
                 <span className="font-medium text-gray-100">{t(key(`learn.sources.${i + 1}.title`))}.</span>{" "}
                 <span className="text-gray-400">{t(key(`learn.sources.${i + 1}.desc`))}</span>
               </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Email authentication checks */}
+      <section className={SECTION}>
+        <h2 className={H2}>{t("learn.auth.heading")}</h2>
+        <p className="text-sm text-gray-400">{t("learn.auth.intro")}</p>
+        <div className="space-y-4 pt-1">
+          {AUTH_LEGEND.map((entry) => (
+            <div key={entry.protocol} className="space-y-1.5">
+              <p className="text-sm text-gray-300">
+                <span className="font-semibold text-gray-100">{entry.protocol}. </span>
+                {t(entry.explainKey as MessageKey)}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {entry.verdicts.map((v) => (
+                  <StaticAuthPill key={v.label} label={v.label} severity={v.severity} />
+                ))}
+              </div>
             </div>
           ))}
         </div>

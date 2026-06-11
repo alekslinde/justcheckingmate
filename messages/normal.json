@@ -197,7 +197,6 @@
   "subs.empty.filterHint": "Try a different type or time period",
 
   "subs.repliesTo": "replies to",
-  "subs.auth": "auth",
   "subs.reportedFrom": "Reported from {location}",
   "subs.pagination.label": "Report pages",
   "subs.pagination.prev": "Prev",
@@ -281,6 +280,12 @@
   "learn.sources.5.desc": "Sponsored links and look-alike sites for banks, logins and support numbers.",
   "learn.sources.6.title": "Messaging & dating apps",
   "learn.sources.6.desc": "WhatsApp “family emergencies”, romance scams, and investment “mentors”.",
+  "learn.auth.heading": "Email Authentication Checks",
+  "learn.auth.intro": "When you paste email headers, we automatically check three technical signals that prove whether the sender is who they claim to be. You'll see these badges on community reports too.",
+  "learn.auth.spf.desc": "Sender Policy Framework — confirms the sending server is on the list of servers authorised to send on behalf of this domain. A fail means the email came from somewhere it shouldn't.",
+  "learn.auth.dkim.desc": "DomainKeys Identified Mail — a cryptographic signature proving the message wasn't tampered with. Pass is good, but only if the signing domain matches the sender. A pass from an unrelated domain (e.g. a Microsoft tenant) is a red flag.",
+  "learn.auth.dmarc.desc": "Domain-based Message Authentication — the domain owner's own policy tying SPF and DKIM together. A fail means the message violated the sender's own rules. None means the domain publishes no enforcement — scammers love this.",
+
   "learn.flags.heading": "Common Scam Red Flags",
   "learn.flags.1": "Asks for bank, tax file number (TFN) or Medicare details",
   "learn.flags.2": "Creates urgent pressure to act right now",

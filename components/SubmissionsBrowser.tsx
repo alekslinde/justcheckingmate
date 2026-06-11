@@ -8,6 +8,7 @@ import { REPORT_TYPES } from "@/lib/reportTypes";
 import { timeAgo, truncate } from "@/lib/formatters";
 import { useLang, MessageKey } from "@/lib/lang";
 import SafeDisplay from "@/components/SafeDisplay";
+import AuthBadges from "@/components/AuthBadges";
 import SubmissionsStats from "@/components/SubmissionsStats";
 
 function CopyId({ id }: { id: string }) {
@@ -311,7 +312,7 @@ export default function SubmissionsBrowser() {
               {reports.map((r) => {
                 const opt = TYPE_OPTIONS.find((o) => o.value === r.type) ?? TYPE_OPTIONS[TYPE_OPTIONS.length - 1];
 
-                // Email reports carry raw headers — show subject or a short excerpt instead.
+                // Email reports carry raw headers — extract subject as the human-readable summary.
                 const displayContent = (() => {
                   if (r.type === "email") {
                     const subjectMatch = r.content.match(/^Subject:\s*(.+)$/im);
@@ -321,92 +322,79 @@ export default function SubmissionsBrowser() {
                   return truncate(r.content, 200);
                 })();
 
-                // Primary identifier — what's most useful to show at a glance.
-                const primaryId = r.scamUrl || r.scamPhone || r.scamEmail;
+                // All reporter-supplied scam identifiers, in display priority order.
+                const identifiers: { icon: string; value: string }[] = [
+                  r.scamUrl   && { icon: "🔗", value: r.scamUrl   },
+                  r.scamPhone && { icon: "📞", value: r.scamPhone },
+                  r.scamEmail && { icon: "📧", value: r.scamEmail },
+                ].filter(Boolean) as { icon: string; value: string }[];
 
                 return (
                   <li key={r.id} className="px-5 py-4 space-y-3">
-                    {/* Header row: type + badge + timestamp */}
+
+                    {/* ── Row 1: type label · repetition badge · age ── */}
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <span aria-hidden="true" className="shrink-0 text-base">{opt.icon}</span>
                         <span className="text-sm font-semibold text-gray-300">{t(opt.labelKey)}</span>
                         {r.matchCount > 1 && (
-                          <span className="shrink-0 border text-xs font-semibold px-2 py-1 rounded-full bg-red-900/50 text-red-300 border-red-700/50">
+                          <span className="shrink-0 border text-xs font-semibold px-2 py-0.5 rounded-full bg-red-900/50 text-red-300 border-red-700/50">
                             {r.matchCount}×
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {timeAgo(r.submittedAt)}
-                      </span>
+                      <span className="text-xs text-gray-500 shrink-0">{timeAgo(r.submittedAt)}</span>
                     </div>
 
-                    {/* Primary identifier */}
-                    {primaryId && (
-                      <SafeDisplay value={primaryId} className="font-mono text-sm text-amber-300 break-all" />
-                    )}
-
-                    {/* Secondary identifiers */}
-                    {(r.scamReplyTo || r.emailAuth || (!primaryId && (r.scamUrl || r.scamPhone || r.scamEmail))) && (
-                      <div className="grid gap-1.5 text-xs text-gray-400 pl-3 border-l border-gray-700">
-                        {!primaryId && r.scamUrl && (
-                          <span className="flex items-center gap-2">
-                            <span aria-hidden="true" className="shrink-0">🔗</span>
-                            <SafeDisplay value={r.scamUrl} className="font-mono text-amber-300 break-all" />
-                          </span>
-                        )}
-                        {!primaryId && r.scamPhone && (
-                          <span className="flex items-center gap-2">
-                            <span aria-hidden="true" className="shrink-0">📞</span>
-                            <SafeDisplay value={r.scamPhone} className="font-mono text-amber-300" />
-                          </span>
-                        )}
-                        {!primaryId && r.scamEmail && (
-                          <span className="flex items-center gap-2">
-                            <span aria-hidden="true" className="shrink-0">📧</span>
-                            <SafeDisplay value={r.scamEmail} className="font-mono text-amber-300 break-all" />
-                          </span>
-                        )}
+                    {/* ── Row 2: scam identifiers (reporter-supplied) ── */}
+                    {identifiers.length > 0 && (
+                      <div className="space-y-1">
+                        {identifiers.map(({ icon, value }, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span aria-hidden="true" className="shrink-0 text-sm">{icon}</span>
+                            <SafeDisplay
+                              value={value}
+                              className={`font-mono break-all ${i === 0 ? "text-sm text-amber-300" : "text-xs text-amber-300/70"}`}
+                            />
+                          </div>
+                        ))}
                         {r.scamReplyTo && (
-                          <span className="flex items-center gap-2">
-                            <span aria-hidden="true" className="shrink-0">↩️</span>
-                            <span className="text-gray-500 shrink-0">{t("subs.repliesTo")}</span>
-                            <SafeDisplay value={r.scamReplyTo} className="font-mono text-amber-300 break-all" />
-                          </span>
-                        )}
-                        {r.emailAuth && (
-                          <span className="flex items-center gap-2">
-                            <span aria-hidden="true" className="shrink-0">🔐</span>
-                            <span className="text-gray-500 shrink-0">{t("subs.auth")}</span>
-                            <SafeDisplay value={r.emailAuth} className="font-mono text-gray-400 break-all" />
-                          </span>
+                          <div className="flex items-center gap-2 pl-1">
+                            <span aria-hidden="true" className="shrink-0 text-sm">↩</span>
+                            <span className="text-xs text-gray-500 shrink-0">{t("subs.repliesTo")}</span>
+                            <SafeDisplay value={r.scamReplyTo} className="font-mono text-xs text-amber-300/70 break-all" />
+                          </div>
                         )}
                       </div>
                     )}
 
-                    {/* Coarse submission location — the only geographic data a
-                        report carries (see /about). Never an IP, never a city. */}
-                    {r.location && (
-                      <p className="text-xs text-gray-500">
-                        <span aria-hidden="true">📍 </span>
-                        {t("subs.reportedFrom", { location: r.location })}
-                      </p>
-                    )}
+                    {/* ── Row 3: system-derived forensic auth badges ── */}
+                    <AuthBadges emailAuth={r.emailAuth} />
 
-                    {/* Content, description, and ID */}
-                    <div className="space-y-2">
+                    {/* ── Row 4: what the scam said · reporter's note ── */}
+                    <div className="space-y-1.5">
                       {displayContent && (
                         <SafeDisplay
                           value={displayContent}
-                          className="block text-xs text-gray-400 break-all"
+                          className="block text-xs text-gray-400 break-all border-l-2 border-gray-700 pl-2"
                         />
                       )}
                       {r.description && (
-                        <p className="text-xs text-gray-400 italic">{truncate(r.description, 200)}</p>
+                        <p className="text-xs text-gray-500 italic">{truncate(r.description, 200)}</p>
                       )}
-                      <CopyId id={r.id} />
                     </div>
+
+                    {/* ── Footer: report ID · location ── */}
+                    <div className="flex items-center justify-between gap-3 pt-0.5">
+                      <CopyId id={r.id} />
+                      {r.location && (
+                        <p className="text-xs text-gray-600 shrink-0">
+                          <span aria-hidden="true">📍 </span>
+                          {t("subs.reportedFrom", { location: r.location })}
+                        </p>
+                      )}
+                    </div>
+
                   </li>
                 );
               })}
