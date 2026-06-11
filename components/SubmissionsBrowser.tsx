@@ -233,76 +233,107 @@ export default function SubmissionsBrowser() {
           )}
         </div>
 
-        {/* Row 1: view toggle + sort + count */}
-        <div className="flex gap-2 items-center">
-          <div className="flex rounded-lg overflow-hidden border border-gray-700 shrink-0" role="group" aria-label={t("subs.view.label")}>
-            <button
-              onClick={() => update({ view: "grouped", page: "" })}
-              aria-pressed={view === "grouped"}
-              className={`px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors ${
-                view === "grouped"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-gray-900 text-gray-400 hover:text-gray-200"
+        {/* Filter panel */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+
+          {/* ── Top bar: view toggle + result count ─────────────────────────── */}
+          <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 border-b border-gray-800">
+            <div className="flex rounded-lg overflow-hidden border border-gray-700 shrink-0 text-sm" role="group" aria-label={t("subs.view.label")}>
+              <button
+                onClick={() => update({ view: "grouped", page: "" })}
+                aria-pressed={view === "grouped"}
+                className={`px-3 py-1.5 min-h-[36px] font-medium transition-colors ${
+                  view === "grouped"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-transparent text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {t("subs.view.grouped")}
+              </button>
+              <button
+                onClick={() => update({ view: "individual", page: "" })}
+                aria-pressed={view === "individual"}
+                className={`px-3 py-1.5 min-h-[36px] font-medium transition-colors border-l border-gray-700 ${
+                  view === "individual"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-transparent text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {t("subs.view.individual")}
+              </button>
+            </div>
+
+            {/* Result count — or loading pulse placeholder */}
+            <span
+              aria-live="polite"
+              className={`text-sm font-semibold tabular-nums shrink-0 transition-colors ${
+                loading ? "text-gray-700" : "text-emerald-400"
               }`}
             >
-              {t("subs.view.grouped")}
-            </button>
-            <button
-              onClick={() => update({ view: "individual", page: "" })}
-              aria-pressed={view === "individual"}
-              className={`px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors border-l border-gray-700 ${
-                view === "individual"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-gray-900 text-gray-400 hover:text-gray-200"
-              }`}
-            >
-              {t("subs.view.individual")}
-            </button>
+              {loading
+                ? "—"
+                : total > 0
+                  ? (view === "grouped"
+                      ? t(total === 1 ? "subs.count.source" : "subs.count.sources", { n: total.toLocaleString() })
+                      : t(total === 1 ? "subs.count.report" : "subs.count.reports", { n: total.toLocaleString() }))
+                  : null}
+            </span>
           </div>
 
-          <select
-            value={sort}
-            onChange={(e) => update({ sort: e.target.value, page: "" })}
-            aria-label={t("subs.sort.label")}
-            className="bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-            ))}
-          </select>
+          {/* ── Filter grid ─────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-800">
 
-          {!loading && total > 0 && (
-            <span className="text-sm text-gray-500 ml-auto shrink-0">
-              {view === "grouped"
-                ? t(total === 1 ? "subs.count.source" : "subs.count.sources", { n: total.toLocaleString() })
-                : t(total === 1 ? "subs.count.report" : "subs.count.reports", { n: total.toLocaleString() })}
-            </span>
-          )}
-        </div>
+            {/* Type */}
+            <div className="bg-gray-900 px-4 py-3 space-y-1">
+              <label htmlFor="subs-filter-type" className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                {t("subs.type.label")}
+              </label>
+              <select
+                id="subs-filter-type"
+                value={type}
+                onChange={(e) => update({ type: e.target.value, page: "" })}
+                className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
+              >
+                {TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.icon} {t(opt.labelKey)}</option>
+                ))}
+              </select>
+            </div>
 
-        {/* Row 2: type + period filters */}
-        <div className="flex gap-2">
-          <select
-            value={type}
-            onChange={(e) => update({ type: e.target.value, page: "" })}
-            aria-label={t("subs.type.label")}
-            className="flex-1 bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
-          >
-            {TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.icon} {t(opt.labelKey)}</option>
-            ))}
-          </select>
+            {/* Period */}
+            <div className="bg-gray-900 px-4 py-3 space-y-1">
+              <label htmlFor="subs-filter-period" className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                {t("subs.period.label")}
+              </label>
+              <select
+                id="subs-filter-period"
+                value={periodDays}
+                onChange={(e) => update({ days: e.target.value, page: "" })}
+                className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
+              >
+                {PERIOD_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                ))}
+              </select>
+            </div>
 
-          <select
-            value={periodDays}
-            onChange={(e) => update({ days: e.target.value, page: "" })}
-            aria-label={t("subs.period.label")}
-            className="flex-1 bg-gray-900 border border-gray-700 text-sm text-gray-300 rounded-lg px-3 py-2.5 min-h-[44px] focus:outline-none focus:border-emerald-500"
-          >
-            {PERIOD_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-            ))}
-          </select>
+            {/* Sort */}
+            <div className="bg-gray-900 px-4 py-3 space-y-1">
+              <label htmlFor="subs-filter-sort" className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                {t("subs.sort.label")}
+              </label>
+              <select
+                id="subs-filter-sort"
+                value={sort}
+                onChange={(e) => update({ sort: e.target.value, page: "" })}
+                className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Results */}
@@ -447,25 +478,35 @@ export default function SubmissionsBrowser() {
             >
               ← {t("subs.pagination.prev")}
             </button>
-            {pageNumbers(page, totalPages).map((p, i) =>
-              p === "…" ? (
-                <span key={`ellipsis-${i}`} className="px-2 text-gray-500 text-sm select-none">…</span>
-              ) : (
-                <button
-                  key={p}
-                  onClick={() => goTo(p)}
-                  disabled={loading}
-                  aria-current={p === page ? "page" : undefined}
-                  className={`min-w-[44px] min-h-[44px] py-2.5 text-sm rounded-lg border transition-colors ${
-                    p === page
-                      ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
-                      : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500"
-                  }`}
-                >
-                  {p}
-                </button>
-              )
-            )}
+
+            {/* Page number buttons — hidden on small screens to prevent overflow */}
+            <div className="hidden sm:contents">
+              {pageNumbers(page, totalPages).map((p, i) =>
+                p === "…" ? (
+                  <span key={`ellipsis-${i}`} className="px-2 text-gray-500 text-sm select-none">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => goTo(p)}
+                    disabled={loading}
+                    aria-current={p === page ? "page" : undefined}
+                    className={`min-w-[44px] min-h-[44px] py-2.5 text-sm rounded-lg border transition-colors ${
+                      p === page
+                        ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
+                        : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* Compact page indicator for mobile */}
+            <span className="sm:hidden text-sm text-gray-400 px-3 py-2.5 min-h-[44px] flex items-center" aria-live="polite">
+              {page} / {totalPages}
+            </span>
+
             <button
               onClick={() => goTo(page + 1)}
               disabled={page === totalPages || loading}

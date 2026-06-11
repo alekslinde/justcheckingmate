@@ -12,6 +12,9 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
+  /* Extra-small breakpoint for sub-640px layout adjustments */
+  --breakpoint-xs: 480px;
+
   /* Cool-neutral dark palette — complements the emerald accent */
   --color-gray-50:  #f9fafb;
   --color-gray-100: #f3f4f6;
@@ -84,6 +87,12 @@ body {
    focus and inerts the page, but doesn't stop the body scrolling behind it) */
 body:has(dialog[open]) {
   overflow: hidden;
+}
+
+/* Keep programmatically-focused step headings (tabIndex=-1) clear of the
+   52px sticky header so the content isn't obscured on step transitions */
+[data-step-heading] {
+  scroll-margin-top: 64px;
 }
 
 /* Visually hidden but announced to screen readers */

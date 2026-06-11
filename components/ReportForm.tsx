@@ -258,7 +258,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           {REPORT_TYPES.map((rt) => (
             <label
               key={rt.value}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-300 ${
+              className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-lg border text-sm cursor-pointer transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-300 ${
                 type === rt.value
                   ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
                   : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500 hover:text-gray-100"
@@ -318,7 +318,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           placeholder={t(PLACEHOLDER_KEYS[type])}
           rows={type === "url" || type === "phone" ? 2 : 4}
           maxLength={2000}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm font-mono"
+          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm font-mono"
         />
         {/* Deliberately not aria-live — announcing every keystroke is noise;
             the count is reachable via aria-describedby on the field. */}
@@ -340,7 +340,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             placeholder={t("report.desc.placeholder.custom")}
             rows={4}
             maxLength={1000}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm"
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm"
           />
         </div>
       )}
@@ -364,7 +364,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               onChange={(e) => setScamUrl(e.target.value)}
               placeholder="https://fake-ato-refund.xyz/verify"
               maxLength={2000}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
             />
           </div>
         )}
@@ -380,7 +380,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               onChange={(e) => setScamPhone(e.target.value)}
               placeholder="+61 4xx xxx xxx"
               maxLength={50}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
             />
           </div>
         )}
@@ -398,7 +398,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               onChange={(e) => setScamEmail(e.target.value)}
               placeholder="scammer@dodgy-domain.com"
               maxLength={200}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
             />
           </div>
         )}
@@ -416,7 +416,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
                 onChange={(e) => setScamReplyTo(e.target.value)}
                 placeholder="different-address@elsewhere.ru"
                 maxLength={200}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-sm font-mono"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
               />
               {scamEmail && scamReplyTo &&
                 scamEmail.split("@")[1]?.toLowerCase() !== scamReplyTo.split("@")[1]?.toLowerCase() && (
@@ -447,7 +447,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
                 onChange={(e) => parseSource(e.target.value)}
                 placeholder={t("report.email.source.placeholder")}
                 rows={3}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-xs font-mono resize-y"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-xs font-mono resize-y"
               />
               <input
                 type="file"
@@ -487,7 +487,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             placeholder={t("report.desc.placeholder")}
             rows={3}
             maxLength={1000}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-sm"
+            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm"
           />
         </div>
       )}
