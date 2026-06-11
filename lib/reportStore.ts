@@ -232,73 +232,37 @@ export async function getPublicReportsCount(opts: FeedOpts = {}): Promise<number
   return Number(result.rows[0]?.n ?? 0);
 }
 
-// ── Grouped feed (one row per unique source identifier) ───────────────────────
+// ── Feed stats (for the submissions page overview panel) ──────────────────────
 
-// Groups reports by their primary identifier (URL, phone, or email).
-// Reports with no identifier stay individual (keyed by their own id).
-const GROUP_KEY_EXPR = `COALESCE(NULLIF(scam_url,''), NULLIF(scam_phone,''), NULLIF(scam_email,''), id)`;
-
-export async function getGroupedReports(opts: {
-  limit?: number;
-  offset?: number;
-  sort?: SortOption;
-} & FeedOpts = {}): Promise<PublicReport[]> {
-  const { limit = 25, offset = 0, type, sort = "most", since, search } = opts;
-  const { where, args } = buildConditions({ type, since, search });
-  const db = await getDb();
-
-  const orderBy =
-    sort === "most"  ? "report_count DESC, submitted_at DESC" :
-    sort === "least" ? "report_count ASC,  submitted_at DESC" :
-    sort === "asc"   ? "submitted_at ASC"                     :
-                       "submitted_at DESC";
-
-  const result = await db.execute({
-    sql: `SELECT
-            MAX(id)          as id,
-            MAX(type)        as type,
-            MAX(content)     as content,
-            MAX(description) as description,
-            MAX(submitted_at) as submitted_at,
-            MAX(scam_url)    as scam_url,
-            MAX(scam_phone)  as scam_phone,
-            MAX(scam_email)  as scam_email,
-            MAX(scam_reply_to) as scam_reply_to,
-            MAX(email_auth)  as email_auth,
-            MAX(location)    as location,
-            COUNT(*)         as report_count
-          FROM reports WHERE ${where}
-          GROUP BY ${GROUP_KEY_EXPR}
-          ORDER BY ${orderBy}
-          LIMIT ? OFFSET ?`,
-    args: [...args, Math.min(limit, 100), offset],
-  });
-
-  return result.rows.map((r) => ({
-    id:          r.id as string,
-    type:        r.type as string,
-    content:     defangText(r.content as string),
-    description: scrubPii(r.description as string),
-    submittedAt: Number(r.submitted_at),
-    scamUrl:     (r.scam_url as string)   ? defang(r.scam_url as string)        : "",
-    scamPhone:   (r.scam_phone as string) ? defangPhone(r.scam_phone as string) : "",
-    scamEmail:   (r.scam_email as string) ? defangEmail(r.scam_email as string) : "",
-    scamReplyTo: (r.scam_reply_to as string) ? defangEmail(r.scam_reply_to as string) : "",
-    emailAuth:   (r.email_auth as string) ?? "",
-    location:    (r.location as string) ?? "",
-    matchCount:  Number(r.report_count ?? 1),
-  }));
+export interface FeedStats {
+  total: number;
+  byDay: { date: string; count: number }[];   // ISO date strings, last 30 days
+  byType: { type: string; count: number }[];  // all types, descending
 }
 
-export async function getGroupedReportsCount(opts: FeedOpts = {}): Promise<number> {
-  const { where, args } = buildConditions(opts);
+export async function getFeedStats(): Promise<FeedStats> {
   const db = await getDb();
-  const result = await db.execute({
-    sql: `SELECT COUNT(*) as n FROM (
-            SELECT 1 FROM reports WHERE ${where}
-            GROUP BY ${GROUP_KEY_EXPR}
-          )`,
-    args,
-  });
-  return Number(result.rows[0]?.n ?? 0);
+  const since30d = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+  const [totalRes, byDayRes, byTypeRes] = await Promise.all([
+    db.execute(`SELECT COUNT(*) as n FROM reports WHERE suspect = 0`),
+    db.execute({
+      sql: `SELECT date(submitted_at / 1000, 'unixepoch') as d, COUNT(*) as n
+            FROM reports
+            WHERE suspect = 0 AND submitted_at >= ?
+            GROUP BY d
+            ORDER BY d ASC`,
+      args: [since30d],
+    }),
+    db.execute(
+      `SELECT type, COUNT(*) as n FROM reports WHERE suspect = 0 GROUP BY type ORDER BY n DESC`
+    ),
+  ]);
+
+  return {
+    total:  Number(totalRes.rows[0]?.n ?? 0),
+    byDay:  byDayRes.rows.map((r)  => ({ date: r.d as string, count: Number(r.n) })),
+    byType: byTypeRes.rows.map((r) => ({ type: r.type as string, count: Number(r.n) })),
+  };
 }
+
