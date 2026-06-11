@@ -206,7 +206,7 @@ export default function CheckFlow() {
     const primary = results[0];
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-        <h2 ref={stepHeadingRef} tabIndex={-1} className="sr-only">{t("check.step.report")}</h2>
+        <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.report")}</h2>
         <button
           onClick={() => history.back()}
           className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-gray-800 text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
@@ -238,7 +238,7 @@ export default function CheckFlow() {
   if (step === "result") {
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-        <h2 ref={stepHeadingRef} tabIndex={-1} className="sr-only">{t("check.step.result")}</h2>
+        <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
         <button
           onClick={() => history.back()}
           className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-gray-800 text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
@@ -300,7 +300,7 @@ export default function CheckFlow() {
   // ── Input step ──────────────────────────────────────────────────────────────
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
-      <h2 ref={stepHeadingRef} tabIndex={-1} className="sr-only">{t("check.step.input")}</h2>
+      <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.input")}</h2>
       <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-500 leading-snug">
         <span aria-hidden="true">🔒</span>
         {t("check.privacy")}
@@ -314,34 +314,36 @@ export default function CheckFlow() {
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* On mobile: camera is full-width (primary action), image+eml share the row.
+          On sm+: equal three columns. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <button
+          type="button"
+          onClick={() => cameraRef.current?.click()}
+          disabled={busy}
+          className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <span aria-hidden="true" className="text-2xl">📷</span>
+          <span className="font-medium text-sm text-center">{t("check.takePhoto")}</span>
+          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
+        </button>
         <button
           type="button"
           onClick={() => imageRef.current?.click()}
           disabled={busy}
           aria-busy={uploadLoading}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-6 min-h-[88px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span aria-hidden="true" className="text-2xl">{uploadLoading ? "⏳" : "🖼️"}</span>
           <span className="font-medium text-sm text-center">{t("check.uploadImage")}</span>
           <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadImageDesc")}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => cameraRef.current?.click()}
-          disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-6 min-h-[88px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <span aria-hidden="true" className="text-2xl">📷</span>
-          <span className="font-medium text-sm text-center">{t("check.takePhoto")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
         </button>
         {/* .eml upload — labelled for clarity; described as advanced to de-prioritise for most users */}
         <button
           type="button"
           onClick={() => emlRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-6 min-h-[88px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span aria-hidden="true" className="text-2xl">📨</span>
           <span className="font-medium text-sm text-center">{t("check.uploadEml")}</span>
