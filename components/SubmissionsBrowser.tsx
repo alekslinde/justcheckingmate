@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PublicReport, SortOption } from "@/lib/reportStore";
+import { REPORT_TYPES } from "@/lib/reportTypes";
 import { timeAgo, truncate } from "@/lib/formatters";
 import { useLang, MessageKey } from "@/lib/lang";
 import SafeDisplay from "@/components/SafeDisplay";
+import SubmissionsStats from "@/components/SubmissionsStats";
 
 function CopyId({ id }: { id: string }) {
   const { t } = useLang();
@@ -28,16 +30,13 @@ function CopyId({ id }: { id: string }) {
   );
 }
 
-type ViewMode = "grouped" | "individual";
-
 const TYPE_OPTIONS: { value: string; labelKey: MessageKey; icon: string }[] = [
   { value: "all",    labelKey: "subs.type.all",    icon: "🔍" },
-  { value: "url",    labelKey: "subs.type.url",    icon: "🔗" },
-  { value: "sms",    labelKey: "subs.type.sms",    icon: "📱" },
-  { value: "email",  labelKey: "subs.type.email",  icon: "📧" },
-  { value: "phone",  labelKey: "subs.type.phone",  icon: "📞" },
-  { value: "qr",     labelKey: "subs.type.qr",     icon: "📷" },
-  { value: "custom", labelKey: "subs.type.custom", icon: "🤔" },
+  ...REPORT_TYPES.map((t) => ({
+    value: t,
+    labelKey: `subs.type.${t}` as MessageKey,
+    icon: { url: "🔗", sms: "📱", email: "📧", phone: "📞", qr: "📷", custom: "🤔" }[t] ?? "🔍",
+  })),
 ];
 
 const PERIOD_OPTIONS: { value: string; labelKey: MessageKey }[] = [
@@ -101,7 +100,6 @@ export default function SubmissionsBrowser() {
   const type = TYPE_OPTIONS.some((o) => o.value === typeRaw) ? typeRaw : "all";
   const sortRaw = params.get("sort") ?? "desc";
   const sort: SortOption = (SORT_VALUES as readonly string[]).includes(sortRaw) ? (sortRaw as SortOption) : "desc";
-  const view: ViewMode = params.get("view") === "individual" ? "individual" : "grouped";
   const periodDays = ["0", "1", "7", "30"].includes(params.get("days") ?? "0") ? (params.get("days") ?? "0") : "0";
   const page = Math.max(1, parseInt(params.get("page") ?? "1", 10) || 1);
   const search = (params.get("q") ?? "").trim();
@@ -113,7 +111,7 @@ export default function SubmissionsBrowser() {
 
   // Loading is derived: we're loading whenever the current filter signature
   // hasn't been fetched yet (no setState-in-effect needed to flip a flag).
-  const filterSig = JSON.stringify([type, sort, view, periodDays, page, search]);
+  const filterSig = JSON.stringify([type, sort, periodDays, page, search]);
   const [settledSig, setSettledSig] = useState<string | null>(null);
   const loading = filterSig !== settledSig;
 
@@ -130,7 +128,7 @@ export default function SubmissionsBrowser() {
   }
 
   // Defaults are omitted from the URL so the bare /submissions stays canonical.
-  const DEFAULTS: Record<string, string> = { type: "all", sort: "desc", view: "grouped", days: "0", page: "1", q: "" };
+  const DEFAULTS: Record<string, string> = { type: "all", sort: "desc", days: "0", page: "1", q: "" };
 
   function update(changes: Record<string, string>, replace = false) {
     const next = new URLSearchParams(params.toString());
@@ -163,12 +161,11 @@ export default function SubmissionsBrowser() {
       : undefined;
 
     const fetchParams = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), sort });
-    if (view === "grouped") fetchParams.set("grouped", "true");
     if (type !== "all") fetchParams.set("type", type);
     if (since)          fetchParams.set("since", String(since));
     if (search)         fetchParams.set("search", search);
 
-    const sig = JSON.stringify([type, sort, view, periodDays, page, search]);
+    const sig = JSON.stringify([type, sort, periodDays, page, search]);
     fetch(`/api/reports?${fetchParams}`)
       .then((r) => r.json())
       .then((data) => {
@@ -180,7 +177,7 @@ export default function SubmissionsBrowser() {
       .catch(() => { if (!cancelled) setSettledSig(sig); });
 
     return () => { cancelled = true; };
-  }, [type, sort, view, periodDays, page, search]);
+  }, [type, sort, periodDays, page, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -209,6 +206,8 @@ export default function SubmissionsBrowser() {
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
 
+        <SubmissionsStats />
+
         {/* Search */}
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" aria-hidden="true">🔍</span>
@@ -235,50 +234,6 @@ export default function SubmissionsBrowser() {
 
         {/* Filter panel */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-
-          {/* ── Top bar: view toggle + result count ─────────────────────────── */}
-          <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 border-b border-gray-800">
-            <div className="flex rounded-lg overflow-hidden border border-gray-700 shrink-0 text-sm" role="group" aria-label={t("subs.view.label")}>
-              <button
-                onClick={() => update({ view: "grouped", page: "" })}
-                aria-pressed={view === "grouped"}
-                className={`px-3 py-1.5 min-h-[36px] font-medium transition-colors ${
-                  view === "grouped"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-transparent text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                {t("subs.view.grouped")}
-              </button>
-              <button
-                onClick={() => update({ view: "individual", page: "" })}
-                aria-pressed={view === "individual"}
-                className={`px-3 py-1.5 min-h-[36px] font-medium transition-colors border-l border-gray-700 ${
-                  view === "individual"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-transparent text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                {t("subs.view.individual")}
-              </button>
-            </div>
-
-            {/* Result count — or loading pulse placeholder */}
-            <span
-              aria-live="polite"
-              className={`text-sm font-semibold tabular-nums shrink-0 transition-colors ${
-                loading ? "text-gray-700" : "text-emerald-400"
-              }`}
-            >
-              {loading
-                ? "—"
-                : total > 0
-                  ? (view === "grouped"
-                      ? t(total === 1 ? "subs.count.source" : "subs.count.sources", { n: total.toLocaleString() })
-                      : t(total === 1 ? "subs.count.report" : "subs.count.reports", { n: total.toLocaleString() }))
-                  : null}
-            </span>
-          </div>
 
           {/* ── Filter grid ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-800">
@@ -355,11 +310,10 @@ export default function SubmissionsBrowser() {
             <ul className="divide-y divide-gray-800">
               {reports.map((r) => {
                 const opt = TYPE_OPTIONS.find((o) => o.value === r.type) ?? TYPE_OPTIONS[TYPE_OPTIONS.length - 1];
-                const isGrouped = view === "grouped";
 
-                // For email reports in individual view, the content is raw headers — show subject or a short excerpt instead.
+                // Email reports carry raw headers — show subject or a short excerpt instead.
                 const displayContent = (() => {
-                  if (r.type === "email" && !isGrouped) {
+                  if (r.type === "email") {
                     const subjectMatch = r.content.match(/^Subject:\s*(.+)$/im);
                     if (subjectMatch) return `Subject: ${subjectMatch[1].trim()}`;
                     return truncate(r.content.replace(/\S+:\s*.+\n?/g, "").trim() || r.content, 120);
@@ -378,19 +332,13 @@ export default function SubmissionsBrowser() {
                         <span aria-hidden="true" className="shrink-0 text-base">{opt.icon}</span>
                         <span className="text-sm font-semibold text-gray-300">{t(opt.labelKey)}</span>
                         {r.matchCount > 1 && (
-                          <span className={`shrink-0 border text-xs font-semibold px-2 py-1 rounded-full ${
-                            isGrouped
-                              ? "bg-red-900/70 text-red-200 border-red-700"
-                              : "bg-red-900/50 text-red-300 border-red-700/50"
-                          }`}>
-                            {isGrouped
-                              ? t("subs.badge.reports", { n: r.matchCount })
-                              : `${r.matchCount}×`}
+                          <span className="shrink-0 border text-xs font-semibold px-2 py-1 rounded-full bg-red-900/50 text-red-300 border-red-700/50">
+                            {r.matchCount}×
                           </span>
                         )}
                       </div>
                       <span className="text-xs text-gray-400 shrink-0">
-                        {isGrouped ? `${t("subs.lastSeen")} ` : ""}{timeAgo(r.submittedAt)}
+                        {timeAgo(r.submittedAt)}
                       </span>
                     </div>
 
@@ -446,21 +394,19 @@ export default function SubmissionsBrowser() {
                       </p>
                     )}
 
-                    {/* Content and description — individual view only */}
-                    {!isGrouped && (
-                      <div className="space-y-2">
-                        {displayContent && (
-                          <SafeDisplay
-                            value={displayContent}
-                            className="block text-xs text-gray-400 break-all"
-                          />
-                        )}
-                        {r.description && (
-                          <p className="text-xs text-gray-400 italic">{truncate(r.description, 200)}</p>
-                        )}
-                        <CopyId id={r.id} />
-                      </div>
-                    )}
+                    {/* Content, description, and ID */}
+                    <div className="space-y-2">
+                      {displayContent && (
+                        <SafeDisplay
+                          value={displayContent}
+                          className="block text-xs text-gray-400 break-all"
+                        />
+                      )}
+                      {r.description && (
+                        <p className="text-xs text-gray-400 italic">{truncate(r.description, 200)}</p>
+                      )}
+                      <CopyId id={r.id} />
+                    </div>
                   </li>
                 );
               })}

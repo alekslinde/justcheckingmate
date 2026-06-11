@@ -1,4 +1,4 @@
-import { PublicReport } from "./reportStore";
+import { FeedStats, PublicReport } from "./reportStore";
 
 // ── Raw email header blobs for manual testing in CheckFlow ───────────────────
 // Paste any of these into the homepage input to exercise every analysis path.
@@ -347,3 +347,33 @@ export const MOCK_REPORTS: PublicReport[] = RAW_MOCKS.map((r, i) => ({
 }));
 
 export const MOCK_TOTAL = MOCK_REPORTS.length;
+
+// ── Mock feed stats ───────────────────────────────────────────────────────────
+// Derived from MOCK_REPORTS so the dev overlay is coherent with the list.
+
+function isoDate(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function buildMockFeedStats(): FeedStats {
+  // byType — count raw mocks per type
+  const typeCounts = new Map<string, number>();
+  for (const r of RAW_MOCKS) typeCounts.set(r.type, (typeCounts.get(r.type) ?? 0) + 1);
+  const byType = [...typeCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({ type, count }));
+
+  // byDay — count raw mocks per calendar day
+  const dayCounts = new Map<string, number>();
+  for (const r of RAW_MOCKS) {
+    const d = isoDate(r.submittedAt);
+    dayCounts.set(d, (dayCounts.get(d) ?? 0) + 1);
+  }
+  const byDay = [...dayCounts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, count]) => ({ date, count }));
+
+  return { total: RAW_MOCKS.length, byDay, byType };
+}
+
+export const MOCK_FEED_STATS: FeedStats = buildMockFeedStats();
