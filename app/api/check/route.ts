@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     // Pull each identifier out of the input and assess it on its own. All
     // analysis is pure string work — no outbound request is made to the input.
-    const results = analyzeContent(content, blocklist);
+    const results = await analyzeContent(content, blocklist);
 
     incrementCheckCount().catch(() => {});
     return NextResponse.json({ results });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   checkUrl,
   checkSms,
@@ -7,6 +7,15 @@ import {
   checkCustom,
   analyzeContent,
 } from "@/lib/scamDetector";
+import { expandUrl } from "@/lib/urlExpander";
+
+// Keep isShortened from the real module so shortener-detection tests stay valid.
+// Replace expandUrl with a controllable spy that returns null by default so
+// existing tests are unaffected by network I/O.
+vi.mock("@/lib/urlExpander", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/urlExpander")>();
+  return { ...actual, expandUrl: vi.fn().mockResolvedValue({ expandedUrl: null, hops: [] }) };
+});
 
 // ── checkUrl ──────────────────────────────────────────────────────────────────
 
@@ -339,18 +348,18 @@ describe("verdict thresholds", () => {
 // ── analyzeContent (per-identifier orchestration) ─────────────────────────────
 
 describe("analyzeContent", () => {
-  it("returns an empty array for blank input", () => {
-    expect(analyzeContent("   ")).toEqual([]);
+  it("returns an empty array for blank input", async () => {
+    expect(await analyzeContent("   ")).toEqual([]);
   });
 
-  it("returns a single url card for a bare URL", () => {
-    const cards = analyzeContent("https://bit.ly/scam");
+  it("returns a single url card for a bare URL", async () => {
+    const cards = await analyzeContent("https://bit.ly/scam");
     expect(cards).toHaveLength(1);
     expect(cards[0].kind).toBe("url");
   });
 
-  it("produces separate cards for the sender and an embedded link in an email", () => {
-    const cards = analyzeContent(
+  it("produces separate cards for the sender and an embedded link in an email", async () => {
+    const cards = await analyzeContent(
       'From: "myGov" <noreply@evil.tk>\nReply-To: scam@other.ru\n\nVerify at https://fake-ato.xyz/login now',
     );
     const kinds = cards.map((c) => c.kind);
@@ -358,14 +367,14 @@ describe("analyzeContent", () => {
     expect(kinds).toContain("url");
   });
 
-  it("de-duplicates repeated URLs", () => {
-    const cards = analyzeContent("see https://bit.ly/x and again https://bit.ly/x");
+  it("de-duplicates repeated URLs", async () => {
+    const cards = await analyzeContent("see https://bit.ly/x and again https://bit.ly/x");
     const urlCards = cards.filter((c) => c.kind === "url" && c.value === "https://bit.ly/x");
     expect(urlCards).toHaveLength(1);
   });
 
-  it("sorts cards by risk score, highest first", () => {
-    const cards = analyzeContent(
+  it("sorts cards by risk score, highest first", async () => {
+    const cards = await analyzeContent(
       "Hi, click https://commbank-secure-login.tk/verify and also https://ato.gov.au",
     );
     for (let i = 1; i < cards.length; i++) {
@@ -373,17 +382,115 @@ describe("analyzeContent", () => {
     }
   });
 
-  it("always returns at least one card for non-empty input", () => {
-    expect(analyzeContent("just some harmless words").length).toBeGreaterThanOrEqual(1);
+  it("always returns at least one card for non-empty input", async () => {
+    expect((await analyzeContent("just some harmless words")).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("caps the number of cards", () => {
+  it("caps the number of cards", async () => {
     const many = "https://a.tk https://b.tk https://c.tk https://d.tk https://e.tk https://f.tk";
-    expect(analyzeContent(many).length).toBeLessThanOrEqual(5);
+    expect((await analyzeContent(many)).length).toBeLessThanOrEqual(5);
   });
 
-  it("returns a phone card when the whole input is a number", () => {
-    const cards = analyzeContent("+61 412 345 678");
+  it("returns a phone card when the whole input is a number", async () => {
+    const cards = await analyzeContent("+61 412 345 678");
     expect(cards[0].kind).toBe("phone");
+  });
+});
+
+// ── analyzeContent — shortened URL expansion ──────────────────────────────────
+
+describe("analyzeContent — shortened URL expansion", () => {
+  it("expands a shortener and includes the real destination in the result", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "https://commbank-phishing.tk/steal",
+      hops: ["https://commbank-phishing.tk/steal"],
+    });
+
+    const cards = await analyzeContent("https://bit.ly/scam-exp");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.expandedUrl).toBeTruthy();
+    expect(urlCard?.result.flags.some((f) => f.includes("expanded"))).toBe(true);
+  });
+
+  it("raises the score to at least the destination score when destination is riskier than the short URL alone", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "http://1.2.3.4/phish",
+      hops: ["http://1.2.3.4/phish"],
+    });
+
+    const cards = await analyzeContent("https://bit.ly/scam-score");
+    const urlCard = cards.find((c) => c.kind === "url");
+    // IP-address destination adds ≥35; combined with shortener (40) → ≥40
+    expect(urlCard?.result.score).toBeGreaterThanOrEqual(40);
+  });
+
+  it("raises the score to at least the shortener score when the destination is safer", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "https://example.com/landing",
+      hops: ["https://example.com/landing"],
+    });
+
+    // bit.ly alone scores 40; example.com scores ~0; merged must stay ≥ 40
+    const cards = await analyzeContent("https://bit.ly/scam-min-score");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.score).toBeGreaterThanOrEqual(40);
+  });
+
+  it("adds a multi-hop flag when the chain has more than one redirect", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "https://evil-final.tk/phish",
+      hops: ["https://tinyurl.com/hop2", "https://evil-final.tk/phish"],
+    });
+
+    const cards = await analyzeContent("https://bit.ly/multi-hop");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.flags.some((f) => f.includes("Multi-hop"))).toBe(true);
+  });
+
+  it("does NOT add a multi-hop flag for a single-hop expansion", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "https://evil.tk/phish",
+      hops: ["https://evil.tk/phish"],
+    });
+
+    const cards = await analyzeContent("https://bit.ly/single-hop");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.flags.some((f) => f.includes("Multi-hop"))).toBe(false);
+  });
+
+  it("falls back gracefully to the shortener result when expansion returns null", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({ expandedUrl: null, hops: [] });
+
+    const cards = await analyzeContent("https://bit.ly/unexpandable");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.flags.some((f) => f.includes("shortener"))).toBe(true);
+    expect(urlCard?.result.expandedUrl).toBeUndefined();
+  });
+
+  it("defangs the expanded URL stored in expandedUrl so it is never a live link", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "https://phishing-site.tk/steal",
+      hops: ["https://phishing-site.tk/steal"],
+    });
+
+    const cards = await analyzeContent("https://bit.ly/defang-check");
+    const urlCard = cards.find((c) => c.kind === "url");
+    // A defanged URL contains [.] instead of dots and hxxps instead of https
+    expect(urlCard?.result.expandedUrl).toContain("[.]");
+    expect(urlCard?.result.expandedUrl).not.toMatch(/^https?:\/\//);
+  });
+
+  it("expands shortened URLs embedded inside an SMS message", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "https://commbank-phishing.tk/login",
+      hops: ["https://commbank-phishing.tk/login"],
+    });
+
+    const cards = await analyzeContent(
+      "Your package is ready. Track: https://bit.ly/sms-embed-exp",
+    );
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.expandedUrl).toBeTruthy();
+    expect(urlCard?.result.flags.some((f) => f.includes("expanded"))).toBe(true);
   });
 });
