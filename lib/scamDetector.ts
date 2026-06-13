@@ -1,7 +1,8 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
-import { extractIdentifiers, normaliseForAnalysis } from "@/lib/urlSanitizer";
+import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanitizer";
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
+import { isShortened, expandUrl } from "@/lib/urlExpander";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 export type { PhoneIntel };
@@ -13,6 +14,7 @@ export interface CheckResult {
   details: string;
   category?: string;
   phoneIntel?: PhoneIntel;
+  expandedUrl?: string; // defanged real destination when the input was a shortened URL
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -420,7 +422,28 @@ export interface AnalyzedIdentifier {
 const MAX_CARDS = 5;
 const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
-export function analyzeContent(content: string, blocklist?: Set<string>): AnalyzedIdentifier[] {
+// Expands a shortened URL and merges the destination analysis into the base result.
+// If expansion fails or times out, the base result is returned unchanged.
+async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>): Promise<CheckResult> {
+  if (!isShortened(url)) return base;
+
+  const { expandedUrl, hops } = await expandUrl(url);
+  if (!expandedUrl) return base;
+
+  const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist);
+  const destDefanged = defang(expandedUrl);
+  const mergedScore = Math.min(Math.max(base.score, destResult.score), 100);
+  const mergedFlags = [
+    ...base.flags,
+    `Shortened URL expanded — real destination: ${destDefanged}`,
+    ...destResult.flags,
+    ...(hops.length > 1 ? [`Multi-hop chain (${hops.length} redirects) — extra suspicious`] : []),
+  ];
+  const { verdict, details } = scoreToResult(mergedScore, mergedFlags, "URL");
+  return { verdict, score: mergedScore, flags: mergedFlags, details, expandedUrl: destDefanged, category: "URL" };
+}
+
+export async function analyzeContent(content: string, blocklist?: Set<string>): Promise<AnalyzedIdentifier[]> {
   const text = content.trim();
   if (!text) return [];
 
@@ -444,14 +467,23 @@ export function analyzeContent(content: string, blocklist?: Set<string>): Analyz
   } else if (type === "url") {
     // A bare URL is assessed by the per-URL cards below; if the regex missed it
     // (e.g. a "www." host with no scheme), assess the whole string as a URL.
-    if (urls.length === 0) out.push({ kind: "url", value: text, result: checkUrl(normaliseForAnalysis(text), blocklist) });
+    if (urls.length === 0) {
+      const normalised = normaliseForAnalysis(text);
+      const base = checkUrl(normalised, blocklist);
+      const result = await applyExpansion(normalised, base, blocklist);
+      out.push({ kind: "url", value: text, result });
+    }
   } else {
     out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
   }
 
   // A card per embedded URL (normalised first to close percent-encoding tricks).
+  // Expansion runs for each URL that resolves to a known shortener host.
   for (const u of urls) {
-    out.push({ kind: "url", value: u, result: checkUrl(normaliseForAnalysis(u), blocklist) });
+    const normalised = normaliseForAnalysis(u);
+    const base = checkUrl(normalised, blocklist);
+    const result = await applyExpansion(normalised, base, blocklist);
+    out.push({ kind: "url", value: u, result });
   }
 
   // Phone card only when the whole input is a number (extractIdentifiers is
