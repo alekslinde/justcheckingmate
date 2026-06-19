@@ -72,6 +72,7 @@ export default function CheckFlow() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(null);
   // Email sender analysis, populated in runCheck when the pasted content parses
   // as email source (a real From address is present). null otherwise.
@@ -179,6 +180,19 @@ export default function CheckFlow() {
     } finally {
       if (emlRef.current) emlRef.current.value = "";
     }
+  }
+
+  // Drag-and-drop onto the textarea: an image goes through the QR/OCR pipeline,
+  // anything else (a .eml, .txt, or raw source) is read as email text. Routing
+  // by MIME type keeps a dropped screenshot from being read as garbled text.
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (busy) return;
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("image/")) handleImageUpload(file);
+    else handleEmlUpload(file);
   }
 
   async function runCheck() {
@@ -538,17 +552,40 @@ export default function CheckFlow() {
 
       <div>
         <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
-        <textarea
-          id="check-content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={t("check.placeholder")}
-          rows={5}
-          className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-base font-mono"
-        />
+        {/* Drop target: dragging a .eml / image / source file onto the textarea
+            fills it in. dragenter/over must preventDefault to mark a valid drop
+            zone; the overlay only appears mid-drag so it never blocks typing. */}
+        <div
+          className="relative"
+          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+          onDrop={handleDrop}
+        >
+          <textarea
+            id="check-content"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={t("check.placeholder")}
+            rows={5}
+            className={`w-full bg-gray-950 border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-base font-mono transition-colors ${
+              dragOver ? "border-emerald-500 border-dashed" : "border-gray-700"
+            }`}
+          />
+          {dragOver && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 flex items-center justify-center rounded-xl bg-gray-950/90 border-2 border-dashed border-emerald-500 pointer-events-none text-emerald-300 text-sm font-medium gap-2"
+            >
+              <span>📨</span> {t("check.dropHere")}
+            </div>
+          )}
+        </div>
         {/* Paste guidance for users who aren't sure how to copy on mobile */}
         {!content && (
-          <p className="mt-1.5 text-xs text-gray-500">{t("check.pasteHint")}</p>
+          <p className="mt-1.5 text-xs text-gray-500">
+            {t("check.pasteHint")}{" "}
+            <span className="hidden sm:inline">{t("check.dropHint")}</span>
+          </p>
         )}
       </div>
 

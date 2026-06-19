@@ -50,6 +50,8 @@
   "check.orPaste": "or paste below",
   "check.placeholder": "Paste a suspicious link, phone number, text message, or email here…",
   "check.pasteHint": "On your phone: long-press the message → Copy → tap here → Paste",
+  "check.dropHint": "On a computer you can also drag a .eml file or screenshot onto this box.",
+  "check.dropHere": "Drop to analyse",
   "check.analysing": "Analysing…",
   "check.submit": "Check This Now 🔍",
   "check.serverError": "Something went wrong on our end — please try again.",
