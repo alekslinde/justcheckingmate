@@ -12,12 +12,31 @@ import VerdictBadge from "./VerdictBadge";
 import ReportForm from "./ReportForm";
 
 type Step = "input" | "result" | "report";
+type Verdict = AnalyzedIdentifier["result"]["verdict"];
 
 const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: MessageKey }> = {
   url:     { icon: "🔗", labelKey: "kind.url" },
   email:   { icon: "📧", labelKey: "kind.email" },
   phone:   { icon: "📞", labelKey: "kind.phone" },
   message: { icon: "💬", labelKey: "kind.message" },
+};
+
+// Severity ordering — higher wins when collapsing many identifiers into one
+// overall verdict. "unknown" sits just above "safe": it's not a clean pass,
+// but it's not a positive signal of a scam either.
+const VERDICT_RANK: Record<Verdict, number> = {
+  safe: 0,
+  unknown: 1,
+  suspicious: 2,
+  likely_scam: 3,
+};
+
+// Status-dot colour per verdict for the neutral breakdown rows.
+const STATUS_DOT: Record<Verdict, string> = {
+  safe:        "bg-green-500",
+  unknown:     "bg-gray-500",
+  suspicious:  "bg-yellow-500",
+  likely_scam: "bg-red-500",
 };
 
 function defangValue(kind: AnalyzedIdentifier["kind"], value: string): string {
@@ -253,41 +272,76 @@ export default function CheckFlow() {
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
             <p className="text-sm text-gray-400">{t("check.nothing")}</p>
-          ) : (
-            results.map((r, i) => {
-              const meta = KIND_META[r.kind];
-              return (
-                <div key={`${r.kind}-${i}`} className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
-                    <span aria-hidden="true">{meta.icon}</span>
-                    <span className="uppercase tracking-wider">{t(meta.labelKey)}</span>
-                    {r.value && r.kind !== "message" && (
-                      <span className="font-mono text-amber-400/90 break-all">· {defangValue(r.kind, r.value)}</span>
-                    )}
-                  </div>
-                  <VerdictBadge result={r.result} />
-                </div>
-              );
-            })
-          )}
+          ) : (() => {
+            // One overall verdict drives the page: the worst identifier wins.
+            // A tracking pixel can nudge an otherwise-clean result up to
+            // "suspicious" — being silently tracked is itself a red flag.
+            const worst = results.reduce((acc, r) =>
+              VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
+            );
+            let overall = worst.result;
+            if (pixelReport && VERDICT_RANK[overall.verdict] < VERDICT_RANK.suspicious) {
+              overall = { ...overall, verdict: "suspicious", score: Math.max(overall.score, 40) };
+            }
 
-          {pixelReport && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
-                <span aria-hidden="true">🔍</span>
-                <span className="uppercase tracking-wider">Tracking Pixels</span>
-              </div>
-              <div className="bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-3 space-y-1.5">
-                <p className="text-amber-300 text-sm font-semibold">{pixelReport.summary}</p>
-                {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
-                  <p key={i} className="text-xs text-gray-300">• {note}</p>
-                ))}
-              </div>
-            </div>
-          )}
+            return (
+              <>
+                {/* Single coloured verdict card — the only full-colour element. */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    {t("verdict.overall.heading")}
+                  </div>
+                  <VerdictBadge result={overall} />
+                </div>
+
+                {/* Neutral breakdown — every identifier as a quiet row with a
+                    small status dot. No competing card colours. */}
+                <div className="space-y-2 border-t border-gray-800 pt-4">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    {t("verdict.breakdown.heading")}
+                  </div>
+                  <ul className="space-y-1.5">
+                    {results.map((r, i) => {
+                      const meta = KIND_META[r.kind];
+                      return (
+                        <li key={`${r.kind}-${i}`} className="flex items-center gap-2.5 text-sm">
+                          <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT[r.result.verdict]}`} aria-hidden="true" />
+                          <span aria-hidden="true">{meta.icon}</span>
+                          {r.value && r.kind !== "message" ? (
+                            <span className="font-mono text-gray-400 break-all min-w-0 flex-1">{defangValue(r.kind, r.value)}</span>
+                          ) : (
+                            <span className="text-gray-400 flex-1">{t(meta.labelKey)}</span>
+                          )}
+                          <span className="shrink-0 text-gray-300 font-medium">{t(`verdict.${r.result.verdict}.status` as MessageKey)}</span>
+                        </li>
+                      );
+                    })}
+                    {pixelReport && (
+                      <li className="flex items-center gap-2.5 text-sm">
+                        <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
+                        <span aria-hidden="true">🔍</span>
+                        <span className="text-gray-400 flex-1">{t("verdict.breakdown.pixel")}</span>
+                        <span className="shrink-0 text-gray-300 font-medium">{pixelReport.pixels.length}</span>
+                      </li>
+                    )}
+                  </ul>
+                  {pixelReport && (
+                    <div className="text-xs text-gray-500 space-y-1 pl-[18px]">
+                      {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
+                        <p key={i}>• {note}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {(() => {
-            const isClean = results.length > 0 && results.every((r) => r.result.verdict === "safe");
+            // "Clean" means nothing flagged it — every identifier safe AND no
+            // tracking pixel (a pixel pushes the overall verdict to suspicious,
+            // so the CTA should match that, not the softer "report anyway").
+            const isClean = results.length > 0 && results.every((r) => r.result.verdict === "safe") && !pixelReport;
             return (
               <button
                 onClick={() => goForward("report")}
