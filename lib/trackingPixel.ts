@@ -15,31 +15,45 @@ export interface PixelAnalysis {
   url: string;
   domain: string;
   esp: string;           // identified sending platform, e.g. "Mailchimp" or "unknown"
+  espReport: EspReport | null; // where to report the sender, when the ESP is known
   decodedSegments: string[]; // printable strings recovered from encoded path/query parts
   embeddedEmails: string[];  // email addresses found inside the decoded URL
   isLikelyTracking: boolean;
   notes: string[];
 }
 
+// Where a scammer's bulk-sender account can be reported. `kind` lets the UI
+// choose the right affordance: a "url" opens the platform's abuse form, a
+// "mailto" pre-addresses an abuse email.
+export interface EspReport {
+  esp: string;
+  href: string;
+  kind: "url" | "mailto";
+}
+
 export interface TrackingPixelReport {
   pixels: PixelAnalysis[];
   hasTrackingPixels: boolean;
   espsUsed: string[];          // de-duped list of identified platforms
+  espReports: EspReport[];     // de-duped abuse-report targets, one per platform
   embeddedRecipients: string[]; // de-duped recipient addresses found across all pixels
   summary: string;             // one-line human-readable summary, "" when none found
 }
 
 // ─── ESP / bulk-sender fingerprints ──────────────────────────────────────────
 
-const ESP_SIGNATURES: Array<{ name: string; patterns: RegExp[] }> = [
-  { name: "Mailchimp",            patterns: [/list-manage\.com/i, /mailchimpapp\.com/i, /chimpstatic\.com/i] },
-  { name: "SendGrid",             patterns: [/sendgrid\.net/i, /\/wf\/open/i] },
-  { name: "Klaviyo",              patterns: [/trk\.klaviyo\.com/i, /a\.klaviyo\.com/i, /klaviyo\.com/i] },
+// `report` is the platform's official abuse/spam report page, where known and
+// stable. When omitted, the UI falls back to a mailto:abuse@<domain> built from
+// the pixel's own hostname.
+const ESP_SIGNATURES: Array<{ name: string; patterns: RegExp[]; report?: string }> = [
+  { name: "Mailchimp",            patterns: [/list-manage\.com/i, /mailchimpapp\.com/i, /chimpstatic\.com/i], report: "https://mailchimp.com/contact/abuse/" },
+  { name: "SendGrid",             patterns: [/sendgrid\.net/i, /\/wf\/open/i], report: "https://sendgrid.com/report-spam/" },
+  { name: "Klaviyo",              patterns: [/trk\.klaviyo\.com/i, /a\.klaviyo\.com/i, /klaviyo\.com/i], report: "https://www.klaviyo.com/legal/abuse-policy" },
   { name: "Campaign Monitor",     patterns: [/createsend\.com/i, /cmail\d+\.com/i] },
-  { name: "Constant Contact",     patterns: [/constantcontact\.com/i, /r\.constantcontact\.com/i] },
-  { name: "HubSpot",              patterns: [/hubspot\.com/i, /hsmail\.net/i, /hs-analytics\.net/i] },
+  { name: "Constant Contact",     patterns: [/constantcontact\.com/i, /r\.constantcontact\.com/i], report: "https://www.constantcontact.com/legal/anti-spam" },
+  { name: "HubSpot",              patterns: [/hubspot\.com/i, /hsmail\.net/i, /hs-analytics\.net/i], report: "https://www.hubspot.com/abuse-complaint" },
   { name: "ActiveCampaign",       patterns: [/activecampaign\.com/i, /activehosted\.com/i] },
-  { name: "Amazon SES",           patterns: [/amazonses\.com/i] },
+  { name: "Amazon SES",           patterns: [/amazonses\.com/i], report: "https://aws.amazon.com/forms/report-abuse" },
   { name: "Salesforce Marketing", patterns: [/exacttarget\.com/i, /sfmc\.co/i, /salesforceiq\.com/i] },
   { name: "Mailjet",              patterns: [/mailjet\.com/i] },
   { name: "Brevo",                patterns: [/sendinblue\.com/i, /brevo\.com/i] },
@@ -80,6 +94,31 @@ function identifyEsp(url: string): string {
     if (patterns.some((p) => p.test(url))) return name;
   }
   return "unknown";
+}
+
+// Resolve where to report the sender behind a tracking pixel. Prefers the
+// matched ESP's official abuse form; otherwise falls back to a generic
+// mailto:abuse@<registrable-domain> built from the pixel's own hostname.
+// Returns null when the URL is unusable (no host) so callers can hide the action.
+function resolveEspReport(url: string): EspReport | null {
+  for (const { name, patterns, report } of ESP_SIGNATURES) {
+    if (patterns.some((p) => p.test(url))) {
+      if (report) return { esp: name, href: report, kind: "url" };
+      // Known platform, no curated form on file — abuse@ its sending domain.
+      const host = domainFromUrl(url);
+      if (!host) return null;
+      return { esp: name, href: `mailto:abuse@${registrableDomain(host)}`, kind: "mailto" };
+    }
+  }
+  return null;
+}
+
+// Collapse a hostname to its registrable domain (last two labels) so the abuse
+// address targets the platform, not a per-campaign tracking subdomain
+// (e.g. trk.us17.list-manage.com → list-manage.com).
+function registrableDomain(host: string): string {
+  const labels = host.split(".").filter(Boolean);
+  return labels.length <= 2 ? host : labels.slice(-2).join(".");
 }
 
 // Attempt base64url and percent-decode on each path segment and query value.
@@ -181,6 +220,7 @@ export function extractPixelUrls(emailSource: string): string[] {
 export function analysePixelUrl(url: string): PixelAnalysis {
   const domain = domainFromUrl(url);
   const esp = identifyEsp(url);
+  const espReport = resolveEspReport(url);
   const decodedSegments = decodeUrlSegments(url);
   const embeddedEmails = extractEmailsFrom([url, ...decodedSegments]);
   const isLikelyTracking = isTrackingUrl(url);
@@ -195,7 +235,7 @@ export function analysePixelUrl(url: string): PixelAnalysis {
     notes.push("Opening this email notified the sender — the pixel was fetched the moment the message rendered");
   }
 
-  return { url, domain, esp, decodedSegments, embeddedEmails, isLikelyTracking, notes };
+  return { url, domain, esp, espReport, decodedSegments, embeddedEmails, isLikelyTracking, notes };
 }
 
 // Full tracking-pixel analysis for a raw email source.
@@ -203,6 +243,9 @@ export function analyseTrackingPixels(rawEmail: string): TrackingPixelReport {
   const pixelUrls = extractPixelUrls(rawEmail);
   const pixels = pixelUrls.map(analysePixelUrl);
   const espsUsed = [...new Set(pixels.map((p) => p.esp).filter((e) => e !== "unknown"))];
+  const espReports = [...new Map(
+    pixels.map((p) => p.espReport).filter((r): r is EspReport => r !== null).map((r) => [r.esp, r]),
+  ).values()];
   const embeddedRecipients = [...new Set(pixels.flatMap((p) => p.embeddedEmails))];
 
   let summary = "";
@@ -215,5 +258,5 @@ export function analyseTrackingPixels(rawEmail: string): TrackingPixelReport {
     summary = `${count} detected${platform}${recipient}`;
   }
 
-  return { pixels, hasTrackingPixels: pixels.length > 0, espsUsed, embeddedRecipients, summary };
+  return { pixels, hasTrackingPixels: pixels.length > 0, espsUsed, espReports, embeddedRecipients, summary };
 }

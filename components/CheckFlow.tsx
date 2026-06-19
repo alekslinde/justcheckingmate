@@ -332,6 +332,29 @@ export default function CheckFlow() {
                       ))}
                     </div>
                   )}
+                  {/* Direct line to each identified platform's abuse channel —
+                      reporting the sender here can shut the scammer's account down. */}
+                  {pixelReport && pixelReport.espReports.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pl-[18px] pt-0.5">
+                      {pixelReport.espReports.map((r) => (
+                        <a
+                          key={r.esp}
+                          href={r.href}
+                          {...(r.kind === "url" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
+                        >
+                          <span aria-hidden="true">🚩</span>
+                          {t("verdict.breakdown.reportEsp", { esp: r.esp })}
+                          {r.kind === "url" && (
+                            <>
+                              <span className="sr-only"> ({t("a11y.newTab")})</span>
+                              <span aria-hidden="true">↗</span>
+                            </>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             );

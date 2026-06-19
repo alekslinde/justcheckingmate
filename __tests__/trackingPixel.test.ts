@@ -117,6 +117,23 @@ describe("analysePixelUrl", () => {
     const r = analysePixelUrl(`https://trk.evil.com/o/${encoded}`);
     expect(r.notes.join(" ")).toMatch(/recipient address encoded/i);
   });
+
+  it("resolves the official abuse-report URL for a known ESP", () => {
+    const r = analysePixelUrl("https://list-manage.com/track/open?u=a&id=b&e=c");
+    expect(r.espReport).toEqual({ esp: "Mailchimp", href: "https://mailchimp.com/contact/abuse/", kind: "url" });
+  });
+
+  it("falls back to mailto:abuse@<registrable-domain> for an ESP with no curated form", () => {
+    // Campaign Monitor has no `report` URL on file — abuse@ its sending domain,
+    // collapsed to the registrable domain (not the per-campaign subdomain).
+    const r = analysePixelUrl("https://t.cmail19.com/t/r-open/abc");
+    expect(r.espReport).toEqual({ esp: "Campaign Monitor", href: "mailto:abuse@cmail19.com", kind: "mailto" });
+  });
+
+  it("returns null espReport for an unrecognised platform", () => {
+    const r = analysePixelUrl("https://pixel.scammer-domain.tk/track/open/abc");
+    expect(r.espReport).toBeNull();
+  });
 });
 
 // ─── analyseTrackingPixels ───────────────────────────────────────────────────
@@ -186,5 +203,8 @@ describe("analyseTrackingPixels", () => {
     expect(r.espsUsed).toContain("Mailchimp");
     expect(r.espsUsed).toContain("SendGrid");
     expect(r.summary).toMatch(/3 tracking pixels/i);
+    // One abuse-report target per platform, de-duped across the two Mailchimp pixels.
+    expect(r.espReports).toHaveLength(2);
+    expect(r.espReports.map((x) => x.esp).sort()).toEqual(["Mailchimp", "SendGrid"]);
   });
 });
