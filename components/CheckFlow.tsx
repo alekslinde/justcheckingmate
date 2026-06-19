@@ -23,6 +23,12 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
   message: { icon: "💬", labelKey: "kind.message" },
 };
 
+// Forward-to-us address, shown only once inbound mail is live end-to-end. The
+// flag is read at build time (NEXT_PUBLIC_*), so an unconfigured deploy never
+// advertises a dead inbox. Address is overridable for staging/other domains.
+const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
+const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.app";
+
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply
 // shares the exact same rules — see that module.
@@ -520,6 +526,25 @@ export default function CheckFlow() {
       )}
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
+
+      {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
+          Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED). */}
+      {INBOUND_ENABLED && (
+        <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 space-y-2">
+          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+            <span aria-hidden="true">📨</span> {t("check.forward.heading")}
+          </p>
+          <p className="text-xs text-gray-400">
+            {t("check.forward.body", { address: INBOUND_ADDRESS })}
+          </p>
+          <a
+            href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition-colors"
+          >
+            <span aria-hidden="true">↪</span> {t("check.forward.cta", { address: INBOUND_ADDRESS })}
+          </a>
+        </div>
+      )}
 
       {/* Per-client guide for grabbing the raw source / .eml the upload wants. */}
       <EmailExportGuide />
