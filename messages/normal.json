@@ -83,6 +83,12 @@
   "verdict.breakdown.pixel": "Tracking pixel detected",
   "verdict.breakdown.reportEsp": "Report sender to {esp}",
 
+  "email.analysis.heading": "Email sender analysis",
+  "email.analysis.from": "From:",
+  "email.analysis.replyTo": "Reply-To:",
+  "email.analysis.auth": "Authentication:",
+  "email.analysis.clean": "No sender-spoofing signals found in the headers.",
+
   "phone.heading": "Phone details",
   "phone.type": "Type",
   "phone.country": "Country",

@@ -46,6 +46,9 @@
   "verdict.breakdown.pixel": "Tracking pixel spotted",
   "verdict.breakdown.reportEsp": "Dob the sender in to {esp}",
 
+  "email.analysis.heading": "Who really sent this",
+  "email.analysis.clean": "No dodgy sender tricks in the headers, far as we can tell.",
+
   "phone.lineType.voip": "Internet phone (dead easy to fake)",
   "phone.risk.veryHigh": "Almost certainly fake",
   "phone.wangiri.body": "Scammers ring once and hang up. Ring back and you cop international premium rates. **Don't call back, no matter what.**",

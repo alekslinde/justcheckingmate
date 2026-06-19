@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
-import { parseEmailHeaders } from "@/lib/emailHeaders";
+import { parseEmailHeaders, analyseEmailIdentities, summariseAuth, EmailHeaders } from "@/lib/emailHeaders";
 import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
@@ -46,6 +46,15 @@ function defangValue(kind: AnalyzedIdentifier["kind"], value: string): string {
   return defangText(value);
 }
 
+// The identity-analysis flags embed raw email addresses and bare domains as
+// plain text. Defang both so the result card can never surface a live,
+// clickable address — mirroring how every other value on this page is shown.
+function defangFlag(flag: string): string {
+  return flag
+    .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, (a) => defangEmail(a))
+    .replace(/\b[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+\b/g, (d) => d.replace(/\./g, "[.]"));
+}
+
 // kind → ScamType for prefilling the report form.
 function kindToType(kind: AnalyzedIdentifier["kind"], content: string): ScamType {
   if (kind === "url" || kind === "email" || kind === "phone") return kind;
@@ -64,6 +73,9 @@ export default function CheckFlow() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(null);
+  // Email sender analysis, populated in runCheck when the pasted content parses
+  // as email source (a real From address is present). null otherwise.
+  const [emailReport, setEmailReport] = useState<{ headers: EmailHeaders; flags: string[] } | null>(null);
 
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -184,6 +196,15 @@ export default function CheckFlow() {
       setResults(data.results ?? []);
       const pr = analyseTrackingPixels(content);
       setPixelReport(pr.hasTrackingPixels ? pr : null);
+      // If the pasted content is email source, surface the sender analysis
+      // inline — a real From address is the signal that this is email, not a
+      // bare URL/phone the generic check already covers.
+      const headers = parseEmailHeaders(content);
+      if (headers.fromAddress) {
+        setEmailReport({ headers, flags: analyseEmailIdentities(headers).flags });
+      } else {
+        setEmailReport(null);
+      }
       setShareCopied(false);
       goForward("result");
     } catch (err) {
@@ -271,7 +292,10 @@ export default function CheckFlow() {
         </button>
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
-            <p className="text-sm text-gray-400">{t("check.nothing")}</p>
+            // Email source can parse to a sender analysis even when there are no
+            // URL/phone/email identifiers to score — in that case the analysis
+            // card below carries the payoff, so don't claim there's nothing.
+            !emailReport && <p className="text-sm text-gray-400">{t("check.nothing")}</p>
           ) : (() => {
             // One overall verdict drives the page: the worst identifier wins.
             // A tracking pixel can nudge an otherwise-clean result up to
@@ -357,6 +381,54 @@ export default function CheckFlow() {
                   )}
                 </div>
               </>
+            );
+          })()}
+
+          {/* Email sender analysis — only when the pasted content parsed as
+              email source. Surfaces the display-name/Reply-To/auth picture that
+              previously lived only inside the report form. All addresses and
+              domains are defanged before display. */}
+          {emailReport && (() => {
+            const { headers, flags } = emailReport;
+            const authSummary = summariseAuth(headers);
+            return (
+              <div className="space-y-2 border-t border-gray-800 pt-4">
+                <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  {t("email.analysis.heading")}
+                </div>
+                <dl className="space-y-1 text-sm">
+                  {headers.fromAddress && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-gray-500">{t("email.analysis.from")}</dt>
+                      <dd className="font-mono text-gray-400 break-all min-w-0">{defangEmail(headers.fromAddress)}</dd>
+                    </div>
+                  )}
+                  {headers.replyTo && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-gray-500">{t("email.analysis.replyTo")}</dt>
+                      <dd className="font-mono text-gray-400 break-all min-w-0">{defangEmail(headers.replyTo)}</dd>
+                    </div>
+                  )}
+                  {authSummary && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-gray-500">{t("email.analysis.auth")}</dt>
+                      <dd className="font-mono text-gray-400 break-all min-w-0">{authSummary}</dd>
+                    </div>
+                  )}
+                </dl>
+                {flags.length > 0 ? (
+                  <ul className="space-y-1.5 pt-1">
+                    {flags.map((flag, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-amber-300/90">
+                        <span aria-hidden="true" className="shrink-0">⚠</span>
+                        <span className="min-w-0">{defangFlag(flag)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500 pt-1">{t("email.analysis.clean")}</p>
+                )}
+              </div>
             );
           })()}
 
