@@ -1,0 +1,1 @@
+See global rules at ~/.claude/CLAUDE.md

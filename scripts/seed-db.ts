@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { MOCK_REPORTS } from "@/lib/mockReports";
+import { MOCK_REPORTS } from "@/lib/fixtures/mockReports";
 
 async function seed() {
   const db = await getDb();

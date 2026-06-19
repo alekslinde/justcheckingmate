@@ -1,0 +1,253 @@
+{
+  "emailHeaders": {
+    "ALL_FLAGS": "Delivered-To: victim@gmail.com\nFrom: myGov <noreply@au-taxrefund.click>\nReply-To: support@telecom-helpdesk.ru\nReturn-Path: <bounce@eu-mailer.net>\nSubject: Urgent: Your myGov account has been locked\nReceived-SPF: fail (spf.google.com: domain of au-taxrefund.click does not designate 104.21.88.12 as permitted sender) client-ip=104.21.88.12\nAuthentication-Results: mx.google.com; spf=fail smtp.mailfrom=au-taxrefund.click; dkim=none; dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=au-taxrefund.click\n\nDear Customer, we have detected unusual activity on your myGov account.",
+    "DKIM_UNRELATED_TENANT": "Return-Path: <linus@uppent.se>\nAuthentication-Results: bimi.icloud.com; bimi=skipped reason=\"insufficient dmarc\"\nAuthentication-Results: dmarc.icloud.com; dmarc=none header.from=uppent.se\nAuthentication-Results: dkim-verifier.icloud.com; dkim=pass header.d=markona.onmicrosoft.com header.i=@markona.onmicrosoft.com\nReceived-SPF: pass (spf.icloud.com: domain of linus@uppent.se designates 52.102.163.63 as permitted sender) client-ip=52.102.163.63\nARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=pass; dmarc=pass action=none header.from=uppent.se; dkim=pass header.d=uppent.se; arc=none\nFrom: myGov <linus@uppent.se>\nSubject: myGov Notification\nAccept-Language: sv-SE, en-US\n\nClick here to verify your account.",
+    "COMMBANK_PHISH": "From: CommonWealth Bank <secure-msg@commbank-alerts.info>\nReply-To: helpdesk.commbank2024@gmail.com\nReturn-Path: <bounce@commbank-alerts.info>\nSubject: Your CommBank account is temporarily restricted\nReceived-SPF: softfail (domain of commbank-alerts.info does not strongly designate 198.51.100.22 as permitted sender) client-ip=198.51.100.22\nAuthentication-Results: mx.google.com; spf=softfail smtp.mailfrom=commbank-alerts.info; dkim=pass header.d=sendgrid.net; dmarc=none\n\nPlease verify your identity to restore access.",
+    "ATO_PHISH": "From: \"Australian Taxation Office\" <refunds@ato-secure.net>\nReply-To: ato.refunds@protonmail.com\nSubject: Tax Refund Available — Action Required\nReceived-SPF: fail (spf.protection.outlook.com: domain of ato-secure.net does not designate 203.0.113.5 as permitted sender) client-ip=203.0.113.5\nAuthentication-Results: mx.google.com; spf=fail; dkim=fail; dmarc=fail (p=REJECT)\n\nYou have a pending refund of $1,842.00. Click here to claim.",
+    "LEGITIMATE": "From: no-reply@ato.gov.au\nReturn-Path: <bounce@ato.gov.au>\nSubject: Your 2024 tax return has been processed\nReceived-SPF: pass (spf.google.com: domain of ato.gov.au designates 203.0.113.1 as permitted sender) client-ip=203.0.113.1\nAuthentication-Results: mx.google.com; spf=pass; dkim=pass header.d=ato.gov.au; dmarc=pass\n\nYour tax return has been processed. Log in to myGov to view the outcome.",
+    "FOREIGN_LOCALE": "From: Medicare Australia <billing@medi-care-au.se>\nSubject: Medicare Rebate Available\nAccept-Language: sv-SE\nReceived-SPF: pass (domain of medi-care-au.se designates 52.102.163.63 as permitted sender) client-ip=52.102.163.63\nAuthentication-Results: mx.google.com; spf=pass; dkim=none; dmarc=none\n\nYour Medicare rebate of $182.40 is ready to collect."
+  },
+  "reportMocks": [
+    {
+      "id": "RPT-MOCK01",
+      "type": "url",
+      "content": "hxxps[://]myg0v[.]au-taxrefund[.]click/claim?token=aHR0cHM6Ly9leGFtcGxl",
+      "description": "Posed as ATO refund page. Asks for TFN, bank details, and Medicare number.",
+      "minutesAgo": 4,
+      "scamUrl": "hxxps[://]myg0v[.]au-taxrefund[.]click/claim",
+      "scamPhone": "",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 14
+    },
+    {
+      "id": "RPT-MOCK02",
+      "type": "qr",
+      "content": "hxxps[://]parking-fines[.]vic-gov[.]au-pay[.]xyz/ref/VIC-2024-88231",
+      "description": "QR code stuck on car windscreen, pretending to be a council parking fine.",
+      "hoursAgo": 1,
+      "scamUrl": "hxxps[://]parking-fines[.]vic-gov[.]au-pay[.]xyz/ref/VIC-2024-88231",
+      "scamPhone": "+61 1300 XXX 492",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 3
+    },
+    {
+      "id": "RPT-MOCK03",
+      "type": "sms",
+      "content": "Hi it's Mum. I lost my phone, this is my new number. Can you transfer $200 urgently? I'll explain later.",
+      "description": "Classic 'Hi Mum' number swap scam. Came from a random mobile.",
+      "hoursAgo": 2,
+      "scamUrl": "",
+      "scamPhone": "+61 4XX XXX 817",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 27
+    },
+    {
+      "id": "RPT-MOCK04",
+      "type": "sms",
+      "content": "Australia Post: Your parcel is on hold due to an unpaid $3.50 fee. Pay now: hxxps[://]auspost-fee[.]cc/pay",
+      "description": "Delivery fee SMS. Link leads to card-skimming page.",
+      "hoursAgo": 5,
+      "scamUrl": "hxxps[://]auspost-fee[.]cc/pay",
+      "scamPhone": "+61 4XX XXX 203",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 61
+    },
+    {
+      "id": "RPT-MOCK05",
+      "type": "sms",
+      "content": "CONGRATULATIONS! You've been selected for a $1,500 Woolworths gift card. Reply YES to claim.",
+      "description": "",
+      "daysAgo": 1,
+      "scamUrl": "",
+      "scamPhone": "",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 1
+    },
+    {
+      "id": "RPT-MOCK06",
+      "type": "phone",
+      "content": "Robocall claiming to be the Australian Tax Office. Said my TFN had been 'suspended for fraud' and I needed to press 1 to speak to a federal agent.",
+      "description": "ATO robocall. Very aggressive, said arrest warrant issued.",
+      "hoursAgo": 3,
+      "scamUrl": "",
+      "scamPhone": "+61 2 XXXX 5511",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 9
+    },
+    {
+      "id": "RPT-MOCK07",
+      "type": "phone",
+      "content": "Caller said they were from NBN Co and my connection would be cut. Directed me to hxxps[://]nbn-verify[.]net/id to 'confirm my account'.",
+      "description": "NBN disconnection scam. Human caller, convincing accent.",
+      "daysAgo": 2,
+      "scamUrl": "hxxps[://]nbn-verify[.]net/id",
+      "scamPhone": "+61 3 XXXX 0042",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 5
+    },
+    {
+      "id": "RPT-MOCK08",
+      "type": "email",
+      "content": "Delivered-To: victim@gmail.com\nFrom: myGov <noreply@au-taxrefund.click>\nReply-To: support@telecom-helpdesk.ru\nReturn-Path: <bounce@eu-mailer.net>\nSubject: Urgent: Your myGov account has been locked\nReceived-SPF: fail (spf.google.com: domain of au-taxrefund.click does not designate 104.21.88.12 as permitted sender) client-ip=104.21.88.12\nAuthentication-Results: mx.google.com; spf=fail smtp.mailfrom=au-taxrefund.click; dkim=none; dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=au-taxrefund.click\n\nDear Customer, we have detected unusual activity on your myGov account. Click the link below within 24 hours to avoid permanent suspension.\nhxxps[://]my-gov-au[.]help/unlock?uid=c29tZXVzZXI%3D",
+      "description": "myGov phishing. Sender domain was 'au-taxrefund[.]click', not mygov.gov.au. All auth checks failed.",
+      "hoursAgo": 6,
+      "scamUrl": "hxxps[://]my-gov-au[.]help/unlock?uid=c29tZXVzZXI%3D",
+      "scamPhone": "",
+      "scamEmail": "noreply[at]au-taxrefund[.]click",
+      "scamReplyTo": "support[at]telecom-helpdesk[.]ru",
+      "emailAuth": "SPF fail · DMARC fail",
+      "matchCount": 38
+    },
+    {
+      "id": "RPT-MOCK09",
+      "type": "email",
+      "content": "From: CommonWealth Bank <secure-msg@commbank-alerts.info>\nReply-To: helpdesk.commbank2024@gmail.com\nReturn-Path: <bounce@commbank-alerts.info>\nSubject: Your CommBank account is temporarily restricted\nReceived-SPF: softfail (domain of commbank-alerts.info does not strongly designate 198.51.100.22 as permitted sender) client-ip=198.51.100.22\nAuthentication-Results: mx.google.com; spf=softfail smtp.mailfrom=commbank-alerts.info; dkim=pass header.d=sendgrid.net; dmarc=none\n\nPlease log in to view your secure message. Your account may be compromised.\nPlease verify your identity to restore access.",
+      "description": "CommBank impersonation. Reply-To goes to a Gmail address. DKIM signed by SendGrid, not CommBank.",
+      "daysAgo": 1,
+      "scamUrl": "",
+      "scamPhone": "",
+      "scamEmail": "secure-msg[at]commbank-alerts[.]info",
+      "scamReplyTo": "helpdesk.commbank2024[at]gmail[.]com",
+      "emailAuth": "SPF softfail · DKIM pass (sendgrid[.]net) · DMARC none",
+      "matchCount": 12
+    },
+    {
+      "id": "RPT-MOCK10",
+      "type": "email",
+      "content": "From: \"Australian Taxation Office\" <refunds@ato-secure.net>\nReply-To: ato.refunds@protonmail.com\nSubject: Tax Refund Available — Action Required\nReceived-SPF: fail (spf.protection.outlook.com: domain of ato-secure.net does not designate 203.0.113.5 as permitted sender) client-ip=203.0.113.5\nAuthentication-Results: mx.google.com; spf=fail; dkim=fail; dmarc=fail (p=REJECT)\n\nYour Afterpay account is on hold. Verify your identity to restore full access.\nYou have a pending refund of $1,842.00. Click here to claim.",
+      "description": "ATO impersonation. SPF, DKIM and DMARC all failed. Reply-To routes to ProtonMail.",
+      "daysAgo": 3,
+      "scamUrl": "",
+      "scamPhone": "",
+      "scamEmail": "refunds[at]ato-secure[.]net",
+      "scamReplyTo": "ato.refunds[at]protonmail[.]com",
+      "emailAuth": "SPF fail · DKIM fail · DMARC fail",
+      "matchCount": 7
+    },
+    {
+      "id": "RPT-MOCK11",
+      "type": "email",
+      "content": "Return-Path: <linus@uppent.se>\nAuthentication-Results: bimi.icloud.com; bimi=skipped reason=\"insufficient dmarc\"\nAuthentication-Results: dmarc.icloud.com; dmarc=none header.from=uppent.se\nAuthentication-Results: dkim-verifier.icloud.com; dkim=pass header.d=markona.onmicrosoft.com header.i=@markona.onmicrosoft.com\nReceived-SPF: pass (spf.icloud.com: domain of linus@uppent.se designates 52.102.163.63 as permitted sender) client-ip=52.102.163.63\nARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=pass; dmarc=pass action=none header.from=uppent.se; dkim=pass header.d=uppent.se; arc=none\nFrom: myGov <linus@uppent.se>\nSubject: Your Medicare claim has been processed — collect your refund\nAccept-Language: sv-SE, en-US\n\nClick below to receive your $182.40 Medicare rebate directly to your bank account.\nhxxps[://]medicare-rebate[.]au-gov[.]site/collect",
+      "description": "myGov impersonation via Swedish domain. SPF passes but DMARC none; DKIM signed by unrelated onmicrosoft.com tenant.",
+      "daysAgo": 4,
+      "scamUrl": "hxxps[://]medicare-rebate[.]au-gov[.]site/collect",
+      "scamPhone": "",
+      "scamEmail": "linus[at]uppent[.]se",
+      "scamReplyTo": "",
+      "emailAuth": "SPF pass · DKIM pass (markona[.]onmicrosoft[.]com) · DMARC none",
+      "matchCount": 19
+    },
+    {
+      "id": "RPT-MOCK12",
+      "type": "custom",
+      "content": "Person came to my door claiming to be from Energy Australia doing a 'free energy audit'. Pressure-sold solar panels at inflated prices. Asked for bank account details on the spot.",
+      "description": "Door-to-door energy audit scam. Very pushy. Couldn't produce a business card.",
+      "daysAgo": 2,
+      "scamUrl": "",
+      "scamPhone": "+61 4XX XXX 331",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 2
+    },
+    {
+      "id": "RPT-MOCK13",
+      "type": "custom",
+      "content": "Met on dating app. After weeks of messaging, asked me to invest in crypto through their 'exclusive platform'. Site looked very professional.",
+      "description": "Pig butchering / romance investment scam. Lost $4k before I realised.",
+      "daysAgo": 5,
+      "scamUrl": "hxxps[://]trade-vip[.]io/invest",
+      "scamPhone": "",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 1
+    },
+    {
+      "id": "RPT-MOCK14",
+      "type": "sms",
+      "content": "Your licence is due for renewal. Visit service nsw to renew online.",
+      "description": "",
+      "daysAgo": 6,
+      "scamUrl": "",
+      "scamPhone": "",
+      "scamEmail": "",
+      "scamReplyTo": "",
+      "emailAuth": "",
+      "matchCount": 1
+    }
+  ],
+  "mockLocations": [
+    "NSW, Australia",
+    "VIC, Australia",
+    "QLD, Australia",
+    "WA, Australia",
+    "SA, Australia",
+    "",
+    "ACT, Australia",
+    "TAS, Australia",
+    "NT, Australia"
+  ],
+  "emailsWithTrackingPixels": {
+    "MAILCHIMP_WITH_RECIPIENT": {
+      "description": "Mailchimp pixel with base64-encoded recipient email",
+      "content": "From: myGov <noreply@au-taxrefund.click>\nSubject: Urgent: Your myGov account has been locked\nReceived-SPF: fail (spf.google.com: domain of au-taxrefund.click does not designate 104.21.88.12 as permitted sender) client-ip=104.21.88.12\nAuthentication-Results: mx.google.com; spf=fail smtp.mailfrom=au-taxrefund.click; dkim=none; dmarc=fail (p=NONE) header.from=au-taxrefund.click\n\n<html><body>\n<p>Your account is suspended. Click <a href=\"https://phish.tk/login\">here</a> to restore access.</p>\n<img src=\"https://list-manage.com/track/open?u=abc123&id=campaign456&e=dmljdGltQGdtYWlsLmNvbQ==\" width=\"1\" height=\"1\" alt=\"\">\n</body></html>"
+    },
+    "SENDGRID_BASIC": {
+      "description": "SendGrid pixel (no recipient encoded)",
+      "content": "From: CommBank <alerts@commbank-secure.tk>\nSubject: Account Alert\nReceived-SPF: fail (spf.google.com: domain of commbank-secure.tk does not designate 198.51.100.22 as permitted sender) client-ip=198.51.100.22\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html><body>\n<p>Verify your account immediately.</p>\n<img style=\"width:1px;height:1px\" src=\"https://em.sendgrid.net/wf/open?upn=sometoken123abc\" alt=\"\">\n</body></html>"
+    },
+    "KLAVIYO_ENCODED_PATH": {
+      "description": "Klaviyo pixel with base64url-encoded email in path",
+      "content": "From: Shop <newsletter@evilshop.ru>\nSubject: Flash Sale 50% Off\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html><body>\n<p>Limited time offer on all items.</p>\n<img src=\"https://trk.klaviyo.com/o/dmljdGltQGV4YW1wbGUuY29t\" width=\"0\" height=\"0\">\n</body></html>"
+    },
+    "MULTIPLE_ESPS": {
+      "description": "Multiple pixels from different platforms (Mailchimp + SendGrid)",
+      "content": "From: ATO <refunds@ato-scam.net>\nSubject: Tax Refund Available\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=fail; dmarc=fail\n\n<html><body>\n<p>You have a refund of $1,500. Claim it now.</p>\n<img src=\"https://list-manage.com/track/open?u=1&id=2&e=dmljdGltQDEuY29t\" width=\"1\" height=\"1\" alt=\"\">\n<img src=\"https://em.sendgrid.net/wf/open?upn=token2\" width=\"1\" height=\"1\" alt=\"\">\n</body></html>"
+    },
+    "CAMPAIGN_MONITOR": {
+      "description": "Campaign Monitor pixel",
+      "content": "From: Healthcare <booking@health-scam.au>\nSubject: Your appointment reminder\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html><body>\n<p>Your appointment is tomorrow at 2pm.</p>\n<img src=\"https://createsend.com/t/r-open/ABC123DEF456\" width=\"1\" height=\"1\">\n</body></html>"
+    },
+    "HUBSPOT": {
+      "description": "HubSpot pixel",
+      "content": "From: Support <help@fake-support.tk>\nSubject: Urgent: Action Required\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html><body>\n<p>Your account has suspicious activity. Verify now.</p>\n<img src=\"https://hs-analytics.net/hs/track/pixel/abc123def456\" width=\"0\" height=\"0\" alt=\"\">\n</body></html>"
+    },
+    "TRACKING_URL_OUTSIDE_IMG": {
+      "description": "Tracking URL as a link preload (not in img tag)",
+      "content": "From: Promo <deals@spam-promo.tk>\nSubject: Exclusive Offer Inside\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html><head>\n<link rel=\"preload\" href=\"https://trk.evil.com/pixel/xyz789\" as=\"image\">\n</head><body>\n<p>Click for your gift.</p>\n</body></html>"
+    },
+    "UNKNOWN_ESP_TRACKING_PATH": {
+      "description": "Unknown ESP but with /pixel/ path pattern (still detectable as tracking)",
+      "content": "From: Mystery <noreply@unknown-sender.xyz>\nSubject: Click here\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html><body>\n<p>Open now.</p>\n<img src=\"https://mystery-domain.xyz/pixel/beacon123\" width=\"1\" height=\"1\">\n</body></html>"
+    },
+    "NO_PIXELS": {
+      "description": "Clean email without tracking pixels (control case)",
+      "content": "From: myGov <noreply@mygov.gov.au>\nSubject: Your tax return has been processed\nReceived-SPF: pass (spf.google.com: domain of mygov.gov.au designates 203.0.113.1 as permitted sender) client-ip=203.0.113.1\nAuthentication-Results: mx.google.com; spf=pass; dkim=pass header.d=mygov.gov.au; dmarc=pass\n\n<html><body>\n<p>Your tax return has been processed. Log in to view the outcome.</p>\n<img src=\"https://mygov.gov.au/logo.png\" width=\"200\" height=\"50\" alt=\"myGov\">\n</body></html>"
+    }
+  },
+  "reportEmailsWithPixels": {
+    "FULL_PHISHING_WITH_MAILCHIMP": {
+      "description": "Complete email with headers and Mailchimp pixel for ReportForm",
+      "content": "From: Bank Alert <secure@bank-au.com.tk>\nTo: victim@example.com\nDate: Thu, 19 Jun 2026 14:30:00 +0000\nSubject: URGENT: Verify your account\nMIME-Version: 1.0\nContent-Type: text/html; charset=utf-8\nReceived-SPF: fail (spf.google.com: domain of bank-au.com.tk does not designate 192.0.2.1 as permitted sender) client-ip=192.0.2.1\nAuthentication-Results: mx.google.com; spf=fail smtp.mailfrom=bank-au.com.tk; dkim=none; dmarc=fail (p=NONE) header.from=bank-au.com.tk\n\n<html>\n<body>\n<p>Dear customer,</p>\n<p>We have detected unusual activity on your account. <a href='https://bank-verify.tk/login'>Click here to verify immediately</a>.</p>\n<p>This notice expires in 24 hours.</p>\n<img src=\"https://list-manage.com/track/open?u=12345&id=campaign78&e=dmljdGltQGV4YW1wbGUuY29t\" width=\"1\" height=\"1\" style=\"display:none;\" alt=\"\">\n</body>\n</html>"
+    },
+    "MULTI_PLATFORM_PIXELS": {
+      "description": "Email with 3 pixels from different platforms",
+      "content": "From: Support <help@fake.tk>\nSubject: Confirm your identity\nReceived-SPF: fail\nAuthentication-Results: mx.google.com; spf=fail; dkim=none; dmarc=fail\n\n<html>\n<body>\n<p>Click below to confirm:</p>\n<a href=\"https://phish.tk\">Verify Now</a>\n<!-- Tracking pixels from multiple ESPs -->\n<img src=\"https://list-manage.com/track/open?e=dGFyZ2V0QGV4YW1wbGUuY29t\" width=\"1\" height=\"1\" alt=\"\">\n<img src=\"https://em.sendgrid.net/wf/open?upn=abc\" width=\"1\" height=\"1\" alt=\"\">\n<img src=\"https://trk.klaviyo.com/o/dGFyZ2V0QGV4YW1wbGUuY29t\" width=\"0\" height=\"0\" alt=\"\">\n</body>\n</html>"
+    }
+  }
+}

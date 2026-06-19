@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPublicReports, getPublicReportsCount, SortOption } from "@/lib/reportStore";
-import { MOCK_REPORTS } from "@/lib/mockReports";
+import { MOCK_REPORTS } from "@/lib/fixtures/mockReports";
 
 const VALID_SORTS = new Set<SortOption>(["desc", "asc", "most", "least"]);
 
