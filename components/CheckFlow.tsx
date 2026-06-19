@@ -10,6 +10,7 @@ import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
 import ReportForm from "./ReportForm";
+import EmailExportGuide from "./EmailExportGuide";
 
 type Step = "input" | "result" | "report";
 type Verdict = AnalyzedIdentifier["result"]["verdict"];
@@ -543,6 +544,9 @@ export default function CheckFlow() {
       )}
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
+
+      {/* Per-client guide for grabbing the raw source / .eml the upload wants. */}
+      <EmailExportGuide />
 
       <div className="flex items-center gap-3" aria-hidden="true">
         <div className="flex-1 h-px bg-gray-700" />

@@ -8,6 +8,7 @@ import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel"
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
+import EmailExportGuide from "./EmailExportGuide";
 
 const REPORT_TYPES: { value: ScamType; labelKey: MessageKey; icon: string }[] = [
   { value: "url",    labelKey: "report.type.url",    icon: "🔗" },
@@ -436,16 +437,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               )}
             </div>
 
-            <details className="text-xs text-gray-400">
-              <summary className="cursor-pointer text-emerald-400/90 hover:text-emerald-300">
-                {t("report.email.how.summary")}
-              </summary>
-              <ul className="mt-2 space-y-1 list-disc pl-5 text-gray-400">
-                <li>{bold(t("report.email.how.from"))}</li>
-                <li>{bold(t("report.email.how.replyTo"))}</li>
-                <li>{t("report.email.how.desktop")}</li>
-              </ul>
-            </details>
+            <EmailExportGuide />
 
             <div>
               <label htmlFor="report-email-source" className="block text-xs font-medium text-gray-400 mb-1">
