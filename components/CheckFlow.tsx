@@ -5,6 +5,7 @@ import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
 import { parseEmailHeaders } from "@/lib/emailHeaders";
+import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
@@ -43,6 +44,7 @@ export default function CheckFlow() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(null);
 
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -161,6 +163,8 @@ export default function CheckFlow() {
       if (!res.ok) throw new Error("Server error");
       const data = await res.json() as { results: AnalyzedIdentifier[] };
       setResults(data.results ?? []);
+      const pr = analyseTrackingPixels(content);
+      setPixelReport(pr.hasTrackingPixels ? pr : null);
       setShareCopied(false);
       goForward("result");
     } catch (err) {
@@ -228,6 +232,7 @@ export default function CheckFlow() {
             initialScamEmail={headers.fromAddress || ids.scamEmail}
             initialScamReplyTo={headers.replyTo}
             initialAuth={{ spf: headers.spf, dkim: headers.dkim, dkimDomain: headers.dkimDomain, dmarc: headers.dmarc }}
+            initialPixelReport={pixelReport ?? undefined}
           />
         </div>
       </div>
@@ -264,6 +269,21 @@ export default function CheckFlow() {
                 </div>
               );
             })
+          )}
+
+          {pixelReport && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                <span aria-hidden="true">🔍</span>
+                <span className="uppercase tracking-wider">Tracking Pixels</span>
+              </div>
+              <div className="bg-amber-950/30 border border-amber-700/40 rounded-lg px-4 py-3 space-y-1.5">
+                <p className="text-amber-300 text-sm font-semibold">{pixelReport.summary}</p>
+                {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
+                  <p key={i} className="text-xs text-gray-300">• {note}</p>
+                ))}
+              </div>
+            </div>
           )}
 
           {(() => {
