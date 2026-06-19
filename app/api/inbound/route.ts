@@ -3,7 +3,7 @@ import { timingSafeEqual } from "crypto";
 import { analyzeContent } from "@/lib/scamDetector";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { parseEmailHeaders, analyseEmailIdentities } from "@/lib/emailHeaders";
-import { analyseTrackingPixels } from "@/lib/trackingPixel";
+import { analyseEmailTracking } from "@/lib/emailTracking";
 import { unwrapForwarded } from "@/lib/forwardedEmail";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
 import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
@@ -73,10 +73,15 @@ export async function POST(req: NextRequest) {
     const headers = parseEmailHeaders(original);
     const emailFlags = headers.fromAddress ? analyseEmailIdentities(headers).flags : [];
 
-    const pr = analyseTrackingPixels(original);
-    const pixelReport = pr.hasTrackingPixels ? pr : null;
+    const tracking = analyseEmailTracking(original);
+    const pixelReport = tracking.pixelReport.hasTrackingPixels ? tracking.pixelReport : null;
 
-    const reply = formatVerdictEmail({ results, emailFlags, pixelReport });
+    const reply = formatVerdictEmail({
+      results,
+      emailFlags,
+      pixelReport,
+      trackingFindings: tracking.findings,
+    });
 
     incrementCheckCount().catch(() => {});
 

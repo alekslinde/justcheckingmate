@@ -5,7 +5,8 @@ import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
 import { parseEmailHeaders, analyseEmailIdentities, summariseAuth, EmailHeaders } from "@/lib/emailHeaders";
-import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
+import { TrackingPixelReport } from "@/lib/trackingPixel";
+import { analyseEmailTracking, EmailTrackingReport } from "@/lib/emailTracking";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
@@ -58,6 +59,9 @@ export default function CheckFlow() {
   const [shareCopied, setShareCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(null);
+  // Broader tracking surface (pixels + click redirects, CSS beacons, read
+  // receipts, meta refresh, …). null until a check runs.
+  const [trackingReport, setTrackingReport] = useState<EmailTrackingReport | null>(null);
   // Email sender analysis, populated in runCheck when the pasted content parses
   // as email source (a real From address is present). null otherwise.
   const [emailReport, setEmailReport] = useState<{ headers: EmailHeaders; flags: string[] } | null>(null);
@@ -192,8 +196,9 @@ export default function CheckFlow() {
       if (!res.ok) throw new Error("Server error");
       const data = await res.json() as { results: AnalyzedIdentifier[] };
       setResults(data.results ?? []);
-      const pr = analyseTrackingPixels(content);
-      setPixelReport(pr.hasTrackingPixels ? pr : null);
+      const tracking = analyseEmailTracking(content);
+      setTrackingReport(tracking);
+      setPixelReport(tracking.pixelReport.hasTrackingPixels ? tracking.pixelReport : null);
       // If the pasted content is email source, surface the sender analysis
       // inline — a real From address is the signal that this is email, not a
       // bare URL/phone the generic check already covers.
@@ -379,6 +384,39 @@ export default function CheckFlow() {
               </>
             );
           })()}
+
+          {/* Broader tracking surface — pixels plus click redirects, CSS
+              beacons, read-receipt headers, meta refresh, etc. Sibling of the
+              breakdown so it renders even for a header-only email with no scored
+              identifiers. Shown when we found tracking, OR (as reassurance) when
+              this was email source that came up clean. Findings carry their own
+              copy; the values they surface are already non-clickable text. */}
+          {trackingReport && (trackingReport.hasTracking || !!emailReport) && (
+            <div className="space-y-2 border-t border-gray-800 pt-4">
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                {t("tracking.heading")}
+              </div>
+              {trackingReport.findings.length > 0 ? (
+                <>
+                  <ul className="space-y-1.5">
+                    {trackingReport.findings.map((f) => (
+                      <li key={f.kind} className="flex items-start gap-2.5 text-sm">
+                        <span className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
+                        <span className="min-w-0 flex-1">
+                          <span className="text-gray-300 font-medium">{f.label}</span>
+                          {f.count > 1 && <span className="text-gray-500"> ×{f.count}</span>}
+                          <span className="block text-xs text-gray-500">{f.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-emerald-400/90 pl-[18px]">{t("tracking.safe")}</p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">{t("tracking.none")}</p>
+              )}
+            </div>
+          )}
 
           {/* Email sender analysis — only when the pasted content parsed as
               email source. Surfaces the display-name/Reply-To/auth picture that

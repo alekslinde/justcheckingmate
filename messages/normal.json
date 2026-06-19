@@ -87,6 +87,9 @@
   "verdict.breakdown.heading": "What we checked",
   "verdict.breakdown.pixel": "Tracking pixel detected",
   "verdict.breakdown.reportEsp": "Report sender to {esp}",
+  "tracking.heading": "Tracking in this email",
+  "tracking.none": "No tracking mechanisms were triggered — and because we analysed the source without rendering it, nothing here ever phoned home.",
+  "tracking.safe": "Opening this in a previewing mail client could have triggered the items above. We analysed the source without rendering it, so none of them fired here.",
 
   "email.analysis.heading": "Email sender analysis",
   "email.analysis.from": "From:",

@@ -10,6 +10,7 @@
 
 import { AnalyzedIdentifier, CheckResult } from "@/lib/scamDetector";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
+import { TrackingFinding } from "@/lib/emailTracking";
 import { defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
 
 export type Verdict = CheckResult["verdict"];
@@ -105,6 +106,10 @@ export interface VerdictEmailInput {
   results: AnalyzedIdentifier[];
   emailFlags: string[];
   pixelReport: TrackingPixelReport | null;
+  // Broader tracking surface (pixels + click redirects, CSS beacons, read
+  // receipts, …). Optional so existing callers/tests keep working; when given,
+  // it supersedes the single pixel line in the "Why" section.
+  trackingFindings?: TrackingFinding[];
 }
 
 export interface VerdictEmail {
@@ -127,15 +132,16 @@ function escapeHtml(s: string): string {
 // Build the verdict reply. When there are no scored identifiers but sender flags
 // exist (header-only forward), the headline is driven by the flags' presence.
 export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
-  const { results, emailFlags, pixelReport } = input;
+  const { results, emailFlags, pixelReport, trackingFindings = [] } = input;
 
   const overall = composeVerdict(results, pixelReport);
-  // No scored identifiers: fall back to a verdict implied by sender flags /
-  // pixels so a header-only forward still gets a meaningful headline.
+  // No scored identifiers: fall back to a verdict implied by sender flags,
+  // pixels, or any other tracking so a header-only forward still gets a
+  // meaningful headline.
   let verdict: Verdict = overall?.verdict ?? "unknown";
   if (!overall) {
     if (emailFlags.length > 0) verdict = "suspicious";
-    else if (pixelReport) verdict = "suspicious";
+    else if (pixelReport || trackingFindings.length > 0) verdict = "suspicious";
     else verdict = "unknown";
   }
   const head = VERDICT_HEADLINE[verdict];
@@ -147,7 +153,13 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     return `${label}${value}: ${r.result.verdict.replace("_", " ")}`;
   });
   const flagLines = emailFlags.map((f) => defangFlag(f));
-  if (pixelReport?.summary) flagLines.push(`Tracking pixel: ${pixelReport.summary}`);
+  // Tracking: prefer the broader findings when present; otherwise fall back to
+  // the single pixel summary so older callers still surface pixels.
+  if (trackingFindings.length > 0) {
+    for (const f of trackingFindings) flagLines.push(`${f.label}: ${f.detail}`);
+  } else if (pixelReport?.summary) {
+    flagLines.push(`Tracking pixel: ${pixelReport.summary}`);
+  }
 
   const footer =
     "What to do next: don't click links or reply. If you've lost money or shared " +

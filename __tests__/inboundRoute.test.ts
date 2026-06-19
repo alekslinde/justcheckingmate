@@ -73,6 +73,28 @@ describe("POST /api/inbound — analysis", () => {
     expect(data.reply.text).not.toMatch(/http:\/\/ato-refund\.xyz/);
   });
 
+  it("surfaces broader tracking mechanisms from an attached original", async () => {
+    // Attachment forwards preserve the original's full headers AND body, so
+    // header-level (read-receipt) and body-level (pixel) tracking both survive.
+    const forward = [
+      "From: victim@gmail.com",
+      "Subject: Fwd: alert",
+      'Content-Type: multipart/mixed; boundary="B"',
+      "",
+      "--B",
+      "Content-Type: message/rfc822",
+      "",
+      "From: Bank <noreply@bank-evil.tk>",
+      "Disposition-Notification-To: spy@bank-evil.tk",
+      "",
+      '<img src="https://trk.bank-evil.tk/pixel/1" width="1" height="1">',
+      "--B--",
+    ].join("\n");
+    const data = await (await POST(inbound({ raw: forward, from: "victim@gmail.com" }))).json();
+    expect(data.source).toBe("attachment");
+    expect(data.reply.text).toMatch(/read-receipt request/i);
+  });
+
   it("skips (200, no reply) on empty raw", async () => {
     const res = await POST(inbound({ raw: "", from: "a@b.com" }));
     expect(res.status).toBe(200);
