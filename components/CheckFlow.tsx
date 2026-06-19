@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
-import { extractIdentifiers, defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
+import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
 import { parseEmailHeaders, analyseEmailIdentities, summariseAuth, EmailHeaders } from "@/lib/emailHeaders";
 import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
+import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
@@ -22,39 +23,15 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
   message: { icon: "💬", labelKey: "kind.message" },
 };
 
-// Severity ordering — higher wins when collapsing many identifiers into one
-// overall verdict. "unknown" sits just above "safe": it's not a clean pass,
-// but it's not a positive signal of a scam either.
-const VERDICT_RANK: Record<Verdict, number> = {
-  safe: 0,
-  unknown: 1,
-  suspicious: 2,
-  likely_scam: 3,
-};
-
-// Status-dot colour per verdict for the neutral breakdown rows.
+// Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
+// defangValue and defangFlag now live in lib/verdictSummary so the email reply
+// shares the exact same rules — see that module.
 const STATUS_DOT: Record<Verdict, string> = {
   safe:        "bg-green-500",
   unknown:     "bg-gray-500",
   suspicious:  "bg-yellow-500",
   likely_scam: "bg-red-500",
 };
-
-function defangValue(kind: AnalyzedIdentifier["kind"], value: string): string {
-  if (kind === "url")   return defang(value);
-  if (kind === "email") return defangEmail(value);
-  if (kind === "phone") return defangPhone(value);
-  return defangText(value);
-}
-
-// The identity-analysis flags embed raw email addresses and bare domains as
-// plain text. Defang both so the result card can never surface a live,
-// clickable address — mirroring how every other value on this page is shown.
-function defangFlag(flag: string): string {
-  return flag
-    .replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, (a) => defangEmail(a))
-    .replace(/\b[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+\b/g, (d) => d.replace(/\./g, "[.]"));
-}
 
 // kind → ScamType for prefilling the report form.
 function kindToType(kind: AnalyzedIdentifier["kind"], content: string): ScamType {
@@ -312,16 +289,14 @@ export default function CheckFlow() {
             // card below carries the payoff, so don't claim there's nothing.
             !emailReport && <p className="text-sm text-gray-400">{t("check.nothing")}</p>
           ) : (() => {
-            // One overall verdict drives the page: the worst identifier wins.
-            // A tracking pixel can nudge an otherwise-clean result up to
-            // "suspicious" — being silently tracked is itself a red flag.
+            // One overall verdict drives the page — composeVerdict applies the
+            // worst-identifier-wins + tracking-pixel-nudge rules, shared with
+            // the forward-to-us email reply so the two can't drift.
+            const composed = composeVerdict(results, pixelReport)!;
             const worst = results.reduce((acc, r) =>
               VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
             );
-            let overall = worst.result;
-            if (pixelReport && VERDICT_RANK[overall.verdict] < VERDICT_RANK.suspicious) {
-              overall = { ...overall, verdict: "suspicious", score: Math.max(overall.score, 40) };
-            }
+            const overall = { ...worst.result, ...composed };
 
             return (
               <>
@@ -448,21 +423,22 @@ export default function CheckFlow() {
           })()}
 
           {(() => {
-            // "Clean" means nothing flagged it — every identifier safe AND no
-            // tracking pixel (a pixel pushes the overall verdict to suspicious,
-            // so the CTA should match that, not the softer "report anyway").
-            const isClean = results.length > 0 && results.every((r) => r.result.verdict === "safe") && !pixelReport;
+            // "Clean" means nothing flagged it — every identifier safe, no
+            // tracking pixel, and no sender-spoofing flags. A pixel or a flag
+            // pushes the verdict up, so the CTA matches that (the stronger
+            // "report", not the softer "report anyway").
+            const clean = isClean(results, pixelReport, emailReport?.flags ?? []);
             return (
               <button
                 onClick={() => goForward("report")}
                 className={`w-full py-3 px-6 font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2 ${
-                  isClean
+                  clean
                     ? "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
                     : "bg-red-800 hover:bg-red-700 text-white"
                 }`}
               >
                 <span aria-hidden="true">🚨</span>
-                {isClean ? t("check.reportAnyway") : t("check.report")}
+                {clean ? t("check.reportAnyway") : t("check.report")}
               </button>
             );
           })()}
