@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getFeedStats } from "@/lib/reportStore";
-import { MOCK_FEED_STATS } from "@/lib/mockReports";
+import { MOCK_FEED_STATS } from "@/lib/fixtures/mockReports";
 
 export async function GET() {
   const stats = await getFeedStats();

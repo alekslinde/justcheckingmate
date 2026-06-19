@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
 import { parseEmailHeaders, analyseEmailIdentities, summariseAuth } from "@/lib/emailHeaders";
+import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
@@ -31,7 +32,7 @@ type Status = "idle" | "submitting" | "success" | "error";
 interface EmailAuth { spf: string; dkim: string; dkimDomain: string; dmarc: string }
 const EMPTY_AUTH: EmailAuth = { spf: "", dkim: "", dkimDomain: "", dmarc: "" };
 
-export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
+export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth, initialPixelReport }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth; initialPixelReport?: TrackingPixelReport } = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [type, setType] = useState<ScamType>(initialType ?? "url");
@@ -48,6 +49,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   // the SPF/DKIM/DMARC picture. Empty until a source is parsed.
   const [auth, setAuth] = useState<EmailAuth>(initialAuth ?? EMPTY_AUTH);
   const authSummary = summariseAuth(auth);
+  const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(initialPixelReport ?? null);
   const [contact, setContact] = useState("");
   const [hp, setHp] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -70,11 +72,13 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   // address and routing metadata on their device.
   function parseSource(raw: string) {
     setEmailSource(raw);
-    if (!raw.trim()) { setParseNote(null); setAuth(EMPTY_AUTH); return; }
+    if (!raw.trim()) { setParseNote(null); setAuth(EMPTY_AUTH); setPixelReport(null); return; }
     const h = parseEmailHeaders(raw);
     if (h.fromAddress) setScamEmail(h.fromAddress);
     if (h.replyTo) setScamReplyTo(h.replyTo);
     setAuth({ spf: h.spf, dkim: h.dkim, dkimDomain: h.dkimDomain, dmarc: h.dmarc });
+    const pr = analyseTrackingPixels(raw);
+    setPixelReport(pr.hasTrackingPixels ? pr : null);
     if (!h.fromAddress && !h.replyTo) {
       setParseNote(t("report.parse.notFound"));
       return;
@@ -142,6 +146,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
     setParseNote(null);
     setAuth(EMPTY_AUTH);
     setContact("");
+    setPixelReport(null);
     setReportId(null);
     setStatus("idle");
     loadedAt.current = Date.now();
@@ -296,6 +301,11 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           {authSummary && (
             <p className="text-gray-300 font-mono">
               <span className="text-gray-500">{t("report.extracted.auth")} </span>{authSummary}
+            </p>
+          )}
+          {pixelReport?.summary && (
+            <p className="text-amber-300/90 font-mono">
+              <span className="text-gray-500">Pixels: </span>{pixelReport.summary}
             </p>
           )}
           <p className="text-gray-500">{t("report.extracted.review")}</p>
@@ -467,6 +477,13 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
                   <span className="font-mono text-gray-300">{authSummary}</span>
                   <span className="text-gray-500"> {t("report.email.auth.attached")}</span>
                 </p>
+              )}
+              {pixelReport?.hasTrackingPixels && (
+                <div className="mt-2 space-y-1">
+                  {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
+                    <p key={i} className="text-xs text-amber-400">• {note}</p>
+                  ))}
+                </div>
               )}
             </div>
           </>
