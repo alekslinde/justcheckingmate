@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { analyseEmailTracking, TrackingKind } from "@/lib/emailTracking";
+import { MOCK_EMAILS_WITH_PIXELS } from "@/lib/fixtures/mockTrackingPixels";
 
 // Helper: assert a given tracking kind was (or wasn't) detected.
 function kinds(raw: string): TrackingKind[] {
@@ -81,5 +82,14 @@ describe("analyseEmailTracking", () => {
   it("never throws on malformed/empty input", () => {
     expect(() => analyseEmailTracking("")).not.toThrow();
     expect(() => analyseEmailTracking("<<<not really html")).not.toThrow();
+  });
+
+  it("detects every mechanism in the ALL_TRACKING_MECHANISMS fixture", () => {
+    const found = new Set(kinds(MOCK_EMAILS_WITH_PIXELS.ALL_TRACKING_MECHANISMS.content));
+    const expected: TrackingKind[] = [
+      "pixel", "click-redirect", "unique-url", "css-resource",
+      "read-receipt", "external-resource", "meta-refresh",
+    ];
+    for (const k of expected) expect(found).toContain(k);
   });
 });
