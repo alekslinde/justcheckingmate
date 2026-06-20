@@ -86,7 +86,11 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         onClick={openManual}
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-900/90 px-3 py-2 text-xs text-gray-300 shadow-lg backdrop-blur hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+        // Opaque, no backdrop-filter: mobile Safari mis-composites a fixed,
+        // semi-transparent backdrop-blur element in dark mode (renders as a grey
+        // block / fails to repaint on scroll). The chip sits on a near-black
+        // page, so the blur added almost nothing — dropping it is the reliable fix.
+        className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 shadow-lg hover:border-emerald-500 hover:text-emerald-400 transition-colors"
         aria-haspopup="dialog"
       >
         <span>{t("bug.button")}</span>
