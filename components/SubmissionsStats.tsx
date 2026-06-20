@@ -15,7 +15,7 @@ const TYPE_META: Record<string, { icon: string; labelKey: MessageKey }> = {
   email:  { icon: "📧", labelKey: "subs.type.email"  },
   phone:  { icon: "📞", labelKey: "subs.type.phone"  },
   qr:     { icon: "📷", labelKey: "subs.type.qr"     },
-  custom: { icon: "🤔", labelKey: "subs.type.custom" },
+  custom: { icon: "❓", labelKey: "subs.type.custom" },
 };
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────

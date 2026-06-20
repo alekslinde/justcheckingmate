@@ -36,7 +36,7 @@ const TYPE_OPTIONS: { value: string; labelKey: MessageKey; icon: string }[] = [
   ...REPORT_TYPES.map((t) => ({
     value: t,
     labelKey: `subs.type.${t}` as MessageKey,
-    icon: { url: "🔗", sms: "📱", email: "📧", phone: "📞", qr: "📷", custom: "🤔" }[t] ?? "🔍",
+    icon: { url: "🔗", sms: "📱", email: "📧", phone: "📞", qr: "📷", custom: "❓" }[t] ?? "🔍",
   })),
 ];
 
@@ -193,14 +193,11 @@ export default function SubmissionsBrowser() {
       {/* Header */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
         <div className="max-w-2xl mx-auto px-4 py-8">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl" aria-hidden="true">📋</span>
-            <div>
-              <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
-                {t("subs.title")}
-              </h1>
-              <p className="text-sm text-gray-400">{t("subs.subtitle")}</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
+              {t("subs.title")}
+            </h1>
+            <p className="text-sm text-gray-400">{t("subs.subtitle")}</p>
           </div>
         </div>
       </div>
@@ -300,7 +297,6 @@ export default function SubmissionsBrowser() {
           </>
         ) : reports.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <div className="text-4xl" aria-hidden="true">🦘</div>
             <p className="text-gray-300 font-medium">{t("subs.empty.title")}</p>
             <p className="text-sm text-gray-400">
               {search ? t("subs.empty.searchHint") : t("subs.empty.filterHint")}
@@ -389,7 +385,6 @@ export default function SubmissionsBrowser() {
                       <CopyId id={r.id} />
                       {r.location && (
                         <p className="text-xs text-gray-600 shrink-0">
-                          <span aria-hidden="true">📍 </span>
                           {t("subs.reportedFrom", { location: r.location })}
                         </p>
                       )}

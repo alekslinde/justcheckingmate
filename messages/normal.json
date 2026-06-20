@@ -57,7 +57,7 @@
   "check.forward.note": "Forwarding sends the email through your mail provider's servers (unlike pasting, which stays on your device). For anything highly sensitive, paste it instead.",
   "check.forward.cta": "Forward to {address}",
   "check.analysing": "Analysing…",
-  "check.submit": "Check This Now 🔍",
+  "check.submit": "Check This Now",
   "check.serverError": "Something went wrong on our end — please try again.",
 
   "verdict.safe.label": "Looks Good",
@@ -190,7 +190,7 @@
   "report.contact.aboutLink": "How we handle your data",
   "report.error": "Something went wrong. Please try again.",
   "report.submitting": "Lodging your report...",
-  "report.submit": "Report This Scam 🚨",
+  "report.submit": "Report This Scam",
   "report.success.title": "Thank you — you've helped protect others.",
   "report.success.body": "Your report has been logged. Every submission helps warn others about this scam.",
   "report.success.reference": "Report reference",

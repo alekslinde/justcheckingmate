@@ -17,7 +17,7 @@ const REPORT_TYPES: { value: ScamType; labelKey: MessageKey; icon: string }[] = 
   { value: "email",  labelKey: "report.type.email",  icon: "📧" },
   { value: "phone",  labelKey: "report.type.phone",  icon: "📞" },
   { value: "qr",     labelKey: "report.type.qr",     icon: "📷" },
-  { value: "custom", labelKey: "report.type.custom", icon: "🤔" },
+  { value: "custom", labelKey: "report.type.custom", icon: "❓" },
 ];
 
 const PLACEHOLDER_KEYS: Record<ScamType, MessageKey> = {
@@ -164,7 +164,12 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   if (status === "success") {
     return (
       <div className="space-y-5 text-center py-4">
-        <div className="text-5xl" aria-hidden="true">🦘</div>
+        <div
+          className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-900/40 border border-emerald-700 text-2xl text-emerald-400"
+          aria-hidden="true"
+        >
+          ✓
+        </div>
         <div>
           <h3 className="font-bold text-green-400 text-lg mb-1">{t("report.success.title")}</h3>
           <p className="text-gray-300 text-sm">{t("report.success.body")}</p>
@@ -251,7 +256,6 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       {/* Stats badge */}
       {totalReports !== null && (
         <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
-          <span className="text-emerald-400" aria-hidden="true">📊</span>
           <span>{bold(t("report.stats", { n: totalReports.toLocaleString() }))}</span>
         </div>
       )}

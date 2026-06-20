@@ -8,7 +8,8 @@ export default function LangToggle() {
   // Label shows what you'll GET after clicking, not the current state.
   // Standard toggle convention: button describes the destination.
   const label = mode === "normal" ? "Aussie mode" : "Standard mode";
-  const icon  = mode === "normal" ? "🦘" : "🌐";
+  // Short text affordance for small screens where the label is hidden.
+  const shortLabel = mode === "normal" ? "AU" : "EN";
   const title = mode === "normal"
     ? "Switch to Aussie-friendly language"
     : "Switch to standard language";
@@ -20,7 +21,7 @@ export default function LangToggle() {
       aria-label={title}
       className="min-h-[44px] flex items-center gap-1.5 px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
     >
-      <span aria-hidden="true">{icon}</span>
+      <span className="sm:hidden font-semibold">{shortLabel}</span>
       <span className="hidden sm:inline">{label}</span>
     </button>
   );

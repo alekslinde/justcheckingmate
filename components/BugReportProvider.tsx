@@ -89,8 +89,7 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
         className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-900/90 px-3 py-2 text-xs text-gray-300 shadow-lg backdrop-blur hover:border-emerald-500 hover:text-emerald-400 transition-colors"
         aria-haspopup="dialog"
       >
-        <span aria-hidden="true">🐞</span>
-        <span className="hidden sm:inline">{t("bug.button")}</span>
+        <span>{t("bug.button")}</span>
       </button>
       {open && (
         <BugModal key={session} diag={diag} auto={auto} onClose={() => setOpen(false)} />
@@ -187,7 +186,6 @@ function BugModal({
       <div className="p-6 space-y-4">
         {status === "sent" ? (
           <div className="space-y-4 text-center py-2">
-            <div className="text-4xl" aria-hidden="true">🙏</div>
             <h2 id="bug-modal-title" className="text-lg font-bold text-emerald-400">
               {t("bug.sent.title")}
             </h2>

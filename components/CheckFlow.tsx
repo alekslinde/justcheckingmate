@@ -340,7 +340,6 @@ export default function CheckFlow() {
                     {pixelReport && (
                       <li className="flex items-center gap-2.5 text-sm">
                         <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
-                        <span aria-hidden="true">🔍</span>
                         <span className="text-gray-400 flex-1">{t("verdict.breakdown.pixel")}</span>
                         <span className="shrink-0 text-gray-300 font-medium">{pixelReport.pixels.length}</span>
                       </li>
@@ -477,7 +476,6 @@ export default function CheckFlow() {
                     : "bg-red-800 hover:bg-red-700 text-white"
                 }`}
               >
-                <span aria-hidden="true">🚨</span>
                 {clean ? t("check.reportAnyway") : t("check.report")}
               </button>
             );
@@ -488,7 +486,6 @@ export default function CheckFlow() {
               onClick={shareResults}
               className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 flex items-center justify-center gap-2"
             >
-              <span aria-hidden="true">📤</span>
               {shareCopied ? t("check.shareCopied") : t("check.share")}
             </button>
           )}

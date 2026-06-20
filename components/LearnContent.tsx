@@ -4,10 +4,13 @@ import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { AUTH_LEGEND, StaticAuthPill } from "@/components/AuthBadges";
 
+// Type icons mirror the input/report type pickers used across the app, so they
+// stay as a consistent scanning aid. The tactic/source/flag lists used purely
+// decorative emoji and now lead with a neutral marker instead.
 const SCAM_TYPE_ICONS = ["🔗", "📱", "📧", "📞", "📷"];
-const TACTIC_ICONS = ["⏰", "🎭", "🎁", "🔐", "💸", "❤️"];
-const SOURCE_ICONS = ["📱", "📧", "📞", "🛒", "🔎", "💬"];
-const FLAG_ICONS = ["🏦", "⏰", "🎁", "🔗", "📱", "💳", "📞", "📎"];
+const TACTIC_COUNT = 6;
+const SOURCE_COUNT = 6;
+const FLAG_COUNT = 8;
 
 const AGENCIES = [
   { name: "Scamwatch (ACCC)", abbr: null, site: "scamwatch.gov.au", href: "https://www.scamwatch.gov.au" },
@@ -52,9 +55,9 @@ export default function LearnContent() {
         <h2 className={H2}>{t("learn.tactics.heading")}</h2>
         <p className="text-sm text-gray-400">{t("learn.tactics.intro")}</p>
         <div className="space-y-2">
-          {TACTIC_ICONS.map((icon, i) => (
+          {Array.from({ length: TACTIC_COUNT }, (_, i) => (
             <div key={i} className="flex items-start gap-3">
-              <span className="text-lg shrink-0" aria-hidden="true">{icon}</span>
+              <span className="text-emerald-400/70 mt-1 shrink-0" aria-hidden="true">›</span>
               <p className="text-sm text-gray-300">
                 <span className="font-semibold text-gray-100">{t(key(`learn.tactics.${i + 1}.title`))}.</span>{" "}
                 {t(key(`learn.tactics.${i + 1}.desc`))}
@@ -68,9 +71,9 @@ export default function LearnContent() {
       <section className={SECTION}>
         <h2 className={H2}>{t("learn.sources.heading")}</h2>
         <div className="grid sm:grid-cols-2 gap-2">
-          {SOURCE_ICONS.map((icon, i) => (
+          {Array.from({ length: SOURCE_COUNT }, (_, i) => (
             <div key={i} className="flex items-start gap-2.5">
-              <span className="text-lg shrink-0" aria-hidden="true">{icon}</span>
+              <span className="text-emerald-400/70 mt-0.5 shrink-0" aria-hidden="true">›</span>
               <p className="text-sm text-gray-300">
                 <span className="font-medium text-gray-100">{t(key(`learn.sources.${i + 1}.title`))}.</span>{" "}
                 <span className="text-gray-400">{t(key(`learn.sources.${i + 1}.desc`))}</span>
@@ -105,9 +108,9 @@ export default function LearnContent() {
       <section className={SECTION}>
         <h2 className={H2}>{t("learn.flags.heading")}</h2>
         <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-300 list-none">
-          {FLAG_ICONS.map((icon, i) => (
+          {Array.from({ length: FLAG_COUNT }, (_, i) => (
             <li key={i} className="flex items-start gap-2">
-              <span className="shrink-0" aria-hidden="true">{icon}</span>
+              <span className="text-amber-400 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
               <span>{t(key(`learn.flags.${i + 1}`))}</span>
             </li>
           ))}
@@ -149,7 +152,6 @@ export default function LearnContent() {
       {/* Where to report + disclaimer */}
       <section className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-5">
         <div className="flex items-start gap-3">
-          <span className="text-2xl shrink-0" aria-hidden="true">🇦🇺</span>
           <div className="space-y-2 text-sm">
             <p className="font-semibold text-emerald-400">{t("learn.report.heading")}</p>
             <p className="text-gray-300">{bold(t("learn.report.body"))}</p>
