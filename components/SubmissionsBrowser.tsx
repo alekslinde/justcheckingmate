@@ -31,12 +31,11 @@ function CopyId({ id }: { id: string }) {
   );
 }
 
-const TYPE_OPTIONS: { value: string; labelKey: MessageKey; icon: string }[] = [
-  { value: "all",    labelKey: "subs.type.all",    icon: "🔍" },
+const TYPE_OPTIONS: { value: string; labelKey: MessageKey }[] = [
+  { value: "all", labelKey: "subs.type.all" },
   ...REPORT_TYPES.map((t) => ({
     value: t,
     labelKey: `subs.type.${t}` as MessageKey,
-    icon: { url: "🔗", sms: "📱", email: "📧", phone: "📞", qr: "📷", custom: "❓" }[t] ?? "🔍",
   })),
 ];
 
@@ -248,7 +247,7 @@ export default function SubmissionsBrowser() {
                 className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
               >
                 {TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.icon} {t(opt.labelKey)}</option>
+                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
                 ))}
               </select>
             </div>
@@ -319,11 +318,13 @@ export default function SubmissionsBrowser() {
                 })();
 
                 // All reporter-supplied scam identifiers, in display priority order.
-                const identifiers: { icon: string; value: string }[] = [
-                  r.scamUrl   && { icon: "🔗", value: r.scamUrl   },
-                  r.scamPhone && { icon: "📞", value: r.scamPhone },
-                  r.scamEmail && { icon: "📧", value: r.scamEmail },
-                ].filter(Boolean) as { icon: string; value: string }[];
+                // A short text label replaces the former per-row emoji — it reads
+                // the same way the "Replies to" row below already does.
+                const identifiers: { labelKey: MessageKey; value: string }[] = [
+                  r.scamUrl   && { labelKey: "subs.id.link"  as MessageKey, value: r.scamUrl   },
+                  r.scamPhone && { labelKey: "subs.id.phone" as MessageKey, value: r.scamPhone },
+                  r.scamEmail && { labelKey: "subs.id.email" as MessageKey, value: r.scamEmail },
+                ].filter(Boolean) as { labelKey: MessageKey; value: string }[];
 
                 return (
                   <li key={r.id} className="px-5 py-4 space-y-3">
@@ -331,7 +332,6 @@ export default function SubmissionsBrowser() {
                     {/* ── Row 1: type label · repetition badge · age ── */}
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span aria-hidden="true" className="shrink-0 text-base">{opt.icon}</span>
                         <span className="text-sm font-semibold text-gray-300">{t(opt.labelKey)}</span>
                         {r.matchCount > 1 && (
                           <span className="shrink-0 border text-xs font-semibold px-2 py-0.5 rounded-full bg-red-900/50 text-red-300 border-red-700/50">
@@ -345,9 +345,9 @@ export default function SubmissionsBrowser() {
                     {/* ── Row 2: scam identifiers (reporter-supplied) ── */}
                     {identifiers.length > 0 && (
                       <div className="space-y-1">
-                        {identifiers.map(({ icon, value }, i) => (
+                        {identifiers.map(({ labelKey, value }, i) => (
                           <div key={i} className="flex items-center gap-2">
-                            <span aria-hidden="true" className="shrink-0 text-sm">{icon}</span>
+                            <span className="shrink-0 text-xs text-gray-500">{t(labelKey)}</span>
                             <SafeDisplay
                               value={value}
                               className={`font-mono break-all ${i === 0 ? "text-sm text-amber-300" : "text-xs text-amber-300/70"}`}
@@ -356,7 +356,6 @@ export default function SubmissionsBrowser() {
                         ))}
                         {r.scamReplyTo && (
                           <div className="flex items-center gap-2 pl-1">
-                            <span aria-hidden="true" className="shrink-0 text-sm">↩</span>
                             <span className="text-xs text-gray-500 shrink-0">{t("subs.repliesTo")}</span>
                             <SafeDisplay value={r.scamReplyTo} className="font-mono text-xs text-amber-300/70 break-all" />
                           </div>
