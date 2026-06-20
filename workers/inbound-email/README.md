@@ -15,6 +15,10 @@ analyses it in memory and returns a verdict; nothing is persisted but an
 anonymous counter. Replies can only go back to the original sender, so the
 Worker cannot be abused as an open relay.
 
+> **Forking this?** The auto-reply is an abuse surface. The mitigations here
+> (reply-only, webhook secret, per-sender rate limit, analyse-and-discard) are
+> mandatory — see [`SECURITY.md`](../../SECURITY.md) before you deploy a copy.
+
 ## Deployment model
 
 Two **independent** deploy targets — neither deploys the other:
