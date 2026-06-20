@@ -57,7 +57,7 @@
   "check.forward.note": "Forwarding sends the email through your mail provider's servers (unlike pasting, which stays on your device). For anything highly sensitive, paste it instead.",
   "check.forward.cta": "Forward to {address}",
   "check.analysing": "Analysing…",
-  "check.submit": "Check This Now 🔍",
+  "check.submit": "Check This Now",
   "check.serverError": "Something went wrong on our end — please try again.",
 
   "verdict.safe.label": "Looks Good",
@@ -190,7 +190,7 @@
   "report.contact.aboutLink": "How we handle your data",
   "report.error": "Something went wrong. Please try again.",
   "report.submitting": "Lodging your report...",
-  "report.submit": "Report This Scam 🚨",
+  "report.submit": "Report This Scam",
   "report.success.title": "Thank you — you've helped protect others.",
   "report.success.body": "Your report has been logged. Every submission helps warn others about this scam.",
   "report.success.reference": "Report reference",
@@ -231,6 +231,9 @@
   "subs.empty.searchHint": "Try a different search term",
   "subs.empty.filterHint": "Try a different type or time period",
 
+  "subs.id.link": "Link",
+  "subs.id.phone": "Phone",
+  "subs.id.email": "Email",
   "subs.repliesTo": "replies to",
   "subs.reportedFrom": "Reported from {location}",
   "subs.pagination.label": "Report pages",
@@ -349,5 +352,6 @@
   "learn.caught.4.action": "Disconnect from the internet, uninstall it, run a security scan, and change important passwords from a different, trusted device.",
   "learn.caught.outro": "Then report it to **Scamwatch** and **ReportCyber**, and tell your bank. If you're unsure where to start, IDCARE can walk you through it.",
   "learn.report.heading": "Where to report a scam",
-  "learn.report.body": "Reporting helps authorities warn others and disrupt scammers. This tool gives a best-effort check only — **it can't guarantee it catches every scam**, so trust your instincts too."
+  "learn.report.body": "Reporting helps authorities warn others and disrupt scammers. This tool gives a best-effort check only — **it can't guarantee it catches every scam**, so trust your instincts too.",
+  "learn.footer.cta": "Check or report a scam →"
 }

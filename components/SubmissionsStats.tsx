@@ -9,13 +9,13 @@ import { fmt } from "@/lib/formatters";
 // the visuals carry no information and just look broken.
 const SPARKLINE_MIN = 10;
 
-const TYPE_META: Record<string, { icon: string; labelKey: MessageKey }> = {
-  url:    { icon: "🔗", labelKey: "subs.type.url"    },
-  sms:    { icon: "📱", labelKey: "subs.type.sms"    },
-  email:  { icon: "📧", labelKey: "subs.type.email"  },
-  phone:  { icon: "📞", labelKey: "subs.type.phone"  },
-  qr:     { icon: "📷", labelKey: "subs.type.qr"     },
-  custom: { icon: "🤔", labelKey: "subs.type.custom" },
+const TYPE_META: Record<string, { labelKey: MessageKey }> = {
+  url:    { labelKey: "subs.type.url"    },
+  sms:    { labelKey: "subs.type.sms"    },
+  email:  { labelKey: "subs.type.email"  },
+  phone:  { labelKey: "subs.type.phone"  },
+  qr:     { labelKey: "subs.type.qr"     },
+  custom: { labelKey: "subs.type.custom" },
 };
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
@@ -86,7 +86,6 @@ function TypeBars({ byType }: { byType: FeedStats["byType"] }) {
         const pct = Math.round((count / max) * 100);
         return (
           <li key={type} className="flex items-center gap-2 text-xs">
-            <span className="w-4 shrink-0 text-center" aria-hidden="true">{meta.icon}</span>
             <span className="w-24 shrink-0 text-gray-400 truncate">{t(meta.labelKey)}</span>
             <div className="flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden">
               <div
@@ -136,9 +135,10 @@ export default function SubmissionsStats() {
 
       {showCharts && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-gray-800">
-          {/* Sparkline panel */}
+          {/* Sparkline panel — flex-end so the graph hugs the bottom of the
+              panel when the type-breakdown column makes the row taller. */}
           {stats.byDay.length >= 2 && (
-            <div className="bg-gray-900 px-4 pt-3 pb-2 space-y-1">
+            <div className="bg-gray-900 px-4 pt-3 pb-2 flex flex-col justify-end space-y-1">
               <Sparkline byDay={stats.byDay} />
             </div>
           )}

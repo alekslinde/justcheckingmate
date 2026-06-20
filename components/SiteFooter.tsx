@@ -13,7 +13,6 @@ export default function SiteFooter() {
       <div className="max-w-2xl mx-auto px-4 pt-6 pb-0 text-center text-sm text-gray-300 space-y-2">
         <p>
           {t("footer.built")}{" "}
-          <span aria-hidden="true">🦘</span>{" "}
           {t("footer.by")}{" "}
           <a
             href="https://alekslinde.com"

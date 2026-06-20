@@ -16,6 +16,47 @@ import EmailExportGuide from "./EmailExportGuide";
 type Step = "input" | "result" | "report";
 type Verdict = AnalyzedIdentifier["result"]["verdict"];
 
+// Inline stroke icons for the upload actions — kept local (no icon-library
+// dependency for three glyphs). They inherit the button's text colour via
+// currentColor, so hover/disabled states need no extra wiring.
+const ICON = { className: "w-6 h-6", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+
+function CameraIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+function ImageIcon() {
+  return (
+    <svg {...ICON}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="1.5" />
+      <path d="m21 15-4.5-4.5L5 21" />
+    </svg>
+  );
+}
+
+function EmailFileIcon() {
+  return (
+    <svg {...ICON}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3.5 7 8.5 6 8.5-6" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg {...ICON} className="w-6 h-6 animate-spin">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
 const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: MessageKey }> = {
   url:     { icon: "🔗", labelKey: "kind.url" },
   email:   { icon: "📧", labelKey: "kind.email" },
@@ -340,7 +381,6 @@ export default function CheckFlow() {
                     {pixelReport && (
                       <li className="flex items-center gap-2.5 text-sm">
                         <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
-                        <span aria-hidden="true">🔍</span>
                         <span className="text-gray-400 flex-1">{t("verdict.breakdown.pixel")}</span>
                         <span className="shrink-0 text-gray-300 font-medium">{pixelReport.pixels.length}</span>
                       </li>
@@ -477,7 +517,6 @@ export default function CheckFlow() {
                     : "bg-red-800 hover:bg-red-700 text-white"
                 }`}
               >
-                <span aria-hidden="true">🚨</span>
                 {clean ? t("check.reportAnyway") : t("check.report")}
               </button>
             );
@@ -488,7 +527,6 @@ export default function CheckFlow() {
               onClick={shareResults}
               className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 flex items-center justify-center gap-2"
             >
-              <span aria-hidden="true">📤</span>
               {shareCopied ? t("check.shareCopied") : t("check.share")}
             </button>
           )}
@@ -523,7 +561,7 @@ export default function CheckFlow() {
           disabled={busy}
           className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          <span aria-hidden="true" className="text-2xl">📷</span>
+          <CameraIcon />
           <span className="font-medium text-sm text-center">{t("check.takePhoto")}</span>
           <span className="text-xs text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
         </button>
@@ -534,7 +572,7 @@ export default function CheckFlow() {
           aria-busy={uploadLoading}
           className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          <span aria-hidden="true" className="text-2xl">{uploadLoading ? "⏳" : "🖼️"}</span>
+          {uploadLoading ? <SpinnerIcon /> : <ImageIcon />}
           <span className="font-medium text-sm text-center">{t("check.uploadImage")}</span>
           <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadImageDesc")}</span>
         </button>
@@ -545,7 +583,7 @@ export default function CheckFlow() {
           disabled={busy}
           className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          <span aria-hidden="true" className="text-2xl">📨</span>
+          <EmailFileIcon />
           <span className="font-medium text-sm text-center">{t("check.uploadEml")}</span>
           <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadEmlDesc")}</span>
         </button>

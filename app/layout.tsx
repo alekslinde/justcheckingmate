@@ -24,7 +24,7 @@ const SITE_URL =
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "http://localhost:3000");
 
-const TITLE = "Just Checking, Mate 🦘 — Aussie Scam Detector";
+const TITLE = "Just Checking, Mate — Aussie Scam Detector";
 const DESCRIPTION =
   "Australia's no-nonsense scam detector. Check links, texts, emails and calls before you act.";
 

@@ -23,7 +23,7 @@
   "check.forward.cta": "Forward to {address}",
   "check.placeholder": "Paste the sus stuff here — link, number, text message, whatever you've got…",
   "check.analysing": "Checking it out…",
-  "check.submit": "Just Checking, Mate! 🔍",
+  "check.submit": "Just Checking, Mate!",
   "check.serverError": "Strewth, something went wrong on our end. Give it another crack.",
 
   "verdict.safe.label": "Looks Alright, Mate",
@@ -67,7 +67,7 @@
   "report.valuable": "Your report's gold. Every one helps raise the alarm and keeps the next person from getting stung.",
   "report.ids.hint": "Grab any contact details so others can spot the same scam a mile off.",
   "report.error": "Strewth, something went wrong. Give it another crack.",
-  "report.submit": "Report This Mongrel 🚨",
+  "report.submit": "Report This Mongrel",
   "report.success.title": "Good on ya — you've helped protect others.",
   "report.success.body": "Your report's been logged. Every one helps warn the next person about this scam.",
   "report.success.total": "{n} reports lodged by Aussies like you.",
@@ -85,5 +85,6 @@
   "learn.caught.intro": "Don't panic, and don't be embarrassed — this happens to switched-on people too. Move quick, based on what you shared.",
   "learn.handle.1": "**Slow down.** No legit mob minds you taking your time to check.",
   "learn.handle.5": "**Block & delete** the mongrel once you're sure.",
-  "learn.report.body": "Reporting helps the authorities warn others and put scammers out of business. This tool gives a best-effort check only — **it can't promise to catch every scam** — so trust your gut too."
+  "learn.report.body": "Reporting helps the authorities warn others and put scammers out of business. This tool gives a best-effort check only — **it can't promise to catch every scam** — so trust your gut too.",
+  "learn.footer.cta": "Check or dob in a scam →"
 }

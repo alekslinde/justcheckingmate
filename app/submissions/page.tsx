@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import SubmissionsBrowser from "@/components/SubmissionsBrowser";
 
 export const metadata: Metadata = {
-  title: "Community Submissions — Just Checking, Mate 🦘",
+  title: "Community Submissions — Just Checking, Mate",
   description: "Scams reported by Australians — browse and search community-submitted scam reports.",
 };
 

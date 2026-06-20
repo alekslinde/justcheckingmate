@@ -14,9 +14,11 @@ export default function SiteHeader() {
           href="/"
           className="flex items-center gap-1.5 font-black text-emerald-400 tracking-tight py-3 text-sm shrink-0 min-w-0"
         >
+          {/* Single brand mark — the kangaroo lives here and nowhere else */}
+          <span aria-hidden="true">🦘</span>
           {/* Abbreviate on very small screens so nav links aren't squeezed out */}
           <span className="hidden xs:inline">Just Checking, Mate</span>
-          <span className="xs:hidden" aria-hidden="true">JCM ✓</span>
+          <span className="xs:hidden">JCM</span>
         </Link>
         <nav className="flex items-center gap-0.5 min-w-0">
           {/* Min 44px tap target on each nav item */}
