@@ -6,6 +6,7 @@ import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
 import { parseEmailHeaders, summariseAuth } from "@/lib/emailHeaders";
 import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
+import { stripReporterHeaders } from "@/lib/piiScrubber";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
@@ -288,6 +289,11 @@ export default function CheckFlow() {
     // Prefer the unwrapped headers from the shared analysis so a forwarded email
     // prefills the original scammer's From/Reply-To, not the forwarder's.
     const headers = emailAnalysis?.headers ?? parseEmailHeaders(content);
+    // Strip the reporter's own delivery headers (Delivered-To, Received chain,
+    // etc.) before prefilling the report form — the user shouldn't see, or be
+    // asked to submit, their own mailbox address or relay IPs. The server scrubs
+    // again on submit; this also keeps the displayed content honest.
+    const reportContent = stripReporterHeaders(content);
     const primary = results[0];
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
@@ -307,7 +313,7 @@ export default function CheckFlow() {
                 ? "email"
                 : primary ? kindToType(primary.kind, content) : detectType(content)
             }
-            initialContent={content}
+            initialContent={reportContent}
             initialScamUrl={ids.scamUrl}
             initialScamPhone={ids.scamPhone}
             initialScamEmail={headers.fromAddress || ids.scamEmail}
