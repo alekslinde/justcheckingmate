@@ -41,7 +41,9 @@ function headerValue(headerBlock: string, name: string): string {
   return unfolded.match(re)?.[1].trim() ?? "";
 }
 
-function splitHeadersBody(raw: string): { headerBlock: string; body: string } {
+// Split a raw email into its header block and body at the first blank line,
+// accounting for the CRLF-or-LF separator length. Shared with emailTracking.
+export function splitHeadersBody(raw: string): { headerBlock: string; body: string } {
   const idx = raw.search(/\r?\n\r?\n/);
   if (idx === -1) return { headerBlock: raw, body: "" };
   const sepLen = raw.slice(idx).match(/^\r?\n\r?\n/)?.[0].length ?? 2;

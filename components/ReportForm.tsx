@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
-import { parseEmailHeaders, analyseEmailIdentities, summariseAuth } from "@/lib/emailHeaders";
-import { analyseEmailTracking, EmailTrackingReport } from "@/lib/emailTracking";
-import { unwrapForwarded } from "@/lib/forwardedEmail";
+import { summariseAuth } from "@/lib/emailHeaders";
+import { EmailTrackingReport } from "@/lib/emailTracking";
+import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
@@ -56,7 +56,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   // tracking immediately; re-derived whenever a source is pasted/parsed.
   const [trackingReport, setTrackingReport] = useState<EmailTrackingReport | null>(() => {
     if (!initialContent?.trim()) return null;
-    const tr = analyseEmailTracking(unwrapForwarded(initialContent).raw);
+    const tr = analyseEmailSource(initialContent).tracking;
     return tr.hasTracking ? tr : null;
   });
   const [contact, setContact] = useState("");
@@ -82,20 +82,18 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   function parseSource(raw: string) {
     setEmailSource(raw);
     if (!raw.trim()) { setParseNote(null); setAuth(EMPTY_AUTH); setTrackingReport(null); return; }
-    // If this is a forwarded email, analyse the ORIGINAL scam inside it, not the
-    // forwarder's own headers — same unwrap the inbound path uses.
-    const { raw: original } = unwrapForwarded(raw);
-    const h = parseEmailHeaders(original);
+    // Shared analysis: unwraps a forwarded email to the original first, so the
+    // fields autofill the scammer's From/Reply-To, not the forwarder's.
+    const { headers: h, identityFlags, tracking } = analyseEmailSource(raw);
     if (h.fromAddress) setScamEmail(h.fromAddress);
     if (h.replyTo) setScamReplyTo(h.replyTo);
     setAuth({ spf: h.spf, dkim: h.dkim, dkimDomain: h.dkimDomain, dmarc: h.dmarc });
-    setTrackingReport(analyseEmailTracking(original));
+    setTrackingReport(tracking);
     if (!h.fromAddress && !h.replyTo) {
       setParseNote(t("report.parse.notFound"));
       return;
     }
-    const { flags } = analyseEmailIdentities(h);
-    setParseNote(flags.length > 0 ? `⚠ ${flags[0]}` : t("report.parse.ok"));
+    setParseNote(identityFlags.length > 0 ? `⚠ ${identityFlags[0]}` : t("report.parse.ok"));
   }
 
   async function handleEmlFile(file: File) {

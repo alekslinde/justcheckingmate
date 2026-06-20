@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { analyzeContent } from "@/lib/scamDetector";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
-import { parseEmailHeaders, analyseEmailIdentities } from "@/lib/emailHeaders";
-import { analyseEmailTracking } from "@/lib/emailTracking";
-import { unwrapForwarded } from "@/lib/forwardedEmail";
+import { analyseEmailSource } from "@/lib/emailSource";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
 import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
 
@@ -63,22 +61,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Reach the ORIGINAL scam inside the forward before analysing — the
-    // top-level headers belong to the forwarder, not the scammer.
-    const { raw: original, source } = unwrapForwarded(raw);
+    // Reach the ORIGINAL scam inside the forward and run the shared analysis —
+    // the top-level headers belong to the forwarder, not the scammer.
+    const { source, original, identityFlags, tracking } = analyseEmailSource(raw);
 
     const blocklist = await getUrlhausBlocklist();
     const results = await analyzeContent(original, blocklist);
 
-    const headers = parseEmailHeaders(original);
-    const emailFlags = headers.fromAddress ? analyseEmailIdentities(headers).flags : [];
-
-    const tracking = analyseEmailTracking(original);
     const pixelReport = tracking.pixelReport.hasTrackingPixels ? tracking.pixelReport : null;
 
     const reply = formatVerdictEmail({
       results,
-      emailFlags,
+      emailFlags: identityFlags,
       pixelReport,
       trackingFindings: tracking.findings,
     });

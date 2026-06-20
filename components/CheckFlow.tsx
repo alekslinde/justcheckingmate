@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
-import { parseEmailHeaders, analyseEmailIdentities, summariseAuth, EmailHeaders } from "@/lib/emailHeaders";
-import { TrackingPixelReport } from "@/lib/trackingPixel";
-import { analyseEmailTracking, EmailTrackingReport } from "@/lib/emailTracking";
+import { parseEmailHeaders, summariseAuth } from "@/lib/emailHeaders";
+import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
@@ -58,13 +57,17 @@ export default function CheckFlow() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(null);
-  // Broader tracking surface (pixels + click redirects, CSS beacons, read
-  // receipts, meta refresh, …). null until a check runs.
-  const [trackingReport, setTrackingReport] = useState<EmailTrackingReport | null>(null);
-  // Email sender analysis, populated in runCheck when the pasted content parses
-  // as email source (a real From address is present). null otherwise.
-  const [emailReport, setEmailReport] = useState<{ headers: EmailHeaders; flags: string[] } | null>(null);
+  // Full email-source analysis (unwrap → headers → identity flags → tracking),
+  // populated in runCheck. null until a check runs. Everything the result page
+  // needs (pixel report, tracking findings, sender headers/flags) is derived
+  // from this single source of truth.
+  const [emailAnalysis, setEmailAnalysis] = useState<EmailSourceAnalysis | null>(null);
+  // The sender card shows only when the content actually parsed as email (a real
+  // From address). The tracking section can show without one.
+  const hasSender = !!emailAnalysis?.headers.fromAddress;
+  const pixelReport =
+    emailAnalysis?.tracking.pixelReport.hasTrackingPixels ? emailAnalysis.tracking.pixelReport : null;
+  const trackingReport = emailAnalysis?.tracking ?? null;
 
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -196,18 +199,10 @@ export default function CheckFlow() {
       if (!res.ok) throw new Error("Server error");
       const data = await res.json() as { results: AnalyzedIdentifier[] };
       setResults(data.results ?? []);
-      const tracking = analyseEmailTracking(content);
-      setTrackingReport(tracking);
-      setPixelReport(tracking.pixelReport.hasTrackingPixels ? tracking.pixelReport : null);
-      // If the pasted content is email source, surface the sender analysis
-      // inline — a real From address is the signal that this is email, not a
-      // bare URL/phone the generic check already covers.
-      const headers = parseEmailHeaders(content);
-      if (headers.fromAddress) {
-        setEmailReport({ headers, flags: analyseEmailIdentities(headers).flags });
-      } else {
-        setEmailReport(null);
-      }
+      // Run the shared email-source analysis — unwraps a forwarded email to the
+      // original first, so tracking and sender analysis cover the scammer's
+      // message, not the forwarder's. Same path as ReportForm and /api/inbound.
+      setEmailAnalysis(analyseEmailSource(content));
       setShareCopied(false);
       goForward("result");
     } catch (err) {
@@ -249,7 +244,9 @@ export default function CheckFlow() {
   // ── Report step ─────────────────────────────────────────────────────────────
   if (step === "report") {
     const ids = extractIdentifiers(content);
-    const headers = parseEmailHeaders(content);
+    // Prefer the unwrapped headers from the shared analysis so a forwarded email
+    // prefills the original scammer's From/Reply-To, not the forwarder's.
+    const headers = emailAnalysis?.headers ?? parseEmailHeaders(content);
     const primary = results[0];
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
@@ -297,7 +294,7 @@ export default function CheckFlow() {
             // Email source can parse to a sender analysis even when there are no
             // URL/phone/email identifiers to score — in that case the analysis
             // card below carries the payoff, so don't claim there's nothing.
-            !emailReport && <p className="text-sm text-gray-400">{t("check.nothing")}</p>
+            !hasSender && !trackingReport?.hasTracking && <p className="text-sm text-gray-400">{t("check.nothing")}</p>
           ) : (() => {
             // One overall verdict drives the page — composeVerdict applies the
             // worst-identifier-wins + tracking-pixel-nudge rules, shared with
@@ -390,7 +387,7 @@ export default function CheckFlow() {
               identifiers. Shown when we found tracking, OR (as reassurance) when
               this was email source that came up clean. Findings carry their own
               copy; the values they surface are already non-clickable text. */}
-          {trackingReport && (trackingReport.hasTracking || !!emailReport) && (
+          {trackingReport && (trackingReport.hasTracking || hasSender) && (
             <div className="space-y-2 border-t border-gray-800 pt-4">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 {t("tracking.heading")}
@@ -421,8 +418,8 @@ export default function CheckFlow() {
               email source. Surfaces the display-name/Reply-To/auth picture that
               previously lived only inside the report form. All addresses and
               domains are defanged before display. */}
-          {emailReport && (() => {
-            const { headers, flags } = emailReport;
+          {hasSender && emailAnalysis && (() => {
+            const { headers, identityFlags: flags } = emailAnalysis;
             const authSummary = summariseAuth(headers);
             return (
               <div className="space-y-2 border-t border-gray-800 pt-4">
@@ -470,7 +467,7 @@ export default function CheckFlow() {
             // tracking pixel, and no sender-spoofing flags. A pixel or a flag
             // pushes the verdict up, so the CTA matches that (the stronger
             // "report", not the softer "report anyway").
-            const clean = isClean(results, pixelReport, emailReport?.flags ?? []);
+            const clean = isClean(results, pixelReport, emailAnalysis?.identityFlags ?? []);
             return (
               <button
                 onClick={() => goForward("report")}

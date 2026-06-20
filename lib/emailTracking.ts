@@ -18,6 +18,7 @@
 // these fire for the user — that reassurance is worth showing in the UI.
 
 import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
+import { splitHeadersBody } from "@/lib/forwardedEmail";
 
 export type TrackingKind =
   | "pixel"
@@ -47,20 +48,26 @@ export interface EmailTrackingReport {
 
 // ─── Detection signals (mirrors the spec's static-detection table) ───────────
 
-// ESP redirect/click-tracking hostnames — clicking any link is logged here
-// before you reach the real destination.
-const CLICK_REDIRECT_DOMAINS = [
-  /click\.sendgrid\.net/i,
-  /\bclicks?\./i,            // click.* / clicks.* subdomains
-  /links?\.[a-z0-9\-]+\.(com|net|io)/i,
-  /trk\.klaviyo\.com/i,
-  /\btracking\./i,
-  /list-manage\.com/i,
-  /sendgrid\.net/i,
-  /mandrillapp\.com/i,
-  /sparkpostmail\.com/i,
-  /createsend\d*\.com/i,
-  /ablink\./i,               // common "action blink" redirect prefix
+// ESP redirect/click-tracking HOSTNAMES — clicking any link on one of these is
+// logged before you reach the real destination. These are matched against the
+// URL's hostname ONLY (not the path), so a benign link whose PATH happens to
+// contain "click" or "tracking" (e.g. /help/click.html) is not flagged.
+const CLICK_REDIRECT_HOSTS = [
+  /(^|\.)click\.sendgrid\.net$/i,
+  /(^|\.)clicks?\.[a-z0-9\-]+\.[a-z]{2,}$/i,  // click.* / clicks.* subdomains
+  /(^|\.)links?\.[a-z0-9\-]+\.[a-z]{2,}$/i,   // link(s).<brand>.<tld>
+  /(^|\.)trk\.klaviyo\.com$/i,
+  /(^|\.)tracking\.[a-z0-9\-]+\.[a-z]{2,}$/i, // tracking.* subdomains
+  /(^|\.)list-manage\.com$/i,
+  /(^|\.)sendgrid\.net$/i,
+  /(^|\.)mandrillapp\.com$/i,
+  /(^|\.)sparkpostmail\.com$/i,
+  /(^|\.)createsend\d*\.com$/i,
+  /(^|\.)ablink\.[a-z0-9\-]+\.[a-z]{2,}$/i,   // "action blink" redirect host
+];
+
+// Click-tracking ENDPOINT paths that identify a redirect regardless of host.
+const CLICK_REDIRECT_PATHS = [
   /\/ls\/click\?/i,          // SharpSpring / Pardot style click endpoint
 ];
 
@@ -68,14 +75,10 @@ const CLICK_REDIRECT_DOMAINS = [
 // recurs across multiple links it's almost certainly a per-recipient id.
 const OPAQUE_TOKEN_RE = /[A-Za-z0-9_\-]{32,}/;
 
-const HEADER_SPLIT_RE = /\r?\n\r?\n/;
-
-// Split a raw email into its header block and HTML/text body.
-function splitParts(raw: string): { headers: string; body: string } {
-  const idx = raw.search(HEADER_SPLIT_RE);
-  if (idx === -1) return { headers: raw, body: "" };
-  const sepLen = raw.slice(idx).match(/^\r?\n\r?\n/)?.[0].length ?? 2;
-  return { headers: raw.slice(0, idx), body: raw.slice(idx + sepLen) };
+// Hostname of a URL, lowercased; "" when unparseable. Used to anchor the
+// click-redirect host patterns so they can't match inside a path.
+function hostOf(url: string): string {
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
 }
 
 // Pull every href/src/url(...) link out of the body for link-level checks.
@@ -98,7 +101,7 @@ function extractLinks(body: string): string[] {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function analyseEmailTracking(rawEmail: string): EmailTrackingReport {
-  const { headers, body } = splitParts(rawEmail);
+  const { headerBlock, body } = splitHeadersBody(rawEmail);
   const links = extractLinks(body);
   const findings: TrackingFinding[] = [];
 
@@ -113,8 +116,13 @@ export function analyseEmailTracking(rawEmail: string): EmailTrackingReport {
     });
   }
 
-  // 2. Click-tracking redirects.
-  const redirectLinks = links.filter((u) => CLICK_REDIRECT_DOMAINS.some((re) => re.test(u)));
+  // 2. Click-tracking redirects — match the hostname against known redirect
+  //    hosts, or the URL against a known click-endpoint path.
+  const redirectLinks = links.filter((u) => {
+    const host = hostOf(u);
+    return (host && CLICK_REDIRECT_HOSTS.some((re) => re.test(host))) ||
+      CLICK_REDIRECT_PATHS.some((re) => re.test(u));
+  });
   if (redirectLinks.length > 0) {
     findings.push({
       kind: "click-redirect",
@@ -160,7 +168,7 @@ export function analyseEmailTracking(rawEmail: string): EmailTrackingReport {
     /^disposition-notification-to\s*:/im,
     /^return-receipt-to\s*:/im,
     /^x-confirm-reading-to\s*:/im,
-  ].filter((re) => re.test(headers));
+  ].filter((re) => re.test(headerBlock));
   if (receiptHeaders.length > 0) {
     findings.push({
       kind: "read-receipt",

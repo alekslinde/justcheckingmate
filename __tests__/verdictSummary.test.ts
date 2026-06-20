@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   composeVerdict,
+  overallVerdict,
   isClean,
   defangFlag,
   defangValue,
@@ -67,6 +68,22 @@ describe("composeVerdict", () => {
     const results = [ident("url", "safe", "", 55)];
     // 55 already exceeds the 40 pixel floor, so it must survive the nudge.
     expect(composeVerdict(results, pixel())).toEqual({ verdict: "suspicious", score: 55 });
+  });
+});
+
+describe("overallVerdict (no-results fallback)", () => {
+  it("defers to composeVerdict when there are scored identifiers", () => {
+    expect(overallVerdict([ident("email", "likely_scam")], null)).toEqual({ verdict: "likely_scam", score: 0 });
+  });
+  it("is suspicious for a header-only email with sender flags", () => {
+    expect(overallVerdict([], null, ["Reply-To elsewhere"]).verdict).toBe("suspicious");
+  });
+  it("is suspicious for a header-only email with a pixel or other tracking", () => {
+    expect(overallVerdict([], pixel()).verdict).toBe("suspicious");
+    expect(overallVerdict([], null, [], true).verdict).toBe("suspicious");
+  });
+  it("is unknown for an unscored email with no signals", () => {
+    expect(overallVerdict([], null).verdict).toBe("unknown");
   });
 });
 

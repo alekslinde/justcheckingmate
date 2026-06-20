@@ -72,6 +72,25 @@ export function composeVerdict(
   return { verdict, score };
 }
 
+// The single severity decision for a whole email, including the case where no
+// URL/phone/email identifier was scored (a header-only forward). Sender-spoofing
+// flags, a tracking pixel, or any other tracking each imply at least
+// "suspicious"; absent all of those an unscored email is "unknown". Both the
+// Check UI and the email reply call this so they can't disagree.
+export function overallVerdict(
+  results: AnalyzedIdentifier[],
+  pixelReport: TrackingPixelReport | null,
+  emailFlags: string[] = [],
+  hasOtherTracking = false,
+): OverallVerdict {
+  const composed = composeVerdict(results, pixelReport);
+  if (composed) return composed;
+  if (emailFlags.length > 0 || pixelReport || hasOtherTracking) {
+    return { verdict: "suspicious", score: 40 };
+  }
+  return { verdict: "unknown", score: 0 };
+}
+
 // "Clean" means nothing flagged it — every identifier safe AND no tracking
 // pixel (a pixel pushes the overall verdict to suspicious). Mirrors the CTA
 // gating on the Check page.
@@ -134,16 +153,9 @@ function escapeHtml(s: string): string {
 export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
   const { results, emailFlags, pixelReport, trackingFindings = [] } = input;
 
-  const overall = composeVerdict(results, pixelReport);
-  // No scored identifiers: fall back to a verdict implied by sender flags,
-  // pixels, or any other tracking so a header-only forward still gets a
-  // meaningful headline.
-  let verdict: Verdict = overall?.verdict ?? "unknown";
-  if (!overall) {
-    if (emailFlags.length > 0) verdict = "suspicious";
-    else if (pixelReport || trackingFindings.length > 0) verdict = "suspicious";
-    else verdict = "unknown";
-  }
+  // One shared severity decision — same rule the Check UI uses — so a header-
+  // only forward still gets a meaningful headline and the two never disagree.
+  const { verdict } = overallVerdict(results, pixelReport, emailFlags, trackingFindings.length > 0);
   const head = VERDICT_HEADLINE[verdict];
 
   // Breakdown lines — defanged identifier + its per-item status.

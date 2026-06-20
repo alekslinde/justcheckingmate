@@ -26,6 +26,17 @@ describe("analyseEmailTracking", () => {
     expect(kinds(raw)).toContain("click-redirect");
   });
 
+  it("does not flag benign links whose path merely contains 'click' or 'tracking'", () => {
+    const raw = [
+      "From: a@b.com",
+      "",
+      '<a href="https://www.example.com/help/click.html">Help</a>',
+      '<a href="https://example.com/blog/tracking.js">Article</a>',
+      '<a href="https://docs.example.com/x">Docs</a>',
+    ].join("\n");
+    expect(kinds(raw)).not.toContain("click-redirect");
+  });
+
   it("detects unique-per-recipient links by a recurring opaque token", () => {
     const tok = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"; // 32 hex chars
     const raw = `From: a@b.com\n\n<a href="https://shop.example/p?id=${tok}">A</a><a href="https://shop.example/q?id=${tok}">B</a>`;
