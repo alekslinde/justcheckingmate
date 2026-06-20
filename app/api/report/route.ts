@@ -3,7 +3,8 @@ import { guardSubmission } from "@/lib/submissionGuard";
 import { generateReportId, storeReport, getStats } from "@/lib/reportStore";
 import { stripTrackingParams } from "@/lib/urlSanitizer";
 import { summariseAuth } from "@/lib/emailHeaders";
-import { scrubPii, stripReporterHeaders } from "@/lib/piiScrubber";
+import { scrubPii } from "@/lib/piiScrubber";
+import { distillEmailContent } from "@/lib/emailDistiller";
 import { locationFromHeaders } from "@/lib/geo";
 
 // The client IP is used ONLY for transient, in-memory rate limiting inside
@@ -35,17 +36,19 @@ export async function POST(req: NextRequest) {
 
   // For URL/QR reports strip tracking parameters before storing — keeping them
   // would let the scammer correlate which of their campaigns got reported.
-  // For email reports, drop headers that identify the reporter's mailbox or
-  // expose the delivery path before storing — Delivered-To, X-Original-To,
-  // X-Forwarded-To, X-Google-Original-To, the Received chain (relay hostnames +
-  // IPv4/IPv6), X-Received, X-Originating-IP and Received-SPF. After header
-  // stripping, run PII scrubbing (emails, phones, IPv4/IPv6, TFN/BSB/card) on
-  // the remaining content.
+  // For email reports, distil the raw RFC822 down to the legible scam content:
+  // unwrap any forward to the original, keep only the human-meaningful headers
+  // (From/Reply-To/To/Subject/Date) and the decoded body, dropping the
+  // transport/auth header storm (ARC, DKIM, X-MS-Exchange-*), MIME boundaries,
+  // quoted-printable encoding and the duplicate HTML part. Since we keep only an
+  // allowlist of headers, the reporter's mailbox/delivery headers are dropped as
+  // a side effect. After distillation, run PII scrubbing (emails, phones,
+  // IPv4/IPv6, TFN/BSB/card) on the remaining content.
   const safeContent = scrubPii(
     (type === "url" || type === "qr")
       ? stripTrackingParams(rawContent)
       : type === "email"
-        ? stripReporterHeaders(rawContent)
+        ? distillEmailContent(rawContent)
         : rawContent
   );
   const safeScamUrl = rawScamUrl ? stripTrackingParams(rawScamUrl) : "";
