@@ -80,7 +80,9 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
    normal account (Gmail/iCloud). Within a few seconds you should get a threaded
    verdict reply **in the inbox** (not spam — if it's spam, recheck step 1's
    DKIM/DMARC records). Also forward a clean email and confirm the "no tracking"
-   reassurance reads correctly.
+   reassurance reads correctly. This also confirms the reply delivers **on your
+   current plan** at no cost — see *Cost* below; replies show as "dropped" in the
+   Routing summary even when they arrive.
 
 8. **Flip the UI flag.** Only once step 7 passes: set
    `NEXT_PUBLIC_INBOUND_ENABLED=true` on Vercel and redeploy, so the
@@ -111,6 +113,22 @@ mailbox providers still judge it on authentication. To land in the inbox:
    auto-replied`, so it reads as a genuine threaded reply, not an unsolicited
    send, and won't bounce-loop with other auto-responders.
 
+### Cost: why this uses reply() and not outbound sending
+
+Sending to **arbitrary recipients** (Cloudflare Email Service / the `send_email`
+binding to unverified addresses) requires the **Workers Paid** plan ($5/mo +
+$0.35/1k after 3,000/mo). We deliberately avoid that: `message.reply()` is an
+**Email Routing** primitive that replies *on the inbound SMTP transaction* back to
+the original sender only — part of the free Email Routing tier, and inherently
+abuse-proof (it can only reach whoever forwarded the mail). So the verdict reply
+costs nothing.
+
+> Re-verify at go-live: Cloudflare's docs are explicit that *arbitrary* sending is
+> paid, but don't state in writing that `reply()` is exempt. Confirm in the
+> dashboard that replies deliver on your plan before flipping the UI flag. (Heads
+> up: replies show as **"dropped"** in the Email Routing summary even when
+> delivered — that's expected, not a failure.)
+
 ### The one case where NO reply is sent
 
 Cloudflare's documented constraint: **the incoming forward must itself have a
@@ -118,9 +136,14 @@ valid DMARC result for `message.reply()` to be allowed.** If a user forwards fro
 a provider/path that fails DMARC, Cloudflare refuses the reply and `reply()`
 throws — the Worker logs this (`console.warn`) rather than failing silently.
 Most consumer providers (Gmail/Outlook/iCloud) pass DMARC on forwards, so this is
-an edge case, but it means a small fraction of forwards will get no reply. If that
-becomes common, the fallback is to send a fresh (non-reply) message via Cloudflare
-Email Service / a transactional provider instead of `message.reply()`.
+an edge case, but a small fraction of forwards will get no reply.
+
+**Decision (current):** accept this — no paid outbound sender. If it becomes a
+real problem, the upgrade is a fallback that sends a fresh message via a
+transactional provider (Resend, Cloudflare Email Service, SES) when `reply()` is
+rejected. The Worker is already shaped for this: `/api/inbound` returns
+`{subject, text, html}` and the Worker chooses how to send, so adding a fallback
+is localized to `src/index.ts` — `buildReplyMime` and the analysis are untouched.
 
 ## Transport security (MTA-STS) — recommended hardening
 
