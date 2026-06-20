@@ -42,7 +42,9 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
    Routing → enable. This auto-adds the **MX** and **SPF (TXT)** records. Then go
    to its DNS/authentication settings and **publish the DKIM and DMARC records it
    offers** — these are what make the verdict reply pass authentication and reach
-   the inbox (see *Deliverability* below). Verify all records are live.
+   the inbox (see *Deliverability* below). Verify all records are live. While here,
+   consider enabling **MTA-STS** to enforce TLS in transit (see *Transport
+   security* below) — recommended, but can be done after launch.
 
 2. **Pick the shared secret.** Generate one (`openssl rand -hex 32`). You'll set
    the same value in two places (steps 3 and 5).
@@ -119,6 +121,36 @@ Most consumer providers (Gmail/Outlook/iCloud) pass DMARC on forwards, so this i
 an edge case, but it means a small fraction of forwards will get no reply. If that
 becomes common, the fallback is to send a fresh (non-reply) message via Cloudflare
 Email Service / a transactional provider instead of `message.reply()`.
+
+## Transport security (MTA-STS) — recommended hardening
+
+A forwarded email transits SMTP servers between the user's provider and us, and
+between us and them on the reply. SMTP uses **opportunistic** TLS (STARTTLS): each
+hop is encrypted only if both servers offer it, and a network attacker can strip
+the offer to force plaintext. Cloudflare → big providers (Gmail/Outlook/iCloud) is
+TLS in practice, but it isn't *guaranteed* and downgrade attacks are possible.
+
+**MTA-STS makes TLS mandatory** for the domain and blocks STARTTLS downgrades —
+mail won't deliver at all if a secure channel can't be established. Given we handle
+potentially sensitive forwarded emails, enabling it is the right call. Cloudflare
+supports it (including upstream, for the reply path). Setup:
+
+1. Add a CNAME `_mta-sts` → `_mta-sts.mx.cloudflare.net` (DNS-only, not proxied).
+2. Serve the policy file at `https://mta-sts.<domain>/.well-known/mta-sts.txt` —
+   Cloudflare's docs use a tiny Worker that proxies to
+   `https://mta-sts.mx.cloudflare.net/.well-known/mta-sts.txt`. The policy lists
+   `mx: *.mx.cloudflare.net`.
+3. **Roll out in `mode: testing` first**, add a TLS-RPT record, and watch the
+   reports for a couple of weeks before switching the policy to `mode: enforce` —
+   enforcing a misconfigured policy would silently drop inbound mail.
+
+This is independent of the auth records above (SPF/DKIM/DMARC prove *who* sent the
+mail; MTA-STS protects *the channel* it travels over). Note it's transport
+encryption only — not end-to-end; the Worker still reads the message in cleartext
+to analyse it, which is why the user-facing copy says "we read it on arrival and
+don't keep a copy" rather than implying the email is private the whole way.
+
+See: <https://developers.cloudflare.com/email-service/configuration/mta-sts/>
 
 ## Local development
 

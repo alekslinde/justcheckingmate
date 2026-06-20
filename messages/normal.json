@@ -54,6 +54,7 @@
   "check.dropHere": "Drop to analyse",
   "check.forward.heading": "On your phone? Forward it to us",
   "check.forward.body": "Forward the suspicious email to {address} and we'll email back a plain-English verdict. We read it on arrival and don't keep a copy.",
+  "check.forward.note": "Forwarding sends the email through your mail provider's servers (unlike pasting, which stays on your device). For anything highly sensitive, paste it instead.",
   "check.forward.cta": "Forward to {address}",
   "check.analysing": "Analysing…",
   "check.submit": "Check This Now 🔍",

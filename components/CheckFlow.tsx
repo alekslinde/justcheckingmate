@@ -571,6 +571,9 @@ export default function CheckFlow() {
           <p className="text-xs text-gray-400">
             {t("check.forward.body", { address: INBOUND_ADDRESS })}
           </p>
+          <p className="text-[11px] text-gray-500">
+            {t("check.forward.note")}
+          </p>
           <a
             href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition-colors"

@@ -19,6 +19,7 @@
   "check.dropHere": "Drop it here",
   "check.forward.heading": "On your phone? Just flick it to us",
   "check.forward.body": "Forward the dodgy email to {address} and we'll email you back a straight-up verdict. We read it on arrival and don't keep a copy.",
+  "check.forward.note": "Forwarding sends the email through your mail provider's servers (unlike pasting, which stays on your device). If it's really sensitive, paste it instead.",
   "check.forward.cta": "Forward to {address}",
   "check.placeholder": "Paste the sus stuff here — link, number, text message, whatever you've got…",
   "check.analysing": "Checking it out…",
