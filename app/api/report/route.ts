@@ -35,10 +35,12 @@ export async function POST(req: NextRequest) {
 
   // For URL/QR reports strip tracking parameters before storing — keeping them
   // would let the scammer correlate which of their campaigns got reported.
-  // For email reports, drop headers that identify the reporter's mailbox before
-  // storing — Delivered-To, X-Original-To, X-Forwarded-To, X-Google-Original-To,
-  // and X-Received all contain the reporter's own address or routing path.
-  // After header stripping, run PII scrubbing on the remaining content.
+  // For email reports, drop headers that identify the reporter's mailbox or
+  // expose the delivery path before storing — Delivered-To, X-Original-To,
+  // X-Forwarded-To, X-Google-Original-To, the Received chain (relay hostnames +
+  // IPv4/IPv6), X-Received, X-Originating-IP and Received-SPF. After header
+  // stripping, run PII scrubbing (emails, phones, IPv4/IPv6, TFN/BSB/card) on
+  // the remaining content.
   const safeContent = scrubPii(
     (type === "url" || type === "qr")
       ? stripTrackingParams(rawContent)

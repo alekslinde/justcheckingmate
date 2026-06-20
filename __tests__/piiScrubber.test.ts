@@ -100,6 +100,55 @@ describe("scrubPii", () => {
     expect(result).not.toContain("203.0.113.42");
     expect(result).toContain("[IP removed]");
   });
+
+  it("scrubs a full IPv6 address", () => {
+    const result = scrubPii("relay 2001:0db8:85a3:0000:0000:8a2e:0370:7334 seen");
+    expect(result).not.toContain("2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+    expect(result).toContain("[IP removed]");
+  });
+
+  it("scrubs a compressed IPv6 address whole (no remnant)", () => {
+    // The full-then-compressed form must be consumed entirely, leaving no "::1".
+    expect(scrubPii("from 2002:a05:6512:31c3::1 by mx")).toBe("from [IP removed] by mx");
+  });
+
+  it("scrubs a short compressed IPv6 (link-local fe80::)", () => {
+    expect(scrubPii("relay fe80::1234:5678 hop")).toBe("relay [IP removed] hop");
+  });
+
+  it("scrubs a trailing-compressed IPv6 (2001:db8::)", () => {
+    const result = scrubPii("via 2001:db8:: now");
+    expect(result).not.toContain("2001:db8");
+    expect(result).toContain("[IP removed]");
+  });
+
+  it("scrubs a bracketed IPv6 whole, leaving no digit remnant", () => {
+    // Regression: must not leave a stray "1]" — the whole address goes.
+    expect(scrubPii("from [2001:db8::1]:25 by mx")).toBe("from [[IP removed]]:25 by mx");
+  });
+
+  it("does not mistake an HH:MM:SS timestamp for an IPv6 address", () => {
+    const line = "Date: Tue, 21 Jun 2026 01:00:00 -0700";
+    expect(scrubPii(line)).toBe(line);
+    expect(scrubPii("sent at 12:30:45")).toBe("sent at 12:30:45");
+  });
+
+  it("does not mistake a short-decimal sequence for an IPv6 address", () => {
+    // Regression: "1:2:3:4" (4 one-digit groups) is not an address.
+    expect(scrubPii("grid 1:2:3:4 cols")).toBe("grid 1:2:3:4 cols");
+    expect(scrubPii("ratio 16:9 screen")).toBe("ratio 16:9 screen");
+  });
+
+  it("scrubs the IPv6 in a Received header", () => {
+    const result = scrubPii("Received: by 2002:a05:6512:31c3 with SMTP id x");
+    expect(result).not.toContain("2002:a05:6512:31c3");
+    expect(result).toContain("[IP removed]");
+  });
+
+  it("leaves an ordinary hex word untouched", () => {
+    // A single hex group with no colon must not be mistaken for an IPv6 address.
+    expect(scrubPii("order deadbeef confirmed")).toBe("order deadbeef confirmed");
+  });
 });
 
 describe("stripReporterHeaders", () => {
@@ -135,6 +184,67 @@ describe("stripReporterHeaders", () => {
 
   it("removes X-Received header", () => {
     expect(stripReporterHeaders(phishHeaders)).not.toMatch(/^X-Received:/im);
+  });
+
+  it("removes a Received header and its folded continuation lines", () => {
+    const withReceived = [
+      "Delivered-To: victim@gmail.com",
+      "Received: from mail.evil.tk (mail.evil.tk [203.0.113.9])",
+      "        by mx.google.com with ESMTPS id abc123",
+      "        for <victim@gmail.com>; Tue, 21 Jun 2026 01:00:00 -0700 (PDT)",
+      "Received: from [2001:db8::1] by relay.example.com",
+      "From: myGov <noreply@au-taxrefund.click>",
+      "Subject: Locked",
+      "",
+      "Body here.",
+    ].join("\n");
+    const result = stripReporterHeaders(withReceived);
+    expect(result).not.toMatch(/^Received:/im);
+    expect(result).not.toContain("mx.google.com");
+    expect(result).not.toContain("2001:db8::1");
+    expect(result).not.toContain("203.0.113.9");
+    // Scammer-side headers and the body survive.
+    expect(result).toContain("From: myGov");
+    expect(result).toContain("Body here.");
+  });
+
+  it("does not strip a body line that begins with a header-like word", () => {
+    // Regression: "received"/"delivered-to" are ordinary words; a body sentence
+    // starting with one (and a colon) must survive — stripping is header-only.
+    const email = [
+      "From: myGov <noreply@evil.tk>",
+      "Subject: Action required",
+      "",
+      "Dear customer,",
+      "Received: your parcel could not be delivered.",
+      "Delivered-To: confirm your address at the link below.",
+      "Click https://evil.tk to confirm.",
+    ].join("\n");
+    const result = stripReporterHeaders(email);
+    expect(result).toContain("Received: your parcel could not be delivered.");
+    expect(result).toContain("Delivered-To: confirm your address");
+    expect(result).toContain("Click https://evil.tk to confirm.");
+  });
+
+  it("preserves the CRLF separator and body when stripping headers", () => {
+    const email = "Delivered-To: me@x.com\r\nFrom: a@b.com\r\n\r\nBody line.";
+    const result = stripReporterHeaders(email);
+    expect(result).not.toMatch(/Delivered-To:/i);
+    expect(result).toContain("From: a@b.com");
+    expect(result).toContain("\r\n\r\nBody line.");
+  });
+
+  it("removes X-Originating-IP and Received-SPF but keeps Authentication-Results", () => {
+    const headers = [
+      "X-Originating-IP: [203.0.113.42]",
+      "Received-SPF: fail (evil.tk) client-ip=203.0.113.42",
+      "Authentication-Results: mx.google.com; spf=fail dkim=fail",
+      "From: x@y.com",
+    ].join("\n");
+    const result = stripReporterHeaders(headers);
+    expect(result).not.toMatch(/^X-Originating-IP:/im);
+    expect(result).not.toMatch(/^Received-SPF:/im);
+    expect(result).toContain("Authentication-Results:");
   });
 
   it("preserves scammer-side headers (From, Reply-To, Subject, Authentication-Results)", () => {
