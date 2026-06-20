@@ -34,6 +34,38 @@ type Status = "idle" | "submitting" | "success" | "error";
 interface EmailAuth { spf: string; dkim: string; dkimDomain: string; dmarc: string }
 const EMPTY_AUTH: EmailAuth = { spf: "", dkim: "", dkimDomain: "", dmarc: "" };
 
+// Map an SPF/DKIM/DMARC verdict word to a Tailwind chip class. "pass" reads as
+// safe (emerald), "fail" as bad (red), the soft/neutral middle as caution
+// (amber); anything else (none/error/unknown) is neutral grey.
+function authChipClass(verdict: string): string {
+  switch (verdict.toLowerCase()) {
+    case "pass":
+    case "bestguesspass":
+      return "bg-emerald-900/50 border-emerald-700 text-emerald-300";
+    case "fail":
+    case "permerror":
+      return "bg-red-900/40 border-red-800 text-red-300";
+    case "softfail":
+    case "neutral":
+    case "temperror":
+      return "bg-amber-900/40 border-amber-800 text-amber-300";
+    default:
+      return "bg-gray-800 border-gray-700 text-gray-400";
+  }
+}
+
+// Small coloured verdict chip, e.g. "SPF pass" in green. Rendered only when the
+// verdict word is present.
+function AuthChip({ label, verdict }: { label: string; verdict: string }) {
+  if (!verdict) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[11px] ${authChipClass(verdict)}`}>
+      <span className="font-semibold">{label}</span>
+      <span>{verdict.toLowerCase()}</span>
+    </span>
+  );
+}
+
 export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
@@ -46,6 +78,11 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   const [scamReplyTo, setScamReplyTo] = useState(initialScamReplyTo ?? "");
   const [emailSource, setEmailSource] = useState("");
   const [parseNote, setParseNote] = useState<string | null>(null);
+  // When the email was already identified upstream (Check→Report handoff gave us
+  // a From address), the raw-source paste box adds nothing — the headers are
+  // already parsed. Keep it available behind a toggle for power users who want to
+  // enrich a missing SPF/DKIM, but collapsed by default in that case.
+  const [showSource, setShowSource] = useState(!initialScamEmail);
   // Authentication verdicts pulled from pasted headers. Not directly editable —
   // derived from the source and submitted as-is so the public report can show
   // the SPF/DKIM/DMARC picture. Empty until a source is parsed.
@@ -311,10 +348,13 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               <span className="text-gray-500">{t("report.extracted.replyTo")} </span>{scamReplyTo}
             </p>
           )}
-          {authSummary && (
-            <p className="text-gray-300 font-mono">
-              <span className="text-gray-500">{t("report.extracted.auth")} </span>{authSummary}
-            </p>
+          {(auth.spf || auth.dkim || auth.dmarc) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-gray-500">{t("report.extracted.auth")}</span>
+              <AuthChip label="SPF" verdict={auth.spf} />
+              <AuthChip label="DKIM" verdict={auth.dkim} />
+              <AuthChip label="DMARC" verdict={auth.dmarc} />
+            </div>
           )}
           {trackingReport?.summary && (
             <p className="text-amber-300/90 font-mono">
@@ -449,49 +489,58 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               )}
             </div>
 
-            <EmailExportGuide />
+            {/* Raw-source paste / .eml drop. Collapsed by default once the email
+                was already identified upstream (we have a From) — re-pasting
+                wouldn't add anything. A toggle keeps it reachable to enrich a
+                missing SPF/DKIM. When nothing was parsed yet it's shown open. */}
+            {showSource ? (
+              <div>
+                <EmailExportGuide />
+                <label htmlFor="report-email-source" className="block text-xs font-medium text-gray-400 mb-1 mt-3">
+                  {t("report.email.source.label")}
+                </label>
+                <textarea
+                  id="report-email-source"
+                  value={emailSource}
+                  onChange={(e) => parseSource(e.target.value)}
+                  placeholder={t("report.email.source.placeholder")}
+                  rows={3}
+                  className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-xs font-mono resize-y"
+                />
+                <input
+                  type="file"
+                  accept=".eml,message/rfc822,text/plain"
+                  aria-label={t("report.email.source.file")}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlFile(f); }}
+                  className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1.5 file:text-gray-300 hover:file:bg-gray-700"
+                />
+                {parseNote && (
+                  <p className={`mt-1 text-xs ${parseNote.startsWith("⚠") ? "text-amber-400" : "text-gray-400"}`}>
+                    {parseNote}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowSource(true)}
+                className="text-xs text-gray-400 hover:text-emerald-400 underline underline-offset-2"
+              >
+                {t("report.email.source.add")}
+              </button>
+            )}
 
-            <div>
-              <label htmlFor="report-email-source" className="block text-xs font-medium text-gray-400 mb-1">
-                {t("report.email.source.label")}
-              </label>
-              <textarea
-                id="report-email-source"
-                value={emailSource}
-                onChange={(e) => parseSource(e.target.value)}
-                placeholder={t("report.email.source.placeholder")}
-                rows={3}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-xs font-mono resize-y"
-              />
-              <input
-                type="file"
-                accept=".eml,message/rfc822,text/plain"
-                aria-label={t("report.email.source.file")}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlFile(f); }}
-                className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1.5 file:text-gray-300 hover:file:bg-gray-700"
-              />
-              {parseNote && (
-                <p className={`mt-1 text-xs ${parseNote.startsWith("⚠") ? "text-amber-400" : "text-gray-400"}`}>
-                  {parseNote}
-                </p>
-              )}
-              {authSummary && (
-                <p className="mt-1 text-xs text-gray-400">
-                  <span className="text-gray-500">{t("report.email.auth.label")} </span>
-                  <span className="font-mono text-gray-300">{authSummary}</span>
-                  <span className="text-gray-500"> {t("report.email.auth.attached")}</span>
-                </p>
-              )}
-              {trackingReport?.hasTracking && (
-                <div className="mt-2 space-y-1">
-                  {trackingReport.findings.map((f) => (
-                    <p key={f.kind} className="text-xs text-amber-400">
-                      • {f.label}{f.count > 1 ? ` ×${f.count}` : ""} — {f.detail}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Tracking findings are derived analysis — keep them visible even
+                when the raw-source box is collapsed. */}
+            {trackingReport?.hasTracking && (
+              <div className="space-y-1">
+                {trackingReport.findings.map((f) => (
+                  <p key={f.kind} className="text-xs text-amber-400">
+                    • {f.label}{f.count > 1 ? ` ×${f.count}` : ""} — {f.detail}
+                  </p>
+                ))}
+              </div>
+            )}
           </>
         )}
       </fieldset>
