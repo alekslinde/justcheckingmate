@@ -145,6 +145,7 @@
   "report.extracted.from": "From:",
   "report.extracted.replyTo": "Reply-To:",
   "report.extracted.auth": "Auth:",
+  "report.extracted.tracking": "Tracking:",
   "report.extracted.review": "Review or edit the fields below before submitting.",
   "report.content.label": "The scam content",
   "report.desc.label": "What happened?",

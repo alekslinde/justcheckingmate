@@ -275,7 +275,6 @@ export default function CheckFlow() {
             initialScamEmail={headers.fromAddress || ids.scamEmail}
             initialScamReplyTo={headers.replyTo}
             initialAuth={{ spf: headers.spf, dkim: headers.dkim, dkimDomain: headers.dkimDomain, dmarc: headers.dmarc }}
-            initialPixelReport={pixelReport ?? undefined}
           />
         </div>
       </div>
