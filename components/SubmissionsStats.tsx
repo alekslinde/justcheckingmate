@@ -135,9 +135,10 @@ export default function SubmissionsStats() {
 
       {showCharts && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-gray-800">
-          {/* Sparkline panel */}
+          {/* Sparkline panel — flex-end so the graph hugs the bottom of the
+              panel when the type-breakdown column makes the row taller. */}
           {stats.byDay.length >= 2 && (
-            <div className="bg-gray-900 px-4 pt-3 pb-2 space-y-1">
+            <div className="bg-gray-900 px-4 pt-3 pb-2 flex flex-col justify-end space-y-1">
               <Sparkline byDay={stats.byDay} />
             </div>
           )}
