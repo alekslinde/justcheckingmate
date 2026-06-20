@@ -37,7 +37,13 @@ trade-off strongly favours transparency.
 
 ## If you fork or self-host the forward-to-us inbound flow
 
-The inbound email flow ([`workers/inbound-email/`](workers/inbound-email/) +
+> **Status: not deployed.** The Cloudflare Email Worker that sends verdict
+> replies is parked on the `feat/inbound-email-reply` branch, not `main`, because
+> `message.reply()` is systemically rejected for forwarded mail. The feature is
+> off in production (`NEXT_PUBLIC_INBOUND_ENABLED=false`) and not auto-deployed.
+> The guidance below still applies to anyone resuming or self-hosting the flow.
+
+The inbound email flow (the worker on `feat/inbound-email-reply` +
 [`app/api/inbound/`](app/api/inbound)) auto-replies to whoever forwards an email.
 That convenience is also an abuse surface, so these mitigations are **required,
 not optional** — a fork that drops them can become an open email reflector or a
@@ -56,8 +62,8 @@ data leak:
    stored; only an anonymous counter is incremented. Don't add logging that
    persists message content or reporter addresses.
 
-See [`workers/inbound-email/README.md`](workers/inbound-email/README.md) for the
-full design and go-live runbook.
+See `workers/inbound-email/README.md` on the `feat/inbound-email-reply` branch
+for the full design and go-live runbook.
 
 ## Reporting a vulnerability
 

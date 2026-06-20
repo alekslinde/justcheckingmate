@@ -6,9 +6,11 @@ import { analyseEmailSource } from "@/lib/emailSource";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
 import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
 
-// Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (see
-// workers/inbound-email/) receives a forwarded suspicious email, POSTs the raw
-// RFC822 here, and sends the verdict we return back to the forwarder.
+// Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (parked
+// on the feat/inbound-email-reply branch — its reply path is broken, so it is
+// NOT deployed) receives a forwarded suspicious email, POSTs the raw RFC822
+// here, and would send the verdict we return back to the forwarder. This route
+// stays on main but is inert in prod: nothing currently calls it.
 //
 // PRIVACY: we analyse the raw email entirely in memory and return a verdict.
 // The raw email is NEVER stored — only an anonymous aggregate counter is
