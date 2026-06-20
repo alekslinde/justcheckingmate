@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
-import { extractIdentifiers, defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
-import { parseEmailHeaders } from "@/lib/emailHeaders";
-import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
+import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
+import { parseEmailHeaders, summariseAuth } from "@/lib/emailHeaders";
+import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
+import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
 import ReportForm from "./ReportForm";
+import EmailExportGuide from "./EmailExportGuide";
 
 type Step = "input" | "result" | "report";
 type Verdict = AnalyzedIdentifier["result"]["verdict"];
@@ -21,30 +23,21 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
   message: { icon: "💬", labelKey: "kind.message" },
 };
 
-// Severity ordering — higher wins when collapsing many identifiers into one
-// overall verdict. "unknown" sits just above "safe": it's not a clean pass,
-// but it's not a positive signal of a scam either.
-const VERDICT_RANK: Record<Verdict, number> = {
-  safe: 0,
-  unknown: 1,
-  suspicious: 2,
-  likely_scam: 3,
-};
+// Forward-to-us address, shown only once inbound mail is live end-to-end. The
+// flag is read at build time (NEXT_PUBLIC_*), so an unconfigured deploy never
+// advertises a dead inbox. Address is overridable for staging/other domains.
+const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
+const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.com";
 
-// Status-dot colour per verdict for the neutral breakdown rows.
+// Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
+// defangValue and defangFlag now live in lib/verdictSummary so the email reply
+// shares the exact same rules — see that module.
 const STATUS_DOT: Record<Verdict, string> = {
   safe:        "bg-green-500",
   unknown:     "bg-gray-500",
   suspicious:  "bg-yellow-500",
   likely_scam: "bg-red-500",
 };
-
-function defangValue(kind: AnalyzedIdentifier["kind"], value: string): string {
-  if (kind === "url")   return defang(value);
-  if (kind === "email") return defangEmail(value);
-  if (kind === "phone") return defangPhone(value);
-  return defangText(value);
-}
 
 // kind → ScamType for prefilling the report form.
 function kindToType(kind: AnalyzedIdentifier["kind"], content: string): ScamType {
@@ -63,7 +56,18 @@ export default function CheckFlow() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
-  const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  // Full email-source analysis (unwrap → headers → identity flags → tracking),
+  // populated in runCheck. null until a check runs. Everything the result page
+  // needs (pixel report, tracking findings, sender headers/flags) is derived
+  // from this single source of truth.
+  const [emailAnalysis, setEmailAnalysis] = useState<EmailSourceAnalysis | null>(null);
+  // The sender card shows only when the content actually parsed as email (a real
+  // From address). The tracking section can show without one.
+  const hasSender = !!emailAnalysis?.headers.fromAddress;
+  const pixelReport =
+    emailAnalysis?.tracking.pixelReport.hasTrackingPixels ? emailAnalysis.tracking.pixelReport : null;
+  const trackingReport = emailAnalysis?.tracking ?? null;
 
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -169,6 +173,19 @@ export default function CheckFlow() {
     }
   }
 
+  // Drag-and-drop onto the textarea: an image goes through the QR/OCR pipeline,
+  // anything else (a .eml, .txt, or raw source) is read as email text. Routing
+  // by MIME type keeps a dropped screenshot from being read as garbled text.
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (busy) return;
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("image/")) handleImageUpload(file);
+    else handleEmlUpload(file);
+  }
+
   async function runCheck() {
     if (!content.trim()) return;
     setCheckLoading(true);
@@ -182,8 +199,10 @@ export default function CheckFlow() {
       if (!res.ok) throw new Error("Server error");
       const data = await res.json() as { results: AnalyzedIdentifier[] };
       setResults(data.results ?? []);
-      const pr = analyseTrackingPixels(content);
-      setPixelReport(pr.hasTrackingPixels ? pr : null);
+      // Run the shared email-source analysis — unwraps a forwarded email to the
+      // original first, so tracking and sender analysis cover the scammer's
+      // message, not the forwarder's. Same path as ReportForm and /api/inbound.
+      setEmailAnalysis(analyseEmailSource(content));
       setShareCopied(false);
       goForward("result");
     } catch (err) {
@@ -225,7 +244,9 @@ export default function CheckFlow() {
   // ── Report step ─────────────────────────────────────────────────────────────
   if (step === "report") {
     const ids = extractIdentifiers(content);
-    const headers = parseEmailHeaders(content);
+    // Prefer the unwrapped headers from the shared analysis so a forwarded email
+    // prefills the original scammer's From/Reply-To, not the forwarder's.
+    const headers = emailAnalysis?.headers ?? parseEmailHeaders(content);
     const primary = results[0];
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
@@ -251,7 +272,6 @@ export default function CheckFlow() {
             initialScamEmail={headers.fromAddress || ids.scamEmail}
             initialScamReplyTo={headers.replyTo}
             initialAuth={{ spf: headers.spf, dkim: headers.dkim, dkimDomain: headers.dkimDomain, dmarc: headers.dmarc }}
-            initialPixelReport={pixelReport ?? undefined}
           />
         </div>
       </div>
@@ -271,18 +291,19 @@ export default function CheckFlow() {
         </button>
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
-            <p className="text-sm text-gray-400">{t("check.nothing")}</p>
+            // Email source can parse to a sender analysis even when there are no
+            // URL/phone/email identifiers to score — in that case the analysis
+            // card below carries the payoff, so don't claim there's nothing.
+            !hasSender && !trackingReport?.hasTracking && <p className="text-sm text-gray-400">{t("check.nothing")}</p>
           ) : (() => {
-            // One overall verdict drives the page: the worst identifier wins.
-            // A tracking pixel can nudge an otherwise-clean result up to
-            // "suspicious" — being silently tracked is itself a red flag.
+            // One overall verdict drives the page — composeVerdict applies the
+            // worst-identifier-wins + tracking-pixel-nudge rules, shared with
+            // the forward-to-us email reply so the two can't drift.
+            const composed = composeVerdict(results, pixelReport)!;
             const worst = results.reduce((acc, r) =>
               VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
             );
-            let overall = worst.result;
-            if (pixelReport && VERDICT_RANK[overall.verdict] < VERDICT_RANK.suspicious) {
-              overall = { ...overall, verdict: "suspicious", score: Math.max(overall.score, 40) };
-            }
+            const overall = { ...worst.result, ...composed };
 
             return (
               <>
@@ -360,22 +381,104 @@ export default function CheckFlow() {
             );
           })()}
 
+          {/* Broader tracking surface — pixels plus click redirects, CSS
+              beacons, read-receipt headers, meta refresh, etc. Sibling of the
+              breakdown so it renders even for a header-only email with no scored
+              identifiers. Shown when we found tracking, OR (as reassurance) when
+              this was email source that came up clean. Findings carry their own
+              copy; the values they surface are already non-clickable text. */}
+          {trackingReport && (trackingReport.hasTracking || hasSender) && (
+            <div className="space-y-2 border-t border-gray-800 pt-4">
+              <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                {t("tracking.heading")}
+              </div>
+              {trackingReport.findings.length > 0 ? (
+                <>
+                  <ul className="space-y-1.5">
+                    {trackingReport.findings.map((f) => (
+                      <li key={f.kind} className="flex items-start gap-2.5 text-sm">
+                        <span className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
+                        <span className="min-w-0 flex-1">
+                          <span className="text-gray-300 font-medium">{f.label}</span>
+                          {f.count > 1 && <span className="text-gray-500"> ×{f.count}</span>}
+                          <span className="block text-xs text-gray-500">{f.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-emerald-400/90 pl-[18px]">{t("tracking.safe")}</p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">{t("tracking.none")}</p>
+              )}
+            </div>
+          )}
+
+          {/* Email sender analysis — only when the pasted content parsed as
+              email source. Surfaces the display-name/Reply-To/auth picture that
+              previously lived only inside the report form. All addresses and
+              domains are defanged before display. */}
+          {hasSender && emailAnalysis && (() => {
+            const { headers, identityFlags: flags } = emailAnalysis;
+            const authSummary = summariseAuth(headers);
+            return (
+              <div className="space-y-2 border-t border-gray-800 pt-4">
+                <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  {t("email.analysis.heading")}
+                </div>
+                <dl className="space-y-1 text-sm">
+                  {headers.fromAddress && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-gray-500">{t("email.analysis.from")}</dt>
+                      <dd className="font-mono text-gray-400 break-all min-w-0">{defangEmail(headers.fromAddress)}</dd>
+                    </div>
+                  )}
+                  {headers.replyTo && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-gray-500">{t("email.analysis.replyTo")}</dt>
+                      <dd className="font-mono text-gray-400 break-all min-w-0">{defangEmail(headers.replyTo)}</dd>
+                    </div>
+                  )}
+                  {authSummary && (
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 text-gray-500">{t("email.analysis.auth")}</dt>
+                      <dd className="font-mono text-gray-400 break-all min-w-0">{authSummary}</dd>
+                    </div>
+                  )}
+                </dl>
+                {flags.length > 0 ? (
+                  <ul className="space-y-1.5 pt-1">
+                    {flags.map((flag, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-amber-300/90">
+                        <span aria-hidden="true" className="shrink-0">⚠</span>
+                        <span className="min-w-0">{defangFlag(flag)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500 pt-1">{t("email.analysis.clean")}</p>
+                )}
+              </div>
+            );
+          })()}
+
           {(() => {
-            // "Clean" means nothing flagged it — every identifier safe AND no
-            // tracking pixel (a pixel pushes the overall verdict to suspicious,
-            // so the CTA should match that, not the softer "report anyway").
-            const isClean = results.length > 0 && results.every((r) => r.result.verdict === "safe") && !pixelReport;
+            // "Clean" means nothing flagged it — every identifier safe, no
+            // tracking pixel, and no sender-spoofing flags. A pixel or a flag
+            // pushes the verdict up, so the CTA matches that (the stronger
+            // "report", not the softer "report anyway").
+            const clean = isClean(results, pixelReport, emailAnalysis?.identityFlags ?? []);
             return (
               <button
                 onClick={() => goForward("report")}
                 className={`w-full py-3 px-6 font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2 ${
-                  isClean
+                  clean
                     ? "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
                     : "bg-red-800 hover:bg-red-700 text-white"
                 }`}
               >
                 <span aria-hidden="true">🚨</span>
-                {isClean ? t("check.reportAnyway") : t("check.report")}
+                {clean ? t("check.reportAnyway") : t("check.report")}
               </button>
             );
           })()}
@@ -458,6 +561,31 @@ export default function CheckFlow() {
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
 
+      {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
+          Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED). */}
+      {INBOUND_ENABLED && (
+        <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 space-y-2">
+          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
+            <span aria-hidden="true">📨</span> {t("check.forward.heading")}
+          </p>
+          <p className="text-xs text-gray-400">
+            {t("check.forward.body", { address: INBOUND_ADDRESS })}
+          </p>
+          <p className="text-[11px] text-gray-500">
+            {t("check.forward.note")}
+          </p>
+          <a
+            href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition-colors"
+          >
+            <span aria-hidden="true">↪</span> {t("check.forward.cta", { address: INBOUND_ADDRESS })}
+          </a>
+        </div>
+      )}
+
+      {/* Per-client guide for grabbing the raw source / .eml the upload wants. */}
+      <EmailExportGuide />
+
       <div className="flex items-center gap-3" aria-hidden="true">
         <div className="flex-1 h-px bg-gray-700" />
         <span className="text-xs text-gray-500">{t("check.orPaste")}</span>
@@ -466,17 +594,40 @@ export default function CheckFlow() {
 
       <div>
         <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
-        <textarea
-          id="check-content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={t("check.placeholder")}
-          rows={5}
-          className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-base font-mono"
-        />
+        {/* Drop target: dragging a .eml / image / source file onto the textarea
+            fills it in. dragenter/over must preventDefault to mark a valid drop
+            zone; the overlay only appears mid-drag so it never blocks typing. */}
+        <div
+          className="relative"
+          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+          onDrop={handleDrop}
+        >
+          <textarea
+            id="check-content"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={t("check.placeholder")}
+            rows={5}
+            className={`w-full bg-gray-950 border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-base font-mono transition-colors ${
+              dragOver ? "border-emerald-500 border-dashed" : "border-gray-700"
+            }`}
+          />
+          {dragOver && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 flex items-center justify-center rounded-xl bg-gray-950/90 border-2 border-dashed border-emerald-500 pointer-events-none text-emerald-300 text-sm font-medium gap-2"
+            >
+              <span>📨</span> {t("check.dropHere")}
+            </div>
+          )}
+        </div>
         {/* Paste guidance for users who aren't sure how to copy on mobile */}
         {!content && (
-          <p className="mt-1.5 text-xs text-gray-500">{t("check.pasteHint")}</p>
+          <p className="mt-1.5 text-xs text-gray-500">
+            {t("check.pasteHint")}{" "}
+            <span className="hidden sm:inline">{t("check.dropHint")}</span>
+          </p>
         )}
       </div>
 

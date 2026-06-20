@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ScamType } from "@/lib/scamDetector";
-import { parseEmailHeaders, analyseEmailIdentities, summariseAuth } from "@/lib/emailHeaders";
-import { analyseTrackingPixels, TrackingPixelReport } from "@/lib/trackingPixel";
+import { summariseAuth } from "@/lib/emailHeaders";
+import { EmailTrackingReport } from "@/lib/emailTracking";
+import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
+import EmailExportGuide from "./EmailExportGuide";
 
 const REPORT_TYPES: { value: ScamType; labelKey: MessageKey; icon: string }[] = [
   { value: "url",    labelKey: "report.type.url",    icon: "🔗" },
@@ -32,7 +34,7 @@ type Status = "idle" | "submitting" | "success" | "error";
 interface EmailAuth { spf: string; dkim: string; dkimDomain: string; dmarc: string }
 const EMPTY_AUTH: EmailAuth = { spf: "", dkim: "", dkimDomain: "", dmarc: "" };
 
-export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth, initialPixelReport }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth; initialPixelReport?: TrackingPixelReport } = {}) {
+export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [type, setType] = useState<ScamType>(initialType ?? "url");
@@ -49,7 +51,14 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   // the SPF/DKIM/DMARC picture. Empty until a source is parsed.
   const [auth, setAuth] = useState<EmailAuth>(initialAuth ?? EMPTY_AUTH);
   const authSummary = summariseAuth(auth);
-  const [pixelReport, setPixelReport] = useState<TrackingPixelReport | null>(initialPixelReport ?? null);
+  // Broader tracking surface (pixels + click redirects, CSS beacons, read
+  // receipts, …). Seeded from initialContent so a Check→Report handoff shows
+  // tracking immediately; re-derived whenever a source is pasted/parsed.
+  const [trackingReport, setTrackingReport] = useState<EmailTrackingReport | null>(() => {
+    if (!initialContent?.trim()) return null;
+    const tr = analyseEmailSource(initialContent).tracking;
+    return tr.hasTracking ? tr : null;
+  });
   const [contact, setContact] = useState("");
   const [hp, setHp] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -72,19 +81,19 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
   // address and routing metadata on their device.
   function parseSource(raw: string) {
     setEmailSource(raw);
-    if (!raw.trim()) { setParseNote(null); setAuth(EMPTY_AUTH); setPixelReport(null); return; }
-    const h = parseEmailHeaders(raw);
+    if (!raw.trim()) { setParseNote(null); setAuth(EMPTY_AUTH); setTrackingReport(null); return; }
+    // Shared analysis: unwraps a forwarded email to the original first, so the
+    // fields autofill the scammer's From/Reply-To, not the forwarder's.
+    const { headers: h, identityFlags, tracking } = analyseEmailSource(raw);
     if (h.fromAddress) setScamEmail(h.fromAddress);
     if (h.replyTo) setScamReplyTo(h.replyTo);
     setAuth({ spf: h.spf, dkim: h.dkim, dkimDomain: h.dkimDomain, dmarc: h.dmarc });
-    const pr = analyseTrackingPixels(raw);
-    setPixelReport(pr.hasTrackingPixels ? pr : null);
+    setTrackingReport(tracking);
     if (!h.fromAddress && !h.replyTo) {
       setParseNote(t("report.parse.notFound"));
       return;
     }
-    const { flags } = analyseEmailIdentities(h);
-    setParseNote(flags.length > 0 ? `⚠ ${flags[0]}` : t("report.parse.ok"));
+    setParseNote(identityFlags.length > 0 ? `⚠ ${identityFlags[0]}` : t("report.parse.ok"));
   }
 
   async function handleEmlFile(file: File) {
@@ -146,7 +155,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
     setParseNote(null);
     setAuth(EMPTY_AUTH);
     setContact("");
-    setPixelReport(null);
+    setTrackingReport(null);
     setReportId(null);
     setStatus("idle");
     loadedAt.current = Date.now();
@@ -303,9 +312,9 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               <span className="text-gray-500">{t("report.extracted.auth")} </span>{authSummary}
             </p>
           )}
-          {pixelReport?.summary && (
+          {trackingReport?.summary && (
             <p className="text-amber-300/90 font-mono">
-              <span className="text-gray-500">Pixels: </span>{pixelReport.summary}
+              <span className="text-gray-500">{t("report.extracted.tracking")} </span>{trackingReport.summary}
             </p>
           )}
           <p className="text-gray-500">{t("report.extracted.review")}</p>
@@ -436,16 +445,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               )}
             </div>
 
-            <details className="text-xs text-gray-400">
-              <summary className="cursor-pointer text-emerald-400/90 hover:text-emerald-300">
-                {t("report.email.how.summary")}
-              </summary>
-              <ul className="mt-2 space-y-1 list-disc pl-5 text-gray-400">
-                <li>{bold(t("report.email.how.from"))}</li>
-                <li>{bold(t("report.email.how.replyTo"))}</li>
-                <li>{t("report.email.how.desktop")}</li>
-              </ul>
-            </details>
+            <EmailExportGuide />
 
             <div>
               <label htmlFor="report-email-source" className="block text-xs font-medium text-gray-400 mb-1">
@@ -478,10 +478,12 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
                   <span className="text-gray-500"> {t("report.email.auth.attached")}</span>
                 </p>
               )}
-              {pixelReport?.hasTrackingPixels && (
+              {trackingReport?.hasTracking && (
                 <div className="mt-2 space-y-1">
-                  {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
-                    <p key={i} className="text-xs text-amber-400">• {note}</p>
+                  {trackingReport.findings.map((f) => (
+                    <p key={f.kind} className="text-xs text-amber-400">
+                      • {f.label}{f.count > 1 ? ` ×${f.count}` : ""} — {f.detail}
+                    </p>
                   ))}
                 </div>
               )}

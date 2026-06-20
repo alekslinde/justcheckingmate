@@ -238,6 +238,10 @@
     "NO_PIXELS": {
       "description": "Clean email without tracking pixels (control case)",
       "content": "From: myGov <noreply@mygov.gov.au>\nSubject: Your tax return has been processed\nReceived-SPF: pass (spf.google.com: domain of mygov.gov.au designates 203.0.113.1 as permitted sender) client-ip=203.0.113.1\nAuthentication-Results: mx.google.com; spf=pass; dkim=pass header.d=mygov.gov.au; dmarc=pass\n\n<html><body>\n<p>Your tax return has been processed. Log in to view the outcome.</p>\n<img src=\"https://mygov.gov.au/logo.png\" width=\"200\" height=\"50\" alt=\"myGov\">\n</body></html>"
+    },
+    "ALL_TRACKING_MECHANISMS": {
+      "description": "Every tracking mechanism at once: pixel, click-redirect, unique-per-recipient token, CSS @import/background, read-receipt header, preload link, meta refresh — plus display-name masking and From≠Reply-To",
+      "content": "From: myGov <noreply@mygov-secure.tk>\nReply-To: collect@payme-now.ru\nTo: you@example.com\nSubject: Action required: verify your account\nDisposition-Notification-To: spy@mygov-secure.tk\nContent-Type: text/html\n\n<html><head><link rel=\"preload\" href=\"https://fonts.mygov-secure.tk/f.woff2\">\n<style>@import url(https://t.mygov-secure.tk/track.css);</style>\n<meta http-equiv=\"refresh\" content=\"30;url=https://mygov-secure.tk/verify\"></head>\n<body style=\"background-image: url(https://t.mygov-secure.tk/bg.png)\">\n<p>Your account is suspended. Verify now:</p>\n<a href=\"https://click.sendgrid.net/ls/click?u=a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6\">Verify</a>\n<a href=\"https://click.sendgrid.net/ls/click?u=a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6&p=2\">Unsubscribe</a>\n<img src=\"https://t.mygov-secure.tk/pixel/open?r=you%40example.com\" width=\"1\" height=\"1\">\n</body></html>"
     }
   },
   "reportEmailsWithPixels": {

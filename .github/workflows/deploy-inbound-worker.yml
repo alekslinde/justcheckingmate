@@ -1,0 +1,48 @@
+name: Deploy inbound email worker
+
+# Deploys the Cloudflare Email Worker in workers/inbound-email/. The Next app is
+# deployed separately by Vercel — this only handles the Worker, and only runs
+# when the Worker's own files change, so app-only commits don't redeploy it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/inbound-email/**"
+      - ".github/workflows/deploy-inbound-worker.yml"
+  # Allow a manual run from the Actions tab (e.g. to re-push the secret).
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: workers/inbound-email/package-lock.json
+
+      - name: Install worker deps
+        run: npm ci
+        working-directory: workers/inbound-email
+
+      - name: Unit-test the reply builder
+        run: npm test
+        working-directory: workers/inbound-email
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/inbound-email
+          wranglerVersion: "3"
+          # Push the shared secret as part of the deploy, so it lives only in
+          # GitHub repo secrets and the Worker — never in the repo. Must match
+          # INBOUND_SECRET set on the Next app (Vercel env var).
+          secrets: |
+            INBOUND_SECRET
+        env:
+          INBOUND_SECRET: ${{ secrets.INBOUND_SECRET }}
