@@ -10,11 +10,15 @@
 //      raw message — headers and all. This is the high-fidelity case.
 //   2. Quoted inline in the body, under a separator like
 //      "---------- Forwarded message ---------" followed by lines such as
-//      "From: ...", "Reply-To: ...", sometimes `>`-quoted. Lower fidelity:
-//      authentication results are usually lost, but From/Reply-To survive.
+//      "From: ...", "Reply-To: ...", sometimes `>`-quoted. We preserve the
+//      quoted headers AND the quoted body, so sender analysis AND tracking
+//      analysis (pixels, CSS beacons, read receipts, meta refresh) both work.
+//      The only loss versus an attachment is the receiving-server SPF/DKIM/DMARC
+//      results, which clients don't carry into the quote.
 //
-// This module returns the best raw block to hand to parseEmailHeaders, plus how
-// it was found, so callers can caveat a low-fidelity (inline) result.
+// This module returns the best raw block to hand to parseEmailHeaders /
+// analyseEmailTracking, plus how it was found, so callers can caveat the
+// (slightly lower-fidelity) inline result.
 //
 // Pure string logic. No MIME library — a focused splitter covers the shapes
 // real clients actually produce, and is auditable in one screen.
@@ -94,8 +98,18 @@ const INLINE_MARKERS = [
   /^from:\s.+\bsent:\s/im,                        // Outlook header-style block
 ];
 
-// Extract the original headers quoted inline. Returns a synthetic header block
-// (From:/Reply-To:/Subject:) reconstructed from the quoted lines, or "".
+// A line that looks like an email header: "Header-Name: value".
+const HEADER_LINE_RE = /^[A-Za-z][A-Za-z0-9\-]*\s*:\s/;
+
+// Header names a forwarded quote typically carries — used to recognise the
+// original's header block even when extra prose is interleaved.
+const QUOTED_HEADER_RE = /^(from|to|cc|reply-to|sent|date|subject|disposition-notification-to|return-receipt-to|x-confirm-reading-to)\s*:/i;
+
+// Extract the inline-quoted original as a full email: its quoted headers, a
+// blank line, then the quoted body. Preserving the body (not just From/Reply-To)
+// means tracking analysis — pixels, CSS beacons, meta refresh — works on inline
+// forwards too, and read-receipt headers in the quote survive. Returns "" when
+// nothing useful is quoted.
 function findInline(body: string): string {
   // Find the earliest marker; everything after it is the quoted original.
   let cut = -1;
@@ -105,32 +119,48 @@ function findInline(body: string): string {
   }
   if (cut === -1) return "";
 
-  // De-quote (`> `), then pull the header-ish lines that follow the marker.
-  const quoted = body
+  // De-quote (`> `) every line after the marker, dropping the marker line itself.
+  const lines = body
     .slice(cut)
     .split(/\r?\n/)
-    .map((l) => l.replace(/^\s*>+\s?/, "").trim());
+    .slice(1) // skip the "---- Forwarded message ----" / "Begin forwarded message:" line
+    .map((l) => l.replace(/^\s*>+\s?/, ""));
 
-  const grab = (name: string): string => {
-    const re = new RegExp(`^${name}\\s*:\\s*(.+)$`, "i");
-    for (const l of quoted) {
-      const m = l.match(re);
-      if (m) return m[1].trim();
+  // Walk the de-quoted lines: the leading run of header-looking lines (allowing
+  // blank lines and folded continuations among them) is the original's header
+  // block; the first line that's clearly body text ends it. Everything from
+  // there on is the body we hand to the tracking analyser.
+  const headerLines: string[] = [];
+  let bodyStart = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === "") {
+      // A blank line ends the header block ONLY once we've seen a real header.
+      if (headerLines.length > 0) { bodyStart = i + 1; break; }
+      continue;
     }
-    return "";
-  };
+    if (QUOTED_HEADER_RE.test(line) || (headerLines.length > 0 && /^\s+\S/.test(line))) {
+      // A recognised header, or a folded continuation of the previous one.
+      headerLines.push(line.trim());
+      continue;
+    }
+    if (HEADER_LINE_RE.test(line) && headerLines.length > 0) {
+      // Some other header-shaped line amid the block — keep it.
+      headerLines.push(line.trim());
+      continue;
+    }
+    // First non-header line: the body starts here.
+    bodyStart = i;
+    break;
+  }
 
-  const from = grab("from");
-  const replyTo = grab("reply-to");
-  const subject = grab("subject");
-  if (!from && !replyTo) return ""; // nothing useful quoted
+  // Need at least a From/Reply-To to be worth treating as the original.
+  const hasSender = headerLines.some((l) => /^(from|reply-to)\s*:/i.test(l));
+  if (!hasSender) return "";
 
-  // Reconstruct a minimal header block parseEmailHeaders understands.
-  const lines: string[] = [];
-  if (from) lines.push(`From: ${from}`);
-  if (replyTo) lines.push(`Reply-To: ${replyTo}`);
-  if (subject) lines.push(`Subject: ${subject}`);
-  return lines.join("\n");
+  const bodyText = lines.slice(bodyStart).join("\n").trim();
+  // Reassemble as a proper RFC822 message: headers, blank line, body.
+  return bodyText ? `${headerLines.join("\n")}\n\n${bodyText}` : headerLines.join("\n");
 }
 
 // Find the original message inside a (possibly) forwarded email. Tries the

@@ -84,6 +84,9 @@ describe("unwrapForwarded", () => {
     expect(h.fromAddress).toBe("refunds@ato-refund.xyz");
     expect(h.replyTo).toBe("get@payme.cc");
     expect(h.fromAddress).not.toBe(FORWARDER);
+    // The quoted body must be preserved (not just the headers) so tracking
+    // analysis can run on inline forwards.
+    expect(raw).toContain("You are owed $450");
   });
 
   it("recovers the original from an Outlook quoted forward", () => {
@@ -105,6 +108,29 @@ describe("unwrapForwarded", () => {
     const out = unwrapForwarded(raw);
     expect(out.source).toBe("toplevel");
     expect(parseEmailHeaders(out.raw).fromAddress).toBe("scammer@bad.tk");
+  });
+
+  it("preserves quoted headers and body so tracking fires on inline forwards", () => {
+    const forward = [
+      `From: ${FORWARDER}`,
+      "Subject: Fwd: alert",
+      "",
+      "look at this",
+      "",
+      "---------- Forwarded message ---------",
+      "From: Bank <noreply@bank-evil.tk>",
+      "Reply-To: collect@bank-evil.tk",
+      "Disposition-Notification-To: spy@bank-evil.tk",
+      "Subject: alert",
+      "",
+      '<img src="https://trk.bank-evil.tk/pixel/1" width="1" height="1">',
+    ].join("\n");
+    const { raw, source } = unwrapForwarded(forward);
+    expect(source).toBe("inline");
+    // Read-receipt header from the quote survives.
+    expect(raw).toMatch(/Disposition-Notification-To:/i);
+    // Body (pixel) survives.
+    expect(raw).toContain("trk.bank-evil.tk/pixel/1");
   });
 
   it("does not crash on empty or junk input", () => {
