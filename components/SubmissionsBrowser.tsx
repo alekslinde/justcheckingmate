@@ -342,12 +342,15 @@ export default function SubmissionsBrowser() {
                       <span className="text-xs text-gray-500 shrink-0">{timeAgo(r.submittedAt)}</span>
                     </div>
 
-                    {/* ── Row 2: scam identifiers (reporter-supplied) ── */}
+                    {/* ── Row 2: scam identifiers (reporter-supplied) ──
+                        Each field stacks vertically: caption label on top, the
+                        defanged value below. break-all keeps long URLs/emails in
+                        the card without overflowing. */}
                     {identifiers.length > 0 && (
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         {identifiers.map(({ labelKey, value }, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            <span className="shrink-0 text-xs text-gray-500">{t(labelKey)}</span>
+                          <div key={i} className="flex flex-col gap-0.5">
+                            <span className="text-[11px] uppercase tracking-wider text-gray-500">{t(labelKey)}</span>
                             <SafeDisplay
                               value={value}
                               className={`font-mono break-all ${i === 0 ? "text-sm text-amber-300" : "text-xs text-amber-300/70"}`}
@@ -355,8 +358,8 @@ export default function SubmissionsBrowser() {
                           </div>
                         ))}
                         {r.scamReplyTo && (
-                          <div className="flex items-center gap-2 pl-1">
-                            <span className="text-xs text-gray-500 shrink-0">{t("subs.repliesTo")}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[11px] uppercase tracking-wider text-gray-500">{t("subs.repliesTo")}</span>
                             <SafeDisplay value={r.scamReplyTo} className="font-mono text-xs text-amber-300/70 break-all" />
                           </div>
                         )}
