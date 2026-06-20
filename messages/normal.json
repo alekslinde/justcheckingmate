@@ -352,5 +352,6 @@
   "learn.caught.4.action": "Disconnect from the internet, uninstall it, run a security scan, and change important passwords from a different, trusted device.",
   "learn.caught.outro": "Then report it to **Scamwatch** and **ReportCyber**, and tell your bank. If you're unsure where to start, IDCARE can walk you through it.",
   "learn.report.heading": "Where to report a scam",
-  "learn.report.body": "Reporting helps authorities warn others and disrupt scammers. This tool gives a best-effort check only — **it can't guarantee it catches every scam**, so trust your instincts too."
+  "learn.report.body": "Reporting helps authorities warn others and disrupt scammers. This tool gives a best-effort check only — **it can't guarantee it catches every scam**, so trust your instincts too.",
+  "learn.footer.cta": "Check or report a scam →"
 }
