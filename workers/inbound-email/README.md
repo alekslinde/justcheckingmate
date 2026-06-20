@@ -15,33 +15,80 @@ analyses it in memory and returns a verdict; nothing is persisted but an
 anonymous counter. Replies can only go back to the original sender, so the
 Worker cannot be abused as an open relay.
 
-## One-time setup (Cloudflare dashboard + CLI)
+## Deployment model
 
-1. **DNS / Email Routing.** In the Cloudflare dashboard for the domain:
-   Email → Email Routing → enable it. This adds the required **MX** and **TXT
-   (SPF)** records automatically. Verify they're live.
+Two **independent** deploy targets — neither deploys the other:
 
-2. **Secret.** Generate a shared secret and set it on both sides — it must match
-   `INBOUND_SECRET` in the Next app's environment:
-   ```sh
-   wrangler secret put INBOUND_SECRET   # paste the same value used by the app
-   ```
+| | Next app (`/`) | This Worker (`workers/inbound-email/`) |
+| --- | --- | --- |
+| Host | **Vercel** (git push → build) | **Cloudflare** (`wrangler deploy`) |
+| `/api/inbound` lives here | ✅ | — |
+| `INBOUND_SECRET` set as | Vercel env var | GitHub repo secret → pushed on deploy |
 
-3. **Webhook URL.** Edit `wrangler.toml` → `INBOUND_WEBHOOK_URL` to your deployed
-   app's `/api/inbound` (defaults to `https://justcheckingmate.com/api/inbound`).
+The two share one value: **`INBOUND_SECRET` must be identical** on Vercel and on
+the Worker, or the webhook 401s every call.
 
-4. **Deploy.**
-   ```sh
-   npm install
-   npm run deploy
-   ```
+## Go-live runbook (one-time)
 
-5. **Bind the address.** In Email Routing → Routing rules, add a custom address
-   `check@<domain>` and set its action to **Send to a Worker → jcm-inbound-email**.
+Do these in order. Steps 0–1 are the prerequisites people miss.
 
-6. **Flip the UI flag.** Once mail flows end-to-end, set
-   `NEXT_PUBLIC_INBOUND_ENABLED=true` in the Next app so the address is shown to
-   users. Leave it unset until then — never advertise a dead inbox.
+0. **Domain DNS must be on Cloudflare.** Cloudflare Email Routing can only add MX
+   records if Cloudflare is the domain's DNS provider. If `justcheckingmate.com`
+   currently resolves through Vercel/your registrar, move the domain's
+   nameservers to Cloudflare first (Vercel still serves the site via its records;
+   only DNS hosting moves). **Nothing below works until this is done.**
+
+1. **Enable Email Routing.** Cloudflare dashboard → the domain → Email → Email
+   Routing → enable. This auto-adds the **MX** and **SPF (TXT)** records. Then go
+   to its DNS/authentication settings and **publish the DKIM and DMARC records it
+   offers** — these are what make the verdict reply pass authentication and reach
+   the inbox (see *Deliverability* below). Verify all records are live.
+
+2. **Pick the shared secret.** Generate one (`openssl rand -hex 32`). You'll set
+   the same value in two places (steps 3 and 5).
+
+3. **Set it on Vercel.** Project → Settings → Environment Variables →
+   `INBOUND_SECRET` = the value from step 2. Also confirm the app is deployed
+   with `/api/inbound` live (this branch merged to `main`). Vercel bakes env vars
+   at build time, so **redeploy** after adding it.
+
+4. **Point the webhook at the app.** `wrangler.toml` → `INBOUND_WEBHOOK_URL`
+   should be your deployed app's `/api/inbound` (default:
+   `https://justcheckingmate.com/api/inbound`).
+
+5. **Deploy the Worker** — either path sets the secret on the Worker:
+
+   - **CI (recommended):** add three GitHub repo secrets — `CLOUDFLARE_API_TOKEN`
+     (a token scoped to *Edit Workers*), `CLOUDFLARE_ACCOUNT_ID`, and
+     `INBOUND_SECRET` (same value as step 3). Push to `main`; the
+     [deploy-inbound-worker workflow](../../.github/workflows/deploy-inbound-worker.yml)
+     deploys and pushes the secret automatically. Or run it manually from the
+     Actions tab (**Run workflow**).
+   - **Manual:**
+     ```sh
+     npm ci
+     npx wrangler secret put INBOUND_SECRET   # paste the step-2 value
+     npm run deploy
+     ```
+
+6. **Bind the address.** Email Routing → Routing rules → add a custom address
+   `check@justcheckingmate.com` → action **Send to a Worker → jcm-inbound-email**.
+
+7. **Verify end-to-end.** Forward a known scam email to `check@<domain>` from a
+   normal account (Gmail/iCloud). Within a few seconds you should get a threaded
+   verdict reply **in the inbox** (not spam — if it's spam, recheck step 1's
+   DKIM/DMARC records). Also forward a clean email and confirm the "no tracking"
+   reassurance reads correctly.
+
+8. **Flip the UI flag.** Only once step 7 passes: set
+   `NEXT_PUBLIC_INBOUND_ENABLED=true` on Vercel and redeploy, so the
+   "forward it to us" address is shown to users. Never advertise a dead inbox.
+
+### Rotating the secret later
+
+Change it in **both** GitHub repo secrets (re-run the workflow) **and** the
+Vercel env var (redeploy). If only one side changes, inbound mail 401s until both
+match — so do them close together.
 
 ## Deliverability — keeping the reply out of spam
 
