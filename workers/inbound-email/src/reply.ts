@@ -1,7 +1,11 @@
 // Reply MIME building — pure, no Cloudflare runtime imports, so it can be
 // unit-tested under plain Node/vitest. The email() handler in index.ts uses it.
 
-import { createMimeMessage } from "mimetext";
+// Use the /browser entrypoint: the default (Node) build imports Node built-ins
+// like "path", which the Cloudflare Workers runtime doesn't provide and which
+// fails the build ("Could not resolve path"). The browser build is built for
+// exactly this kind of runtime and avoids them.
+import { createMimeMessage } from "mimetext/browser";
 
 export interface ReplyContent {
   subject: string;

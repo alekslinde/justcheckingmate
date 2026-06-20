@@ -15,33 +15,48 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/inbound-email
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: workers/inbound-email/package-lock.json
 
       - name: Install worker deps
         run: npm ci
-        working-directory: workers/inbound-email
 
       - name: Unit-test the reply builder
         run: npm test
-        working-directory: workers/inbound-email
 
-      - name: Deploy
+      # Deploy the Worker FIRST, with no secrets. Setting a secret on a Worker
+      # that doesn't exist yet fails (wrangler-action#162), so the worker must
+      # exist before the secret step. `wrangler deploy` is idempotent on reruns.
+      - name: Deploy worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers/inbound-email
           wranglerVersion: "3"
-          # Push the shared secret as part of the deploy, so it lives only in
-          # GitHub repo secrets and the Worker — never in the repo. Must match
-          # INBOUND_SECRET set on the Next app (Vercel env var).
+
+      # Now that the Worker exists, push the shared secret. The `secrets:` input
+      # runs `wrangler secret put` for each name; `command: whoami` is a no-op
+      # so this step ONLY sets the secret and doesn't redeploy. The value lives
+      # only in GitHub repo secrets and the Worker — never in the repo. Must
+      # match INBOUND_SECRET set on the Next app (Vercel env var).
+      - name: Set INBOUND_SECRET
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/inbound-email
+          wranglerVersion: "3"
+          command: whoami
           secrets: |
             INBOUND_SECRET
         env:
