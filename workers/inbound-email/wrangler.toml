@@ -11,4 +11,4 @@ send_email = [{ name = "JCM_REPLY" }]
 # INBOUND_WEBHOOK_URL points at the deployed Next app's /api/inbound route.
 # INBOUND_SECRET is NOT here — set it as a secret: `wrangler secret put INBOUND_SECRET`
 [vars]
-INBOUND_WEBHOOK_URL = "https://justcheckingmate.app/api/inbound"
+INBOUND_WEBHOOK_URL = "https://justcheckingmate.com/api/inbound"

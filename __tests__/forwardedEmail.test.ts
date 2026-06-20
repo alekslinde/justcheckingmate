@@ -9,7 +9,7 @@ const FORWARDER = "victim@gmail.com";
 // ── Apple Mail "Forward as Attachment" → message/rfc822 part ──
 const APPLE_ATTACHMENT = [
   `From: ${FORWARDER}`,
-  "To: check@justcheckingmate.app",
+  "To: check@justcheckingmate.com",
   "Subject: Fwd: Your account",
   'Content-Type: multipart/mixed; boundary="APPLE-BOUND"',
   "",
@@ -33,7 +33,7 @@ const APPLE_ATTACHMENT = [
 // ── Gmail inline forward ──
 const GMAIL_INLINE = [
   `From: ${FORWARDER}`,
-  "To: check@justcheckingmate.app",
+  "To: check@justcheckingmate.com",
   "Subject: Fwd: Refund waiting",
   "",
   "Is this real??",

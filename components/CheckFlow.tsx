@@ -27,7 +27,7 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
 // flag is read at build time (NEXT_PUBLIC_*), so an unconfigured deploy never
 // advertises a dead inbox. Address is overridable for staging/other domains.
 const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
-const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.app";
+const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.com";
 
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply

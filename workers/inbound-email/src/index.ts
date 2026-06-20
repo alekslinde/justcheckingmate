@@ -12,12 +12,12 @@
 // one else. (We still rate-limit per sender on the API side as defence depth.)
 
 import { EmailMessage } from "cloudflare:email";
-import { createMimeMessage } from "mimetext";
+import { buildReplyMime } from "./reply";
 
 export interface Env {
   // Set via `wrangler secret put` — must match the Next app's INBOUND_SECRET.
   INBOUND_SECRET: string;
-  // Full URL of the Next webhook, e.g. https://justcheckingmate.app/api/inbound
+  // Full URL of the Next webhook, e.g. https://justcheckingmate.com/api/inbound
   INBOUND_WEBHOOK_URL: string;
 }
 
@@ -74,21 +74,23 @@ export default {
     if (!data.reply) return;
 
     // Build a reply addressed back to the forwarder. message.reply() restricts
-    // the recipient to the original sender, so this can't be redirected.
-    const msg = createMimeMessage();
-    // In-Reply-To threads the verdict under the forwarded email in the client.
-    const inReplyTo = message.headers.get("Message-ID");
-    if (inReplyTo) msg.setHeader("In-Reply-To", inReplyTo);
-    msg.setSender({ name: "Just Checking, Mate", addr: message.to });
-    msg.setRecipient(message.from);
-    msg.setSubject(data.reply.subject);
-    msg.addMessage({ contentType: "text/plain", data: data.reply.text });
-    msg.addMessage({ contentType: "text/html", data: data.reply.html });
+    // the recipient to the original sender, so this can't be redirected; the
+    // From is the receiving address so Cloudflare DKIM-signs it for that domain.
+    const mime = buildReplyMime(data.reply, {
+      from: message.to,
+      to: message.from,
+      messageId: message.headers.get("Message-ID"),
+      references: message.headers.get("References"),
+    });
 
     try {
-      await message.reply(new EmailMessage(message.to, message.from, msg.asRaw()));
-    } catch {
-      // Reply rejected (e.g. sender not replyable) — nothing else to do.
+      await message.reply(new EmailMessage(message.to, message.from, mime));
+    } catch (err) {
+      // Cloudflare rejects the reply when the incoming forward itself failed
+      // DMARC (a documented constraint) — we can't reply on that transaction.
+      // Log it so this isn't a silent black hole; there's nothing else to do
+      // on the inbound transaction.
+      console.warn("reply rejected (likely incoming DMARC failure):", err);
     }
   },
 };

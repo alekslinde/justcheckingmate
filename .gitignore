@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+# nested workspaces (e.g. the inbound-email worker) have their own deps
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
