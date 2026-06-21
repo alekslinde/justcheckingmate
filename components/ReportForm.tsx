@@ -7,7 +7,6 @@ import { summariseAuth } from "@/lib/emailHeaders";
 import { EmailTrackingReport } from "@/lib/emailTracking";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";
-import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
 import EmailExportGuide from "./EmailExportGuide";
 
