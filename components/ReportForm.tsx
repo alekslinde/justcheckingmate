@@ -7,7 +7,6 @@ import { summariseAuth } from "@/lib/emailHeaders";
 import { EmailTrackingReport } from "@/lib/emailTracking";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";
-import { bold } from "@/lib/richText";
 import { useBugReport } from "./BugReportProvider";
 import EmailExportGuide from "./EmailExportGuide";
 
@@ -289,13 +288,6 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         <p className="text-sm text-emerald-400 font-semibold text-center">{t("report.urgent")}</p>
         <p className="text-sm text-gray-400 text-center">{t("report.valuable")}</p>
       </div>
-
-      {/* Stats badge */}
-      {totalReports !== null && (
-        <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
-          <span>{bold(t("report.stats", { n: totalReports.toLocaleString() }))}</span>
-        </div>
-      )}
 
       {/* Required field note */}
       <p className="text-sm text-gray-400">

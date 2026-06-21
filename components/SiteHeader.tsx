@@ -23,16 +23,16 @@ export default function SiteHeader() {
         <nav className="flex items-center gap-0.5 min-w-0">
           {/* Min 44px tap target on each nav item */}
           <Link
-            href="/learn"
-            className="min-h-[44px] flex items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
-          >
-            {t("nav.learn")}
-          </Link>
-          <Link
             href="/submissions"
             className="min-h-[44px] flex items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
           >
             {t("nav.reports")}
+          </Link>
+          <Link
+            href="/learn"
+            className="min-h-[44px] flex items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
+          >
+            {t("nav.learn")}
           </Link>
           <Link
             href="/about"

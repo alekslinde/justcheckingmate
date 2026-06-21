@@ -28,54 +28,66 @@ const CLIENTS: { id: Client; tabKey: MessageKey; stepKeys: MessageKey[] }[] = [
   },
 ];
 
-export default function EmailExportGuide() {
+// `expandable` (default) wraps the guide in a <details> with the "How do I get
+// the email source?" summary — used inline next to the paste field where it must
+// stay out of the way. Set expandable={false} to render the guide open, e.g. on
+// the Learn page where it already sits under its own section heading.
+export default function EmailExportGuide({ expandable = true }: { expandable?: boolean }) {
   const { t } = useLang();
   const [active, setActive] = useState<Client>("apple");
   const current = CLIENTS.find((c) => c.id === active)!;
+
+  const body = (
+    <div className={expandable ? "mt-2 space-y-2" : "space-y-2"}>
+      <p className="text-gray-400">{t("report.email.guide.intro")}</p>
+
+      {/* Tabs — native buttons in a tablist so arrow-key/AT semantics hold. */}
+      <div role="tablist" aria-label={t("report.email.guide.summary")} className="flex flex-wrap gap-1.5">
+        {CLIENTS.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            role="tab"
+            aria-selected={active === c.id}
+            id={`email-guide-tab-${c.id}`}
+            aria-controls={`email-guide-panel-${c.id}`}
+            onClick={() => setActive(c.id)}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              active === c.id
+                ? "bg-emerald-500 text-gray-900"
+                : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+            }`}
+          >
+            {t(c.tabKey)}
+          </button>
+        ))}
+      </div>
+
+      <ol
+        role="tabpanel"
+        id={`email-guide-panel-${current.id}`}
+        aria-labelledby={`email-guide-tab-${current.id}`}
+        className="space-y-1.5 list-decimal pl-5 text-gray-400"
+      >
+        {current.stepKeys.map((k) => (
+          <li key={k}>{bold(t(k))}</li>
+        ))}
+      </ol>
+
+      <p className="text-gray-500">{t("report.email.guide.fallback")}</p>
+    </div>
+  );
+
+  if (!expandable) {
+    return <div className="text-xs text-gray-400">{body}</div>;
+  }
 
   return (
     <details className="text-xs text-gray-400">
       <summary className="cursor-pointer text-emerald-400/90 hover:text-emerald-300">
         {t("report.email.guide.summary")}
       </summary>
-      <div className="mt-2 space-y-2">
-        <p className="text-gray-400">{t("report.email.guide.intro")}</p>
-
-        {/* Tabs — native buttons in a tablist so arrow-key/AT semantics hold. */}
-        <div role="tablist" aria-label={t("report.email.guide.summary")} className="flex flex-wrap gap-1.5">
-          {CLIENTS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="tab"
-              aria-selected={active === c.id}
-              id={`email-guide-tab-${c.id}`}
-              aria-controls={`email-guide-panel-${c.id}`}
-              onClick={() => setActive(c.id)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                active === c.id
-                  ? "bg-emerald-500 text-gray-900"
-                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
-              {t(c.tabKey)}
-            </button>
-          ))}
-        </div>
-
-        <ol
-          role="tabpanel"
-          id={`email-guide-panel-${current.id}`}
-          aria-labelledby={`email-guide-tab-${current.id}`}
-          className="space-y-1.5 list-decimal pl-5 text-gray-400"
-        >
-          {current.stepKeys.map((k) => (
-            <li key={k}>{bold(t(k))}</li>
-          ))}
-        </ol>
-
-        <p className="text-gray-500">{t("report.email.guide.fallback")}</p>
-      </div>
+      {body}
     </details>
   );
 }

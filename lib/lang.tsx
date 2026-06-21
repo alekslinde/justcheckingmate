@@ -7,8 +7,8 @@ export type { LangMode, MessageKey } from "@/lib/i18n";
 
 const STORAGE_KEY = "jcm_lang";
 
-interface LangCtx { mode: LangMode; toggle: () => void; }
-const LangContext = createContext<LangCtx>({ mode: "normal", toggle: () => {} });
+interface LangCtx { mode: LangMode; toggle: () => void; select: (mode: LangMode) => void; }
+const LangContext = createContext<LangCtx>({ mode: "normal", toggle: () => {}, select: () => {} });
 
 // Back the language preference with localStorage exposed as an external store.
 // useSyncExternalStore renders the server snapshot ("normal") on the server and
@@ -43,15 +43,16 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   const toggle = useCallback(() => {
     setMode(getSnapshot() === "normal" ? "aussie" : "normal");
   }, []);
+  const select = useCallback((next: LangMode) => setMode(next), []);
 
-  return <LangContext.Provider value={{ mode, toggle }}>{children}</LangContext.Provider>;
+  return <LangContext.Provider value={{ mode, toggle, select }}>{children}</LangContext.Provider>;
 }
 
 export function useLang() {
-  const { mode, toggle } = useContext(LangContext);
+  const { mode, toggle, select } = useContext(LangContext);
   const t = useCallback(
     (key: MessageKey, vars?: Record<string, string | number>) => translate(mode, key, vars),
     [mode],
   );
-  return { mode, toggle, t };
+  return { mode, toggle, select, t };
 }
