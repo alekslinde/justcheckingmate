@@ -290,13 +290,6 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         <p className="text-sm text-gray-400 text-center">{t("report.valuable")}</p>
       </div>
 
-      {/* Stats badge */}
-      {totalReports !== null && (
-        <div className="flex items-center gap-2 text-sm text-gray-300 bg-gray-900/50 rounded-lg px-3 py-2">
-          <span>{bold(t("report.stats", { n: totalReports.toLocaleString() }))}</span>
-        </div>
-      )}
-
       {/* Required field note */}
       <p className="text-sm text-gray-400">
         {t("report.required.pre")} <span aria-hidden="true" className="text-red-400">*</span>
