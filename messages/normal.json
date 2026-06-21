@@ -6,7 +6,7 @@
   "nav.about": "About",
 
   "home.title": "Got a suspicious message or call?",
-  "home.subtitle": "Paste it below and we'll check it for you — links, texts, emails, and phone numbers.",
+  "home.subtitle": "Paste it below — links, texts, emails, and phone numbers — and we'll check it for you, without ever storing it, sharing it, or opening its links.",
 
   "stats.checked.one": "scam checked",
   "stats.checked.many": "scams checked",
@@ -23,7 +23,6 @@
   "kind.phone": "Phone number",
   "kind.message": "Message",
 
-  "check.privacy": "We don't store your uploads or share them with anyone — and we never open the links in your scam.",
   "check.step.input": "Check a suspicious message",
   "check.step.result": "Check results",
   "check.step.report": "Report a scam",
@@ -47,6 +46,11 @@
   "check.takePhotoDesc": "Point at a QR code to decode it",
   "check.uploadEml": "Upload email file",
   "check.uploadEmlDesc": "For .eml files exported from a mail app",
+  "check.help.photo.summary": "How do I take a good photo?",
+  "check.help.photo.body": "Point your camera straight at the message or QR code in good light, fill the frame, and hold steady. We decode QR codes and read text automatically.",
+  "check.help.image.summary": "What image works best?",
+  "check.help.image.body": "A clear screenshot of the full message works best. Any format (PNG, JPG, HEIC) is fine — just make sure the text and any links are readable.",
+  "check.help.link": "Need help capturing a scam? See the guide →",
   "check.orPaste": "or paste below",
   "check.placeholder": "Paste a suspicious link, phone number, text message, or email here…",
   "check.pasteHint": "On your phone: long-press the message → Copy → tap here → Paste",
@@ -125,7 +129,6 @@
 
   "report.urgent": "For urgent matters, contact Scamwatch, your bank, or the Australian Federal Police directly — this tool is not a substitute for official reporting channels.",
   "report.valuable": "Your report is valuable. Every submission helps raise awareness and protects others from the same scam.",
-  "report.stats": "**{n}** scams reported by Australians so far",
   "report.required.pre": "Fields marked",
   "report.required.srAsterisk": "with an asterisk",
   "report.required.post": "are required.",
@@ -279,6 +282,13 @@
 
   "learn.title": "Learn",
   "learn.intro": "How scammers work, where scams come from, how to handle one — and what to do if you've already been caught.",
+  "learn.part.spot.heading": "Spotting scams",
+  "learn.part.spot.intro": "What scams look like, where they come from, and the signs that give them away.",
+  "learn.part.using.heading": "Getting the most from this tool",
+  "learn.part.using.intro": "How to capture a scam so we can read it — a clear photo, screenshot, or the email's raw source.",
+  "learn.using.photo.heading": "Taking a photo",
+  "learn.using.image.heading": "Uploading an image",
+  "learn.using.email.heading": "Getting the email source",
   "learn.types.heading": "Common Scam Types We Check",
   "learn.types.1.label": "Links & URLs",
   "learn.types.1.desc": "Fake sites & phishing URLs",

@@ -1,10 +1,9 @@
 {
   "home.title": "Got something a bit sus, mate?",
-  "home.subtitle": "Chuck it in below and we'll give it the once-over — links, texts, emails and phone numbers.",
+  "home.subtitle": "Chuck it in below — links, texts, emails and phone numbers — and we'll give it the once-over, without ever keeping it, passing it on, or opening its links.",
 
   "footer.tagline": "— always have a squiz before you act.",
 
-  "check.privacy": "We don't keep your uploads or pass them to anyone — and we never open the links in your scam.",
   "check.ocr.working": "Having a squiz at your image — can take up to a minute the first go. Hang tight…",
   "check.ocr.timeout": "OCR is taking too long — try again or paste the text in yourself.",
   "check.ocr.failed": "Couldn't process that image — try a clearer screenshot or paste the text in yourself.",
@@ -21,6 +20,11 @@
   "check.forward.body": "Forward the dodgy email to {address} and we'll email you back a straight-up verdict. We read it on arrival and don't keep a copy.",
   "check.forward.note": "Forwarding sends the email through your mail provider's servers (unlike pasting, which stays on your device). If it's really sensitive, paste it instead.",
   "check.forward.cta": "Forward to {address}",
+  "check.help.photo.summary": "How do I get a good snap?",
+  "check.help.photo.body": "Point your camera dead-on at the message or QR code in decent light, fill the frame, and keep it steady. We'll decode QR codes and read the text for you.",
+  "check.help.image.summary": "What image works best, mate?",
+  "check.help.image.body": "A clear screenshot of the whole message is the go. Any format (PNG, JPG, HEIC) is fine — just make sure the text and any links are readable.",
+  "check.help.link": "Need a hand capturing a scam? Check the guide →",
   "check.placeholder": "Paste the sus stuff here — link, number, text message, whatever you've got…",
   "check.analysing": "Checking it out…",
   "check.submit": "Just Checking, Mate!",
@@ -63,7 +67,6 @@
   "phone.wangiri.body": "Scammers ring once and hang up. Ring back and you cop international premium rates. **Don't call back, no matter what.**",
   "phone.spoof.body": "Yep — scammers can chuck any number they like on your caller ID. Costs them nothing and happens all the time. Only the phone company knows the real source, and only the police can trace it.",
 
-  "report.stats": "**{n}** scams dobbed in by Aussies so far",
   "report.valuable": "Your report's gold. Every one helps raise the alarm and keeps the next person from getting stung.",
   "report.ids.hint": "Grab any contact details so others can spot the same scam a mile off.",
   "report.error": "Strewth, something went wrong. Give it another crack.",
