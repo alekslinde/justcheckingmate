@@ -33,6 +33,9 @@ const REWARD_WORDS = [
   "winner", "won", "congratulations", "prize", "reward", "free",
   "gift card", "voucher", "lucky", "selected", "chosen", "claim",
   "unclaimed", "$1000", "$500", "cash", "jackpot",
+  "points will expire", "points expiring", "reward points", "loyalty points",
+  "points forfeited", "claim your points", "points about to expire",
+  "redeem before", "points balance",
 ];
 
 const REQUEST_WORDS = [

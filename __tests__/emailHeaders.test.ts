@@ -161,6 +161,24 @@ describe("analyseEmailIdentities", () => {
     expect(r.score).toBeGreaterThan(0);
   });
 
+  it("flags loyalty-program display-name masking", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "Coles Flybuys",
+      fromAddress: "noreply@points-expiry.icu",
+    });
+    expect(r.flags.join(" ")).toMatch(/masking|display name/i);
+    expect(r.score).toBeGreaterThan(0);
+  });
+
+  it("flags Everyday Rewards display-name masking", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "Everyday Rewards",
+      fromAddress: "service@rewards-expiry.example",
+    });
+    expect(r.flags.join(" ")).toMatch(/masking|display name/i);
+    expect(r.score).toBeGreaterThan(0);
+  });
+
   it("does NOT flag a brand display name on its legit domain", () => {
     const r = analyseEmailIdentities({
       fromDisplay: "myGov",

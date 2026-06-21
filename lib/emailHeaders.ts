@@ -35,7 +35,8 @@ const IMPERSONATED_BRANDS = [
   "ato", "mygov", "centrelink", "medicare", "services australia",
   "commbank", "commonwealth bank", "westpac", "anz", "nab", "paypal",
   "auspost", "australia post", "telstra", "optus", "amazon", "netflix",
-  "apple", "microsoft", "google", "linkt", "etoll",
+  "apple", "microsoft", "google", "linkt", "etoll", "flybuys",
+  "everyday rewards", "velocity", "telstra plus", "frequent flyer",
 ];
 
 // Domain of an email address: lowercased, everything after the last '@'.

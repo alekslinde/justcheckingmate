@@ -124,6 +124,14 @@ describe("checkSms", () => {
     expect(result.flags.some((f) => f.includes("Prize"))).toBe(true);
   });
 
+  it("penalises loyalty points expiry lure language", () => {
+    const result = checkSms(
+      "Everyday Rewards: Your reward points balance expires Friday. Redeem before midnight: https://example.com",
+    );
+    expect(result.score).toBeGreaterThanOrEqual(30);
+    expect(result.flags.some((f) => f.includes("reward points"))).toBe(true);
+  });
+
   it("penalises requests for sensitive info", () => {
     const result = checkSms("Please confirm your bank details and TFN to proceed.");
     expect(result.score).toBeGreaterThanOrEqual(30);
@@ -296,6 +304,14 @@ describe("checkCustom", () => {
     );
     expect(result.score).toBeGreaterThan(30);
     expect(result.flags.some((f) => f.includes("Suspicious keywords"))).toBe(true);
+  });
+
+  it("penalises points balance and redeem-before lures in free text", () => {
+    const result = checkCustom(
+      "Everyday Rewards: Your reward points balance expires Friday. Click to redeem before midnight.",
+    );
+    expect(result.score).toBeGreaterThanOrEqual(16);
+    expect(result.flags.some((f) => f.includes("reward points"))).toBe(true);
   });
 
   it("penalises embedded URLs and scores the worst one", () => {
