@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { AUTH_LEGEND, StaticAuthPill } from "@/components/AuthBadges";
+import EmailExportGuide from "@/components/EmailExportGuide";
 
 // Type icons mirror the input/report type pickers used across the app, so they
 // stay as a consistent scanning aid. The tactic/source/flag lists used purely
@@ -28,6 +29,20 @@ const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 const key = (k: string) => k as MessageKey;
 
+// Part header — the page is split into two distinct halves: "Spotting scams"
+// (what scams are / how to identify them) and "Getting the most from this tool"
+// (how to capture a scam so we can read it). Larger and divider-led so the two
+// halves read as separate sections, not just more cards.
+function PartHeader({ id, heading, intro }: { id: string; heading: string; intro: string }) {
+  return (
+    <div id={id} className="scroll-mt-20 pt-2">
+      <div className="h-px bg-gray-800 mb-6" />
+      <h2 className="text-xl font-black text-gray-100 tracking-tight">{heading}</h2>
+      <p className="text-sm text-gray-400 mt-1">{intro}</p>
+    </div>
+  );
+}
+
 export default function LearnContent() {
   const { t } = useLang();
 
@@ -37,6 +52,13 @@ export default function LearnContent() {
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">{t("learn.title")}</h1>
         <p className="text-sm text-gray-400">{t("learn.intro")}</p>
       </div>
+
+      {/* ── Part 1: Spotting scams ─────────────────────────────────────────── */}
+      <PartHeader
+        id="spotting-scams"
+        heading={t("learn.part.spot.heading")}
+        intro={t("learn.part.spot.intro")}
+      />
 
       <article className={CARD}>
         {/* What this tool checks */}
@@ -174,6 +196,33 @@ export default function LearnContent() {
           </div>
         </div>
       </section>
+
+      {/* ── Part 2: Getting the most from this tool ────────────────────────── */}
+      <PartHeader
+        id="using-this-tool"
+        heading={t("learn.part.using.heading")}
+        intro={t("learn.part.using.intro")}
+      />
+
+      <article className={CARD}>
+        {/* Taking a photo */}
+        <section className="space-y-2">
+          <h2 className={H2}>{t("learn.using.photo.heading")}</h2>
+          <p className="text-sm text-gray-400">{t("check.help.photo.body")}</p>
+        </section>
+
+        {/* Uploading an image */}
+        <section className="space-y-2">
+          <h2 className={H2}>{t("learn.using.image.heading")}</h2>
+          <p className="text-sm text-gray-400">{t("check.help.image.body")}</p>
+        </section>
+
+        {/* Getting the email source — reuses the per-mail-client export guide. */}
+        <section className="space-y-2">
+          <h2 className={H2}>{t("learn.using.email.heading")}</h2>
+          <EmailExportGuide expandable={false} />
+        </section>
+      </article>
 
       <p className="text-center text-sm text-gray-400 pb-4">
         <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium">

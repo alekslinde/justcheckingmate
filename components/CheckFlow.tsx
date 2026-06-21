@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
 import { detectType } from "@/lib/detectType";
 import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
@@ -12,7 +13,6 @@ import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
 import ReportForm from "./ReportForm";
-import EmailExportGuide from "./EmailExportGuide";
 
 type Step = "input" | "result" | "report";
 type Verdict = AnalyzedIdentifier["result"]["verdict"];
@@ -549,10 +549,6 @@ export default function CheckFlow() {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
       <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.input")}</h2>
-      <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-500 leading-snug">
-        <span aria-hidden="true">🔒</span>
-        {t("check.privacy")}
-      </p>
 
       {/* Hidden file inputs */}
       <input ref={imageRef} type="file" accept="image/*" className="hidden" tabIndex={-1} aria-hidden="true"
@@ -563,7 +559,9 @@ export default function CheckFlow() {
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
       {/* On mobile: camera is full-width (primary action), image+eml share the row.
-          On sm+: equal three columns. */}
+          On sm+: equal three columns. Per-field capture help (good photo, best
+          image, getting the email source) lives on the Learn page so this stays
+          uncluttered — linked just below. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <button
           type="button"
@@ -599,6 +597,14 @@ export default function CheckFlow() {
         </button>
       </div>
 
+      {/* Quiet pointer to the full capture guide on Learn — replaces the inline
+          expandables that crowded this flow. */}
+      <p className="text-xs text-gray-500 text-center">
+        <Link href="/learn#using-this-tool" className="text-emerald-400/90 hover:text-emerald-300 underline underline-offset-2">
+          {t("check.help.link")}
+        </Link>
+      </p>
+
       {/* OCR can legitimately take up to a minute on a cold start — say so,
           and announce it to screen readers, so a long wait doesn't read as a hang. */}
       {uploadLoading && (
@@ -630,9 +636,6 @@ export default function CheckFlow() {
           </a>
         </div>
       )}
-
-      {/* Per-client guide for grabbing the raw source / .eml the upload wants. */}
-      <EmailExportGuide />
 
       <div className="flex items-center gap-3" aria-hidden="true">
         <div className="flex-1 h-px bg-gray-700" />
