@@ -494,3 +494,88 @@ describe("analyzeContent — shortened URL expansion", () => {
     expect(urlCard?.result.flags.some((f) => f.includes("expanded"))).toBe(true);
   });
 });
+
+// ── 2026-06-21 threat-intel roadmap rules ───────────────────────────────────
+
+describe("threat-intel roadmap — URL rules", () => {
+  it("flags IPFS gateway hosts (D9 / #56)", () => {
+    const result = checkUrl("https://cloudflare-ipfs.com/ipfs/QmXoYPVK8v3BhKmXNqr2Xf5jK9WbV2TzLpRqt6cCdYz3A/");
+    expect(result.flags.some((f) => f.includes("IPFS"))).toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(40);
+  });
+
+  it("flags the /ipfs/<CID> path on any host (D9 / #56)", () => {
+    const result = checkUrl("https://random-host.example/ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi");
+    expect(result.flags.some((f) => f.includes("IPFS"))).toBe(true);
+  });
+
+  it("flags newly-abused TLDs like .cyou and .icu (D4 / #50, #58)", () => {
+    for (const host of ["https://claim-points.cyou", "https://toll-pay.icu"]) {
+      const result = checkUrl(host);
+      expect(result.flags.some((f) => f.includes("top-level domain"))).toBe(true);
+    }
+  });
+
+  it("flags a trusted host carrying a nested redirect URL (D16)", () => {
+    const result = checkUrl("https://example.com/click?url=https://evil.example/login");
+    expect(result.flags.some((f) => f.includes("redirect"))).toBe(true);
+  });
+});
+
+describe("threat-intel roadmap — SMS rules", () => {
+  it("detects the 'Reply Y to activate' bypass (D3 / #54)", () => {
+    const result = checkSms("Reply Y to activate your link and claim your Qantas points");
+    expect(result.flags.some((f) => f.includes("Reply Y"))).toBe(true);
+  });
+
+  it("detects the 'copy link into your browser' variant (D3 / #54)", () => {
+    const result = checkSms("Copy this link into your browser to pay your toll: example.com");
+    expect(result.flags.some((f) => f.includes("Reply Y"))).toBe(true);
+  });
+
+  it("detects toll-road urgency language (D2 / #53)", () => {
+    const result = checkSms("Linkt: you have an unpaid toll of $12.40. Pay now to avoid a fine.");
+    expect(result.flags.some((f) => f.includes("Urgency"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+
+  it("detects QR quishing prompts (D11)", () => {
+    const result = checkSms("Scan the QR code to verify your myGov account");
+    expect(result.flags.some((f) => f.includes("QR code"))).toBe(true);
+  });
+
+  it("flags fake-job recruitment only with 2+ signals (D13 / #51)", () => {
+    const hit = checkSms("Earn $500/day with simple tasks, work from home, no experience required");
+    expect(hit.flags.some((f) => f.includes("recruitment"))).toBe(true);
+    // A single signal should NOT trip the composite.
+    const miss = checkSms("We have a flexible work from home opportunity at our Sydney office.");
+    expect(miss.flags.some((f) => f.includes("recruitment"))).toBe(false);
+  });
+
+  it("detects loyalty points-expiry phishing language (D6 / #57)", () => {
+    const result = checkSms("Flybuys: your 4,300 loyalty points will expire in 3 days. Claim them now: example.com");
+    expect(result.flags.some((f) => f.includes("reward language"))).toBe(true);
+  });
+
+  it("detects remote-access-tool scam requests (D8 / #55)", () => {
+    const result = checkSms("This is the ACSC. Download AnyDesk so we can fix the malware on your device.");
+    expect(result.flags.some((f) => f.includes("sensitive info"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+});
+
+describe("threat-intel roadmap — phone rules (D15 / #49)", () => {
+  it("flags elevated-volume origins (India) without overstating risk", () => {
+    const result = checkPhone("+91 98765 43210");
+    // Surfaced as a caution, with explicit acknowledgement of legit callers,
+    // and capped at a moderate score — never the very_high reserved for fakes.
+    expect(result.flags.some((f) => /India/.test(f))).toBe(true);
+    expect(result.flags.some((f) => /perfectly legitimate/.test(f))).toBe(true);
+    expect(result.phoneIntel?.spoofingRisk).toBe("medium");
+  });
+
+  it("still rates a known high-scam origin (Nigeria) as high, not medium", () => {
+    const result = checkPhone("+234 800 123 4567");
+    expect(result.phoneIntel?.spoofingRisk).toBe("high");
+  });
+});

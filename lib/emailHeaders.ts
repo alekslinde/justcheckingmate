@@ -36,6 +36,9 @@ const IMPERSONATED_BRANDS = [
   "commbank", "commonwealth bank", "westpac", "anz", "nab", "paypal",
   "auspost", "australia post", "telstra", "optus", "amazon", "netflix",
   "apple", "microsoft", "google", "linkt", "etoll",
+  // Loyalty programs targeted by points-expiry phishing (D5 / #46, #57)
+  "qantas", "frequent flyer", "flybuys", "everyday rewards",
+  "velocity", "telstra plus",
 ];
 
 // Domain of an email address: lowercased, everything after the last '@'.
