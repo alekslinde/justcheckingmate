@@ -1,0 +1,112 @@
+name: Spam guard
+
+# Auto-flags new issues and comments from accounts that match the spam /
+# social-engineering profile we keep seeing on this repo: drive-by promo of an
+# "AI security tool" + a waitlist link, posted from throwaway accounts.
+#
+# Philosophy (see ~/.claude/CLAUDE.md): we FLAG, we don't silently ban. A hit
+# minimizes the comment as spam, labels the thread, and pings the maintainer to
+# decide. No legitimate first-time contributor is locked out — they're just
+# surfaced for a human look. Reporting to GitHub Trust & Safety stays manual
+# (there is no API for it); this just hands you a clean, pre-triaged signal.
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write          # add labels, post the maintainer note
+  pull-requests: write   # issue_comment also fires on PRs
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    # Never act on the repo owner / collaborators — only outside accounts.
+    if: github.event.comment.author_association != 'OWNER' &&
+        github.event.issue.author_association != 'OWNER' &&
+        github.event.sender.login != github.repository_owner
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const MAINTAINER = context.repo.owner;
+
+            // The body + author depend on whether this is an issue or a comment.
+            const isComment = !!context.payload.comment;
+            const body   = (isComment ? context.payload.comment.body
+                                      : context.payload.issue.body) || "";
+            const login  = context.payload.sender.login;
+            const issueNumber = context.payload.issue.number;
+
+            // --- 1. Account-profile signals (the throwaway pattern) ----------
+            const { data: user } = await github.rest.users.getByUsername({ username: login });
+            const ageDays = (Date.now() - new Date(user.created_at)) / 86_400_000;
+
+            let profileScore = 0;
+            const profileReasons = [];
+            if (ageDays < 90)            { profileScore += 2; profileReasons.push(`account is ${Math.round(ageDays)}d old`); }
+            if (user.followers === 0)    { profileScore += 1; profileReasons.push("0 followers"); }
+            if (user.public_repos <= 1)  { profileScore += 1; profileReasons.push(`${user.public_repos} public repo(s)`); }
+            if (!user.bio && !user.name) { profileScore += 1; profileReasons.push("no name/bio"); }
+
+            // --- 2. Content signals (self-promo + waitlist funnel) -----------
+            const text = body.toLowerCase();
+            const contentPatterns = [
+              [/\bwaitlist\b/,                              "mentions a waitlist"],
+              [/\b(alpha|beta)\s+(slot|access|test)/,       "offers alpha/beta access"],
+              [/\b(i|we)\s+(built|made|created)\b.{0,60}(\.ai|\.io|github\.com|tool|platform|runtime|engine)/,
+                                                            "promotes a product the author built"],
+              [/under\s*\d{2,3}\s*ms\b/,                    "marketing latency claim ('under Nms')"],
+              [/before\s+exfiltrat/,                        "'before exfiltration' marketing phrase"],
+              [/(jump on|request access|sign up).{0,30}(repo|waitlist|inside)/, "drives to a signup/repo"],
+              [/check out (my|our)\b/,                      "'check out my/our' promo"],
+            ];
+            let contentScore = 0;
+            const contentReasons = [];
+            for (const [re, why] of contentPatterns) {
+              if (re.test(text)) { contentScore += 2; contentReasons.push(why); }
+            }
+            // Links to a repo/site that ISN'T this repo, combined with promo, is a tell.
+            const selfLink = /github\.com\/(?!alekslinde\/justcheckingmate)[\w.-]+\/[\w.-]+/.test(body)
+                          || /https?:\/\/[\w.-]+\.(ai|io|app)\b/.test(body);
+            if (selfLink && contentScore > 0) { contentScore += 1; contentReasons.push("links to an external product/repo"); }
+
+            // --- 3. Decision ------------------------------------------------
+            // Require BOTH a throwaway-ish profile AND promo content, so a real
+            // newcomer asking a genuine question is never flagged.
+            const isSpam = profileScore >= 2 && contentScore >= 2;
+
+            core.info(`@${login}: profileScore=${profileScore} contentScore=${contentScore} -> spam=${isSpam}`);
+            if (!isSpam) return;
+
+            const reasons = [...profileReasons, ...contentReasons].map(r => `- ${r}`).join("\n");
+
+            // Label the thread.
+            await github.rest.issues.addLabels({
+              ...context.repo, issue_number: issueNumber, labels: ["suspected-spam"],
+            });
+
+            // Hide the comment as spam (only possible for comments, not the issue body).
+            if (isComment) {
+              await github.graphql(`
+                mutation($id:ID!){ minimizeComment(input:{subjectId:$id, classifier:SPAM}){ clientMutationId } }
+              `, { id: context.payload.comment.node_id });
+            }
+
+            // Ping the maintainer with the why + a one-click report link.
+            const reportUrl = `https://github.com/${login}`;
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: issueNumber,
+              body:
+                `> [!WARNING]\n` +
+                `> 🤖 **Spam guard** flagged ${isComment ? "a comment" : "this issue"} from ` +
+                `[@${login}](${reportUrl}) and ${isComment ? "hid it" : "labeled the issue"}.\n` +
+                `>\n` +
+                `> **Why:**\n${reasons.split("\n").map(l => "> " + l).join("\n")}\n` +
+                `>\n` +
+                `> @${MAINTAINER} — review and, if abusive, **Report abuse** from ${reportUrl} ` +
+                `(GitHub T&S reporting has no API, so that step stays manual). ` +
+                `False positive? Remove the \`suspected-spam\` label.`,
+            });
