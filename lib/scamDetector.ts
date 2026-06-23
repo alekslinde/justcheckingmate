@@ -27,12 +27,28 @@ const URGENCY_WORDS = [
   "final notice", "your account", "security alert", "unusual activity",
   "click here", "click link", "tap here", "don't ignore", "action required",
   "respond immediately", "within 24 hours", "within 48 hours",
+  // Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns
+  "unpaid toll", "outstanding toll", "overdue toll", "toll payment",
+  "toll fine", "toll invoice", "final toll notice",
+  // AusPost parcel/delivery lures (D10 / #48)
+  "parcel held", "delivery failed", "couldn't be delivered",
+  "redelivery fee", "invalid postal code",
+  // AI voice-clone follow-up text signals (D17 — watchlist)
+  "i've been in an accident", "don't tell mum", "don't tell anyone",
+  "western union", "wire transfer",
 ];
 
 const REWARD_WORDS = [
   "winner", "won", "congratulations", "prize", "reward", "free",
   "gift card", "voucher", "lucky", "selected", "chosen", "claim",
   "unclaimed", "$1000", "$500", "cash", "jackpot",
+  // Loyalty-points expiry phishing (D6 / #57). "reward points"/"loyalty
+  // points" are deliberately the longer two-word phrases, not bare "points",
+  // to keep legitimate transactional mail from tripping on a single word —
+  // and the scorer only reaches likely_scam when these compound with a URL
+  // or urgency signal.
+  "points will expire", "points expiring", "reward points",
+  "loyalty points", "points forfeited",
 ];
 
 const REQUEST_WORDS = [
@@ -41,6 +57,12 @@ const REQUEST_WORDS = [
   "ato", "date of birth", "social security", "confirm identity",
   "verify identity", "personal information", "account number", "bsb",
   "crypto", "bitcoin", "gift card", "itunes", "google play",
+  // Remote-access-tool scams — ACSC/ASD impersonation (D8 / #55)
+  "teamviewer", "anydesk", "remote access", "remote desktop",
+  "download software", "install software", "give us access",
+  // Pig-butchering / wallet-approval phishing (D12 / #51)
+  "connect wallet", "approve transaction", "wallet approval",
+  "sign transaction", "recharge your account", "top up your account",
 ];
 
 const SCAM_DOMAINS = [
@@ -51,7 +73,18 @@ const SCAM_DOMAINS = [
 const SUSPICIOUS_TLDS = [
   ".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".win",
   ".loan", ".work", ".click", ".link", ".online", ".site", ".live",
+  // High-abuse 2026 TLDs (D4 / #50, #58) — Shortdot-managed + ICANN expansion
+  ".cyou", ".icu", ".sbs", ".cfd", ".bar", ".beauty", ".hair", ".makeup",
+  // Immigration/visa scams using .pn (Pitcairn) to look semi-official (D14 / #50)
+  ".pn",
 ];
+
+// Public IPFS gateways — decentralised hosting used for takedown-resistant
+// phishing. Any host serving the /ipfs/<CID> path is also caught in checkUrl.
+const IPFS_GATEWAYS = new Set([
+  "ipfs.io", "dweb.link", "cloudflare-ipfs.com",
+  "w3s.link", "gateway.pinata.cloud", "nftstorage.link", "ipfs.fleek.co",
+]);
 
 const LEGIT_AU_DOMAINS = [
   "gov.au", "ato.gov.au", "mygov.gov.au", "centrelink.gov.au",
@@ -120,8 +153,30 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
     score += 35;
   }
 
+  // IPFS-hosted content (D9 / #56). Decentralised hosting that can't be taken
+  // down — increasingly used for phishing. Match known public gateways by
+  // hostname OR any host serving the /ipfs/<CID> path convention.
+  if (IPFS_GATEWAYS.has(hostname) || /\/ipfs\/[A-Za-z0-9]{20,}/.test(urlObj.pathname)) {
+    flags.push("IPFS-hosted content — stored on a decentralised network that can't be taken down; increasingly used to host phishing pages");
+    score += 40;
+  }
+
+  // Trusted-service redirect abuse (D16 / roadmap). A legitimate host whose
+  // query string carries a full second URL is a classic open-redirect cloak.
+  // Kept to a low score because legitimate tracking links do this too.
+  const REDIRECT_HOSTS = ["lnkd.in", "cdn.ampproject.org"];
+  const carriesNestedUrl = /[?&](url|u|redirect|dest|destination|target|continue|next)=https?(:|%3a)/i.test(urlObj.search);
+  if (REDIRECT_HOSTS.some((h) => hostname === h || hostname.endsWith("." + h)) ||
+      hostname.endsWith("linkedin.com") && urlObj.pathname.includes("/slink") ||
+      carriesNestedUrl) {
+    flags.push("Trusted service used as a redirect — the real destination is hidden in the link and may be malicious");
+    score += 15;
+  }
+
   // Typosquatting common AU brands
-  const auBrands = ["commbank", "westpac", "anz", "nab", "mybank", "mygov", "centrelink", "medicare", "paypal", "ebay", "amazon", "netflix", "telstra", "optus", "tpg"];
+  const auBrands = ["commbank", "westpac", "anz", "nab", "mybank", "mygov", "centrelink", "medicare", "paypal", "ebay", "amazon", "netflix", "telstra", "optus", "tpg",
+    // Toll operators (D1 / #53) and immigration portals (D14 / #50)
+    "linkt", "eastlink", "etoll", "homeaffairs", "dibp", "immi"];
   for (const brand of auBrands) {
     if (hostname.includes(brand) && !hostname.endsWith(".gov.au") && !hostname.endsWith(".com.au")) {
       flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
@@ -205,8 +260,49 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     }
   }
 
+  // "Reply Y to activate" filter-bypass tactic (D3 / #54). Replying upgrades the
+  // sender to a trusted contact on iOS/Android, making inert URL text tappable
+  // and bypassing built-in phishing filters. The last clause catches the
+  // "copy the link into your browser" variant used to dodge link scanners.
+  const replyBypass =
+    /reply\s*['"]?\s*[Yy](es)?\b.{0,40}(link|activat|access|proceed|view)/i.test(text) ||
+    /type\s+[Yy](es)?\s+to\s+(proceed|activat|access|get\s+the)/i.test(text) ||
+    /send\s+[Yy](es)?\s+to\s+(get|receive|access|activat)/i.test(text) ||
+    /copy\s+(the\s+|this\s+|that\s+)?(link|url)\s+(into|to)\s+your\s+browser/i.test(text);
+  if (replyBypass) {
+    flags.push("'Reply Y' trick detected — scammers tell you to reply first so links become tappable, bypassing your phone's spam filters");
+    score += 25;
+  }
+
+  // QR-code "quishing" prompts (D11 / part of roadmap). The URL hides inside an
+  // image, so the prompt language is the only text-side signal.
+  if (/scan\s+(the\s+|this\s+)?(qr\s*code|code)\s*(to|and)?/i.test(text) ||
+      /\bscan\s+to\s+(verify|update|claim|pay|confirm)/i.test(text)) {
+    flags.push("QR code scan prompt — 'quishing' attacks hide malicious URLs inside QR images to dodge link scanners");
+    score += 20;
+  }
+
+  // Fake task/job recruitment funnel for pig-butchering (D13 / #51). Composite:
+  // require ≥2 distinct signals so legitimate job ads (which may use one of these
+  // phrases) don't trip on their own.
+  const jobSignals = [
+    /\brate\s+products\b/i, /\bsimple\s+tasks?\b/i, /\bearn\s+\$?\d+/i,
+    /\bno\s+experience\s+required\b/i, /\bonline\s+tasks?\b/i,
+    // "work from home" (with or without a "flexible" qualifier) is one concept,
+    // counted once — the qualifier must not let the same phrase score twice.
+    /\bwork\s+from\s+home\b/i,
+  ].filter((re) => re.test(text)).length;
+  if (jobSignals >= 2) {
+    flags.push("Task/job recruitment pattern — a common funnel into 'pig-butchering' investment scams; real employers don't recruit this way");
+    score += 25;
+  }
+
   // Sender mentions a gov agency but is a random number
-  const govMentions = ["ato", "myGov", "mygov", "centrelink", "medicare", "services australia", "afp", "police"];
+  const govMentions = ["ato", "myGov", "mygov", "centrelink", "medicare", "services australia", "afp", "police",
+    // ACSC/ASD impersonation (D7 / #55)
+    "acsc", "asd", "cyber security centre", "australian signals directorate", "cyber.gov.au",
+    // Toll operators (D1 / #53) and AusPost parcel lures (D10 / #48)
+    "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost"];
   if (govMentions.some((g) => lower.includes(g.toLowerCase()))) {
     flags.push("Claims to be from a government agency — verify directly via official channels");
     score += 25;
