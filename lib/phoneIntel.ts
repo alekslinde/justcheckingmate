@@ -64,6 +64,17 @@ const HIGH_SCAM_COUNTRY_CODES: Record<string, string> = {
   "421": "Slovakia",
 };
 
+// High-VOLUME scam-call origins (D15 / #49) that ALSO carry enormous legitimate
+// traffic — large diaspora communities in Australia receive genuine family and
+// business calls from here every day. Kept separate from HIGH_SCAM_COUNTRY_CODES
+// so a match only nudges risk to "medium" (not "high") and the note explicitly
+// acknowledges legitimate callers — we flag the elevated base rate, not the call.
+const ELEVATED_VOLUME_COUNTRY_CODES: Record<string, string> = {
+  "91": "India",
+  "86": "China",
+  "63": "Philippines",
+};
+
 // NANP (North American Numbering Plan) — Caribbean/Pacific islands that share
 // the +1 country code but have their own distinct 3-digit area codes.
 const NANP_ISLANDS: Record<string, string> = {
@@ -443,6 +454,16 @@ export function analysePhone(raw: string): PhoneIntel {
   if (highScamEntry) {
     spoofingNotes.push(`International call from ${highScamEntry[1]} — a country frequently associated with scam call operations targeting Australia`);
     bump("high");
+  }
+
+  // Elevated-volume origins: only flagged when not already a stronger signal,
+  // and with language that respects the many legitimate callers from here.
+  const elevatedEntry = !highScamEntry && !isWangiri
+    ? Object.entries(ELEVATED_VOLUME_COUNTRY_CODES).find(([code]) => intl.startsWith(code))
+    : undefined;
+  if (elevatedEntry) {
+    spoofingNotes.push(`International call from ${elevatedEntry[1]} — a common origin for scam call centres targeting Australia, though most calls from here are perfectly legitimate. Be cautious only if the caller pressures you or asks for money or personal details.`);
+    bump("medium");
   }
 
   const country = lookupCountry(intl);
