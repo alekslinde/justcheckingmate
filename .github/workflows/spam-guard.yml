@@ -1,0 +1,159 @@
+name: Spam guard
+
+# Auto-flags new issues and comments from accounts matching the two abuse
+# patterns we keep seeing on this repo:
+#   (A) PROMO    — drive-by promo of an "AI security tool" + a waitlist link,
+#                  posted from throwaway accounts (e.g. @rishabhyadavtech).
+#   (B) PR-FARM  — automated contribution-farming bots that fork at scale and
+#                  drop a templated "I'd like to work on this / my plan: 1,2,3"
+#                  comment before opening an AI-generated PR (e.g. @CleanDev-Fix).
+#                  Dangerous here specifically: a subtle PR to lib/scamDetector.ts
+#                  could quietly weaken a detection. We flag; review gate (branch
+#                  protection) is what stops the merge.
+#
+# Philosophy (see ~/.claude/CLAUDE.md): we FLAG, we don't silently ban. A hit
+# minimizes the comment as spam, labels the thread, and pings the maintainer to
+# decide. No legitimate first-time contributor is locked out — they're just
+# surfaced for a human look. Reporting to GitHub Trust & Safety stays manual
+# (there is no API for it); this just hands you a clean, pre-triaged signal.
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write          # add labels, post the maintainer note
+  pull-requests: write   # issue_comment also fires on PRs
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    # Never act on the repo owner / collaborators — only outside accounts.
+    if: github.event.comment.author_association != 'OWNER' &&
+        github.event.issue.author_association != 'OWNER' &&
+        github.event.sender.login != github.repository_owner
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const MAINTAINER = context.repo.owner;
+
+            // The body + author depend on whether this is an issue or a comment.
+            const isComment = !!context.payload.comment;
+            const body   = (isComment ? context.payload.comment.body
+                                      : context.payload.issue.body) || "";
+            const login  = context.payload.sender.login;
+            const issueNumber = context.payload.issue.number;
+
+            // --- 1. Account-profile signals (the throwaway pattern) ----------
+            const { data: user } = await github.rest.users.getByUsername({ username: login });
+            const ageDays = (Date.now() - new Date(user.created_at)) / 86_400_000;
+
+            let profileScore = 0;
+            const profileReasons = [];
+            if (ageDays < 90)            { profileScore += 2; profileReasons.push(`account is ${Math.round(ageDays)}d old`); }
+            if (user.followers === 0)    { profileScore += 1; profileReasons.push("0 followers"); }
+            if (user.public_repos <= 1)  { profileScore += 1; profileReasons.push(`${user.public_repos} public repo(s)`); }
+            if (!user.bio && !user.name) { profileScore += 1; profileReasons.push("no name/bio"); }
+
+            // --- 2. Content signals (self-promo + waitlist funnel) -----------
+            const text = body.toLowerCase();
+            const contentPatterns = [
+              [/\bwaitlist\b/,                              "mentions a waitlist"],
+              [/\b(alpha|beta)\s+(slot|access|test)/,       "offers alpha/beta access"],
+              [/\b(i|we)\s+(built|made|created)\b.{0,60}(\.ai|\.io|github\.com|tool|platform|runtime|engine)/,
+                                                            "promotes a product the author built"],
+              [/under\s*\d{2,3}\s*ms\b/,                    "marketing latency claim ('under Nms')"],
+              [/before\s+exfiltrat/,                        "'before exfiltration' marketing phrase"],
+              [/(jump on|request access|sign up).{0,30}(repo|waitlist|inside)/, "drives to a signup/repo"],
+              [/check out (my|our)\b/,                      "'check out my/our' promo"],
+            ];
+            let contentScore = 0;
+            const contentReasons = [];
+            for (const [re, why] of contentPatterns) {
+              if (re.test(text)) { contentScore += 2; contentReasons.push(why); }
+            }
+            // Links to a repo/site that ISN'T this repo, combined with promo, is a tell.
+            const selfLink = /github\.com\/(?!alekslinde\/justcheckingmate)[\w.-]+\/[\w.-]+/.test(body)
+                          || /https?:\/\/[\w.-]+\.(ai|io|app)\b/.test(body);
+            if (selfLink && contentScore > 0) { contentScore += 1; contentReasons.push("links to an external product/repo"); }
+
+            // --- 3. PR-farm signals (templated "I'll work on this" bots) -----
+            // These accounts produce real PRs, so they aren't "throwaway" by the
+            // profile signals above. Tell: boilerplate offer language + a profile
+            // dominated by forks. Judged on its own threshold, ORed into spam.
+            let farmScore = 0;
+            const farmReasons = [];
+            const farmPatterns = [
+              [/\b(i('| wo)?(uld| ?)|i'd)\s*(like|love|want)\s+to\s+work\s+on\s+this\b/, "templated 'I'd like to work on this'"],
+              [/\bmy\s+(planned\s+)?(approach|plan)\b.{0,40}\b1\b/s, "numbered 'my approach: 1,2,3' template"],
+              [/\bcan\s+i\s+(be\s+)?assign(ed)?\b/,                   "asks to be assigned (drive-by)"],
+              [/\bsmallest\s+focused\s+change\b/,                     "boilerplate 'smallest focused change'"],
+              [/\bwithout\s+broad\s+refactors?\b/,                    "boilerplate 'without broad refactors'"],
+              [/\bdoes\s+this\s+(approach\s+)?(line\s+up|sound\s+good|work)\b/, "boilerplate sign-off question"],
+            ];
+            for (const [re, why] of farmPatterns) {
+              if (re.test(text)) { farmScore += 1; farmReasons.push(why); }
+            }
+            // Fork-dominated profile: the strongest PR-farm tell. Only fetched
+            // when the comment already looks templated, to save an API call.
+            if (farmScore >= 1 && user.public_repos >= 8) {
+              try {
+                const repos = await github.paginate(github.rest.repos.listForUser,
+                  { username: login, per_page: 100, type: "owner" });
+                const forks = repos.filter(r => r.fork).length;
+                const forkPct = repos.length ? forks / repos.length : 0;
+                if (forkPct >= 0.8) {
+                  farmScore += 2;
+                  farmReasons.push(`profile is ${Math.round(forkPct*100)}% forks (${forks}/${repos.length}) — fork-farming pattern`);
+                }
+              } catch (e) { core.info(`fork-ratio check skipped: ${e.message}`); }
+            }
+
+            // --- 4. Decision ------------------------------------------------
+            // (A) PROMO: throwaway profile AND promo content (real newcomer asking
+            //     a genuine question is never flagged — needs both).
+            // (B) PR-FARM: enough templated-bot signals on their own.
+            const promoHit = profileScore >= 2 && contentScore >= 2;
+            const farmHit  = farmScore >= 3;
+            const isSpam   = promoHit || farmHit;
+
+            core.info(`@${login}: profile=${profileScore} content=${contentScore} farm=${farmScore} -> spam=${isSpam}`);
+            if (!isSpam) return;
+
+            const kind = promoHit && farmHit ? "promo + PR-farm"
+                       : promoHit ? "promo/social-eng" : "PR-farm bot";
+            const activeReasons = promoHit && farmHit ? [...profileReasons, ...contentReasons, ...farmReasons]
+                                : promoHit ? [...profileReasons, ...contentReasons]
+                                : farmReasons;
+            const reasons = activeReasons.map(r => `- ${r}`).join("\n");
+
+            // Label the thread.
+            await github.rest.issues.addLabels({
+              ...context.repo, issue_number: issueNumber, labels: ["suspected-spam"],
+            });
+
+            // Hide the comment as spam (only possible for comments, not the issue body).
+            if (isComment) {
+              await github.graphql(`
+                mutation($id:ID!){ minimizeComment(input:{subjectId:$id, classifier:SPAM}){ clientMutationId } }
+              `, { id: context.payload.comment.node_id });
+            }
+
+            // Ping the maintainer with the why + a one-click report link.
+            const reportUrl = `https://github.com/${login}`;
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: issueNumber,
+              body:
+                `> [!WARNING]\n` +
+                `> 🤖 **Spam guard** flagged ${isComment ? "a comment" : "this issue"} from ` +
+                `[@${login}](${reportUrl}) (**${kind}**) and ${isComment ? "hid it" : "labeled the issue"}.\n` +
+                `>\n` +
+                `> **Why:**\n${reasons.split("\n").map(l => "> " + l).join("\n")}\n` +
+                `>\n` +
+                `> @${MAINTAINER} — review and, if abusive, **Report abuse** from ${reportUrl} ` +
+                `(GitHub T&S reporting has no API, so that step stays manual). ` +
+                `False positive? Remove the \`suspected-spam\` label.`,
+            });
