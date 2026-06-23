@@ -63,6 +63,11 @@ const REQUEST_WORDS = [
   // Pig-butchering / wallet-approval phishing (D12 / #51)
   "connect wallet", "approve transaction", "wallet approval",
   "sign transaction", "recharge your account", "top up your account",
+  // Bank "safe account" tag-team scam (#47). SMS primes the victim, then a
+  // spoofed-number caller tells them to move money to a "safe account" — a
+  // phrase real banks never use (CBA/NAB/AFP advisories confirm this).
+  "safe account", "safe transfer", "safe wallet",
+  "move your funds", "transfer to safe", "protect your money",
 ];
 
 const SCAM_DOMAINS = [
