@@ -562,6 +562,11 @@ describe("threat-intel roadmap — SMS rules", () => {
     expect(result.flags.some((f) => f.includes("sensitive info"))).toBe(true);
     expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
   });
+
+  it("detects the bank 'safe account' tag-team scam (#47)", () => {
+    const result = checkSms("This is CommBank security. Move your funds to a safe account immediately to protect your money.");
+    expect(result.flags.some((f) => f.includes("sensitive info"))).toBe(true);
+  });
 });
 
 describe("threat-intel roadmap — phone rules (D15 / #49)", () => {
