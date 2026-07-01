@@ -312,13 +312,28 @@ These scripts are distinct enough from the existing signals to warrant expansion
 
 ---
 
-## Issues to Open Manually
+## GitHub Issues Created (run 2026-07-01)
 
-*GitHub issue creation output below — use these if automated creation fails.*
+The following 6 HIGH-priority issues were opened automatically:
+
+- **#63** — [threat-intel] Flag Cloudflare Workers/Pages/Trycloudflare as suspicious phishing hosting
+- **#64** — [threat-intel] Detect superannuation phishing — SMSF early access and super fund impersonation
+- **#65** — [threat-intel] Detect ACCC and Scamwatch impersonation in SMS/calls
+- **#66** — [threat-intel] Detect food delivery platform impersonation (DoorDash, Uber Eats, Menulog, Deliveroo)
+- **#67** — [threat-intel] Detect NBN disconnection threat scam and NBN Co impersonation
+- **#68** — [threat-intel] Expand AI voice-clone follow-up text signals: bail money, kidnapping, stranded overseas
+
+**Draft PR:** #69 — Weekly threat-intel roadmap — 2026-07-01
 
 ---
 
-### Issue A: [threat-intel] Flag Cloudflare Workers/Pages/Trycloudflare as suspicious hosting in checkUrl
+## Full Issue Body Reference
+
+Reproduced below for traceability.
+
+---
+
+### Issue #63: [threat-intel] Flag Cloudflare Workers/Pages/Trycloudflare as suspicious hosting in checkUrl
 
 **Title:** `[threat-intel] Flag Cloudflare Workers/Pages/Trycloudflare as suspicious phishing hosting`
 
@@ -367,7 +382,7 @@ if (hostingMatch) {
 
 ---
 
-### Issue B: [threat-intel] Add superannuation phishing keywords and super fund brand impersonation
+### Issue #64: [threat-intel] Add superannuation phishing keywords and super fund brand impersonation
 
 **Title:** `[threat-intel] Detect superannuation phishing — SMSF early access and super fund impersonation`
 
@@ -415,7 +430,7 @@ Add to `URGENCY_WORDS`:
 
 ---
 
-### Issue C: [threat-intel] Add ACCC/Scamwatch/NASC to govMentions in checkSms
+### Issue #65: [threat-intel] Add ACCC/Scamwatch/NASC to govMentions in checkSms
 
 **Title:** `[threat-intel] Detect ACCC and Scamwatch impersonation in SMS/calls`
 
@@ -445,7 +460,7 @@ Add:
 
 ---
 
-### Issue D: [threat-intel] Add food delivery platform impersonation (DoorDash, Uber Eats, Menulog, Deliveroo)
+### Issue #66: [threat-intel] Add food delivery platform impersonation (DoorDash, Uber Eats, Menulog, Deliveroo)
 
 **Title:** `[threat-intel] Detect food delivery platform impersonation scams (DoorDash, Uber Eats, Menulog)`
 
@@ -486,7 +501,7 @@ Note: These should produce a brand-mention signal, not the same "claims to be fr
 
 ---
 
-### Issue E: [threat-intel] Add NBN Co impersonation and internet disconnection threat to detection
+### Issue #67: [threat-intel] Add NBN Co impersonation and internet disconnection threat to detection
 
 **Title:** `[threat-intel] Detect NBN disconnection threat scam and NBN Co impersonation`
 
@@ -522,7 +537,7 @@ Note: These should produce a brand-mention signal, not the same "claims to be fr
 
 ---
 
-### Issue F: [threat-intel] Expand AI voice-clone follow-up keywords — bail money, kidnapping, stranded abroad
+### Issue #68: [threat-intel] Expand AI voice-clone follow-up keywords — bail money, kidnapping, stranded abroad
 
 **Title:** `[threat-intel] Expand AI voice-clone follow-up text signals: bail, kidnapping, stranded overseas`
 
