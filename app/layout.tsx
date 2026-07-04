@@ -4,6 +4,7 @@ import { LangProvider } from "@/lib/lang";
 import { BugReportProvider } from "@/components/BugReportProvider";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
+import { SITE_URL } from "@/lib/siteUrl";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,14 +17,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Production URL for absolute OG/Twitter URLs: explicit override first, then
-// the Vercel-provided production domain, then localhost for dev.
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : "http://localhost:3000");
-
 const TITLE = "Just Checking, Mate — Aussie Scam Detector";
 const DESCRIPTION =
   "Australia's no-nonsense scam detector. Check links, texts, emails and calls before you act.";
@@ -33,6 +26,9 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   applicationName: "Just Checking, Mate",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
