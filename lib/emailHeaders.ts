@@ -39,6 +39,11 @@ const IMPERSONATED_BRANDS = [
   // Loyalty programs targeted by points-expiry phishing (D5 / #46, #57)
   "qantas", "frequent flyer", "flybuys", "everyday rewards",
   "velocity", "telstra plus",
+  // Food delivery platforms (D6 / #66)
+  "doordash", "uber eats", "ubereats", "menulog", "deliveroo",
+  // Super funds targeted by SMSF / early-access phishing (D3/D4 / #64)
+  "australiansuper", "unisuper", "rest super", "hesta", "sunsuper",
+  "cbus", "amp super", "mlc super",
 ];
 
 // Domain of an email address: lowercased, everything after the last '@'.
