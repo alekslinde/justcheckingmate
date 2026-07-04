@@ -562,3 +562,27 @@ Note: These should produce a brand-mention signal, not the same "claims to be fr
 - https://www.investigatetv.com/2026/01/23/ai-voice-cloning-scams-target-families-with-fake-kidnapping-calls/
 
 **Roadmap:** `docs/threat-intel/2026-07-01-threat-roadmap.md` (D8)
+
+---
+
+## Implementation Status — shipped in PR #69
+
+All six issues from this brief are implemented on branch `threat-intel/2026-07-01`
+(this PR), with test coverage in `__tests__/`.
+
+| Issue | Change | Files |
+|-------|--------|-------|
+| #63 | `SUSPICIOUS_HOSTING` list + suffix check in `checkUrl()` (+35 Cloudflare, +25 Railway/Vercel) | `lib/scamDetector.ts` |
+| #64 | Super SMSF/early-access terms in `REQUEST_WORDS`/`URGENCY_WORDS`; fund names in `auBrands` + `IMPERSONATED_BRANDS` | `lib/scamDetector.ts`, `lib/emailHeaders.ts` |
+| #65 | ACCC/Scamwatch/NASC in `govMentions` | `lib/scamDetector.ts` |
+| #66 | New `brandMentions` list (own "well-known company" wording, not "government agency") + `auBrands` + `IMPERSONATED_BRANDS` | `lib/scamDetector.ts`, `lib/emailHeaders.ts` |
+| #67 | NBN Co in `brandMentions`; disconnection terms in `URGENCY_WORDS` | `lib/scamDetector.ts` |
+| #68 | Bail/kidnap/stranded escalation in `URGENCY_WORDS` | `lib/scamDetector.ts` |
+
+**Design note:** delivery platforms and NBN Co are companies, not government
+agencies, so #66/#67 use a new `brandMentions` list (+20) with accurate wording
+rather than reusing `govMentions` (+25).
+
+**Refactor:** `URGENCY_WORDS` was split into named per-campaign subgroups
+(generic/toll/parcel/voice-clone/nbn/super) composed into the flat export, so
+each campaign can be tuned independently. Behaviour-preserving.
