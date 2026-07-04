@@ -21,34 +21,63 @@ export interface CheckResult {
 // Shared signal lists
 // ────────────────────────────────────────────────────────────────────────────
 
-const URGENCY_WORDS = [
+// Urgency signals, grouped by campaign so each can be tuned or removed
+// independently. URGENCY_WORDS below is the flat union these compose into —
+// the SMS/email/custom checkers consume the flat list, order-independent.
+
+// Generic pressure/urgency language common to nearly all scam messaging.
+const URGENCY_GENERIC = [
   "urgent", "immediately", "act now", "limited time", "expires today",
   "account suspended", "verify now", "confirm now", "last chance",
   "final notice", "your account", "security alert", "unusual activity",
   "click here", "click link", "tap here", "don't ignore", "action required",
   "respond immediately", "within 24 hours", "within 48 hours",
-  // Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns
+];
+
+// Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns.
+const URGENCY_TOLL = [
   "unpaid toll", "outstanding toll", "overdue toll", "toll payment",
   "toll fine", "toll invoice", "final toll notice",
-  // AusPost parcel/delivery lures (D10 / #48)
+];
+
+// AusPost parcel/delivery lures (D10 / #48).
+const URGENCY_PARCEL = [
   "parcel held", "delivery failed", "couldn't be delivered",
   "redelivery fee", "invalid postal code",
-  // AI voice-clone follow-up text signals (D17 — watchlist)
+];
+
+// AI voice-clone scams. The first block is the original "Hi Mum" follow-up
+// signals (D17 — watchlist); the second is the 2026 bail/kidnap/stranded
+// escalation (D8 / #68), arriving as text after a cloned-voice call.
+const URGENCY_VOICE_CLONE = [
   "i've been in an accident", "don't tell mum", "don't tell anyone",
   "western union", "wire transfer",
-  // AI voice-clone bail/kidnap/stranded escalation (D8 / #68) — the 2026 evolution
-  // of the "Hi Mum" script, arriving as text after a cloned-voice call.
   "bail money", "need bail", "post bail", "get me out of jail",
   "stranded overseas", "stuck overseas", "stranded abroad", "wallet stolen overseas",
   "do not call police", "don't call the police", "don't contact police",
   "emergency transfer", "emergency funds needed", "we have your",
-  // NBN Co disconnection-threat smishing (D7 / #67)
+];
+
+// NBN Co disconnection-threat smishing (D7 / #67).
+const URGENCY_NBN = [
   "internet will be disconnected", "broadband will be cut off",
   "nbn technician", "service disconnected within", "disconnected within 24 hours",
   "internet disconnected", "broadband disconnected",
-  // Superannuation phishing urgency (D3/D4/D11 / #64)
+];
+
+// Superannuation phishing urgency (D3/D4/D11 / #64).
+const URGENCY_SUPER = [
   "secure your super", "your super balance", "preservation age",
   "super fund deadline", "super account suspended",
+];
+
+const URGENCY_WORDS = [
+  ...URGENCY_GENERIC,
+  ...URGENCY_TOLL,
+  ...URGENCY_PARCEL,
+  ...URGENCY_VOICE_CLONE,
+  ...URGENCY_NBN,
+  ...URGENCY_SUPER,
 ];
 
 const REWARD_WORDS = [
