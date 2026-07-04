@@ -101,6 +101,26 @@ describe("checkUrl", () => {
     const result = checkUrl("https://example.com");
     expect(result.category).toBe("URL");
   });
+
+  // Free-tier cloud dev platforms abused as phishing hosting (#63)
+  it("flags Cloudflare Workers/Pages hosting (+35)", () => {
+    const result = checkUrl("https://ato-verify-abc123.workers.dev");
+    expect(result.score).toBeGreaterThanOrEqual(35);
+    expect(result.flags.some((f) => f.includes("workers.dev"))).toBe(true);
+  });
+
+  it("flags a trycloudflare.com tunnel", () => {
+    const result = checkUrl("https://willing-bones-random.trycloudflare.com/login");
+    expect(result.flags.some((f) => f.includes("trycloudflare.com"))).toBe(true);
+  });
+
+  it("scores vercel.app/railway.app lower than Cloudflare hosting (+25)", () => {
+    const vercel = checkUrl("https://my-preview.vercel.app");
+    expect(vercel.flags.some((f) => f.includes("vercel.app"))).toBe(true);
+    // pages.dev (+35) should outscore vercel.app (+25) with all else equal
+    const pages = checkUrl("https://mygov-login.pages.dev");
+    expect(pages.score).toBeGreaterThan(vercel.score);
+  });
 });
 
 // ── checkSms ──────────────────────────────────────────────────────────────────
@@ -167,6 +187,55 @@ describe("checkSms", () => {
 
   it("returns category 'SMS'", () => {
     expect(checkSms("hello").category).toBe("SMS");
+  });
+
+  // AI voice-clone bail/kidnap/stranded escalation (#68)
+  it("flags a bail-money escalation script", () => {
+    const result = checkSms(
+      "Gran it's me, I've been arrested. I need bail money and please don't call the police.",
+    );
+    expect(result.verdict).toBe("likely_scam");
+    expect(result.flags.some((f) => f.toLowerCase().includes("bail money"))).toBe(true);
+  });
+
+  it("flags a stranded-overseas emergency transfer", () => {
+    const result = checkSms("Mum I'm stuck overseas, wallet was stolen, I need an emergency transfer");
+    expect(result.score).toBeGreaterThanOrEqual(20);
+  });
+
+  // NBN disconnection-threat smishing + NBN Co impersonation (#67)
+  it("flags NBN Co disconnection-threat smishing", () => {
+    const result = checkSms(
+      "NBN Co: Your internet will be disconnected within 24 hours unless you verify your account.",
+    );
+    expect(result.verdict).toBe("likely_scam");
+    expect(result.flags.some((f) => f.includes("well-known company"))).toBe(true);
+  });
+
+  // Food delivery platform impersonation (#66)
+  it("flags food delivery platform impersonation with a non-gov wording", () => {
+    const result = checkSms("UberEats: Your recent order was cancelled. Click here to claim your $14.90 refund.");
+    expect(result.flags.some((f) => f.includes("well-known company"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(false);
+  });
+
+  // ACCC / Scamwatch impersonation (#65)
+  it("flags ACCC / Scamwatch impersonation as a government agency", () => {
+    const result = checkSms("Scamwatch: Your account has been flagged for investigation. Do not discuss with others.");
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+
+  // Superannuation SMSF / early-access phishing (#64)
+  it("flags superannuation early-access phishing", () => {
+    const result = checkSms("AustralianSuper: Secure your super before June 1. Access your super early via SMSF setup. Click here: http://au-super-verify.cyou");
+    expect(result.verdict).toBe("likely_scam");
+    expect(result.flags.some((f) => f.toLowerCase().includes("smsf"))).toBe(true);
+  });
+
+  // Guard: a bare brand mention without any other signal stays low (compound model)
+  it("does not over-score a bare NBN mention with no other signal", () => {
+    const result = checkSms("My nbn connection has been great this month.");
+    expect(result.verdict).not.toBe("likely_scam");
   });
 });
 

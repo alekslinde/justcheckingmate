@@ -21,21 +21,63 @@ export interface CheckResult {
 // Shared signal lists
 // ────────────────────────────────────────────────────────────────────────────
 
-const URGENCY_WORDS = [
+// Urgency signals, grouped by campaign so each can be tuned or removed
+// independently. URGENCY_WORDS below is the flat union these compose into —
+// the SMS/email/custom checkers consume the flat list, order-independent.
+
+// Generic pressure/urgency language common to nearly all scam messaging.
+const URGENCY_GENERIC = [
   "urgent", "immediately", "act now", "limited time", "expires today",
   "account suspended", "verify now", "confirm now", "last chance",
   "final notice", "your account", "security alert", "unusual activity",
   "click here", "click link", "tap here", "don't ignore", "action required",
   "respond immediately", "within 24 hours", "within 48 hours",
-  // Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns
+];
+
+// Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns.
+const URGENCY_TOLL = [
   "unpaid toll", "outstanding toll", "overdue toll", "toll payment",
   "toll fine", "toll invoice", "final toll notice",
-  // AusPost parcel/delivery lures (D10 / #48)
+];
+
+// AusPost parcel/delivery lures (D10 / #48).
+const URGENCY_PARCEL = [
   "parcel held", "delivery failed", "couldn't be delivered",
   "redelivery fee", "invalid postal code",
-  // AI voice-clone follow-up text signals (D17 — watchlist)
+];
+
+// AI voice-clone scams. The first block is the original "Hi Mum" follow-up
+// signals (D17 — watchlist); the second is the 2026 bail/kidnap/stranded
+// escalation (D8 / #68), arriving as text after a cloned-voice call.
+const URGENCY_VOICE_CLONE = [
   "i've been in an accident", "don't tell mum", "don't tell anyone",
   "western union", "wire transfer",
+  "bail money", "need bail", "post bail", "get me out of jail",
+  "stranded overseas", "stuck overseas", "stranded abroad", "wallet stolen overseas",
+  "do not call police", "don't call the police", "don't contact police",
+  "emergency transfer", "emergency funds needed", "we have your",
+];
+
+// NBN Co disconnection-threat smishing (D7 / #67).
+const URGENCY_NBN = [
+  "internet will be disconnected", "broadband will be cut off",
+  "nbn technician", "service disconnected within", "disconnected within 24 hours",
+  "internet disconnected", "broadband disconnected",
+];
+
+// Superannuation phishing urgency (D3/D4/D11 / #64).
+const URGENCY_SUPER = [
+  "secure your super", "your super balance", "preservation age",
+  "super fund deadline", "super account suspended",
+];
+
+const URGENCY_WORDS = [
+  ...URGENCY_GENERIC,
+  ...URGENCY_TOLL,
+  ...URGENCY_PARCEL,
+  ...URGENCY_VOICE_CLONE,
+  ...URGENCY_NBN,
+  ...URGENCY_SUPER,
 ];
 
 const REWARD_WORDS = [
@@ -68,6 +110,11 @@ const REQUEST_WORDS = [
   // phrase real banks never use (CBA/NAB/AFP advisories confirm this).
   "safe account", "safe transfer", "safe wallet",
   "move your funds", "transfer to safe", "protect your money",
+  // Superannuation early-access phishing (D3/D4/D11 / #64). "smsf" and "early
+  // super release" are AU-specific regulatory terms rarely seen outside a scam.
+  "access your super", "unlock your super", "smsf", "self managed super",
+  "early super release", "super withdrawal", "superannuation transfer",
+  "early access to super",
 ];
 
 const SCAM_DOMAINS = [
@@ -90,6 +137,17 @@ const IPFS_GATEWAYS = new Set([
   "ipfs.io", "dweb.link", "cloudflare-ipfs.com",
   "w3s.link", "gateway.pinata.cloud", "nftstorage.link", "ipfs.fleek.co",
 ]);
+
+// Free-tier cloud dev platforms used as phishing hosting infrastructure (D1/D2
+// / #63). workers.dev, pages.dev (Cloudflare) and trycloudflare.com (ephemeral
+// tunnels) are rated "trusted" by URL filters but are the dominant PhaaS hosting
+// substrate of 2025-2026. railway.app and vercel.app are abused as
+// credential-exfiltration endpoints in multi-hop chains — scored lower because
+// legitimate preview sites on those two are more common.
+const SUSPICIOUS_HOSTING = [
+  "workers.dev", "pages.dev", "trycloudflare.com",
+  "railway.app", "vercel.app",
+];
 
 const LEGIT_AU_DOMAINS = [
   "gov.au", "ato.gov.au", "mygov.gov.au", "centrelink.gov.au",
@@ -166,6 +224,15 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
     score += 40;
   }
 
+  // Free-tier cloud dev platforms abused as phishing hosting (D1/D2 / #63).
+  // These inherit a "trusted" reputation from the parent platform, so URL
+  // filters wave them through. Match on the registrable suffix only.
+  const hostingMatch = SUSPICIOUS_HOSTING.find((h) => hostname === h || hostname.endsWith("." + h));
+  if (hostingMatch) {
+    flags.push(`Hosted on ${hostingMatch} — a free developer platform frequently abused to host phishing pages because it inherits a trusted reputation`);
+    score += hostingMatch === "vercel.app" || hostingMatch === "railway.app" ? 25 : 35;
+  }
+
   // Trusted-service redirect abuse (D16 / roadmap). A legitimate host whose
   // query string carries a full second URL is a classic open-redirect cloak.
   // Kept to a low score because legitimate tracking links do this too.
@@ -181,7 +248,11 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
   // Typosquatting common AU brands
   const auBrands = ["commbank", "westpac", "anz", "nab", "mybank", "mygov", "centrelink", "medicare", "paypal", "ebay", "amazon", "netflix", "telstra", "optus", "tpg",
     // Toll operators (D1 / #53) and immigration portals (D14 / #50)
-    "linkt", "eastlink", "etoll", "homeaffairs", "dibp", "immi"];
+    "linkt", "eastlink", "etoll", "homeaffairs", "dibp", "immi",
+    // Food delivery platforms (D6 / #66)
+    "doordash", "ubereats", "menulog", "deliveroo",
+    // Super funds (D3/D4 / #64)
+    "australiansuper", "unisuper", "sunsuper", "cbus", "hesta", "ampsuper"];
   for (const brand of auBrands) {
     if (hostname.includes(brand) && !hostname.endsWith(".gov.au") && !hostname.endsWith(".com.au")) {
       flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
@@ -306,11 +377,25 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   const govMentions = ["ato", "myGov", "mygov", "centrelink", "medicare", "services australia", "afp", "police",
     // ACSC/ASD impersonation (D7 / #55)
     "acsc", "asd", "cyber security centre", "australian signals directorate", "cyber.gov.au",
+    // ACCC / Scamwatch / NASC impersonation (D5 / #65) — the fraud-reporting
+    // authority is itself used as a lure. The ACCC never cold-calls consumers.
+    "accc", "scamwatch", "national anti-scam centre", "nasc",
+    "consumer watchdog", "competition and consumer commission",
     // Toll operators (D1 / #53) and AusPost parcel lures (D10 / #48)
     "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost"];
   if (govMentions.some((g) => lower.includes(g.toLowerCase()))) {
     flags.push("Claims to be from a government agency — verify directly via official channels");
     score += 25;
+  }
+
+  // Consumer brands impersonated in SMS but not government agencies, so they get
+  // their own flag wording. Food delivery platforms (D6 / #66) and NBN Co
+  // disconnection-threat smishing (D7 / #67).
+  const brandMentions = ["doordash", "uber eats", "ubereats", "menulog", "deliveroo",
+    "nbn co", "nbnco", "nbn", "national broadband network"];
+  if (brandMentions.some((b) => lower.includes(b))) {
+    flags.push("Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message");
+    score += 20;
   }
 
   // Asks to call back a number

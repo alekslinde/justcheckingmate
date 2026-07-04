@@ -161,6 +161,24 @@ describe("analyseEmailIdentities", () => {
     expect(r.score).toBeGreaterThan(0);
   });
 
+  it("flags display-name masking for a food delivery brand (#66)", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "Uber Eats",
+      fromAddress: "noreply@evil.tk",
+    });
+    expect(r.flags.join(" ")).toMatch(/masking|display name/i);
+    expect(r.score).toBeGreaterThan(0);
+  });
+
+  it("flags display-name masking for a super fund brand (#64)", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "AustralianSuper",
+      fromAddress: "noreply@evil.tk",
+    });
+    expect(r.flags.join(" ")).toMatch(/masking|display name/i);
+    expect(r.score).toBeGreaterThan(0);
+  });
+
   it("does NOT flag a brand display name on its legit domain", () => {
     const r = analyseEmailIdentities({
       fromDisplay: "myGov",
