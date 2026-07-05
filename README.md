@@ -1,6 +1,6 @@
 # Just Checking, Mate 🦘
 
-Australia's no-nonsense scam detector. Paste a dodgy link, suspicious text message, phishing email, or scam phone number and get an instant verdict — no account required, no data sold.
+Australia's no-nonsense scam detector. Paste a dodgy link, suspicious text message, phishing email, or scam phone number and get an instant verdict — no account required, nothing kept, no data sold.
 
 Built specifically for Australians, with knowledge of local government domains, banks, phone number formats, and the scams that are actually doing the rounds here.
 
@@ -9,21 +9,29 @@ Built specifically for Australians, with knowledge of local government domains, 
 ## What it does
 
 ### Scam Checker
-Paste in whatever looks sus and get back a verdict (safe / suspicious / likely scam) plus a plain-English breakdown of every red flag found.
+Paste in whatever looks sus — a link, a text, a whole email, a phone number, or a screenshot — and get back a verdict (safe / suspicious / likely scam) with a plain-English breakdown of every red flag found.
 
-Supports six input types:
-- **Dodgy Link** — checks the URL against known scam patterns: URL shorteners, suspicious TLDs, IP-address hosting, typosquatted AU brands, phishing keywords
-- **Scam SMS** — detects urgency language, reward bait, requests for sensitive info, embedded dodgy links, gov agency impersonation. Can also **upload a screenshot** and extract the text automatically (OCR via Tesseract.js)
-- **Phishing Email** — all SMS checks plus sender domain analysis, generic greetings, attachment prompts
-- **Scam Phone Number** — checks for AU premium-rate numbers (190x), spoofed sequential patterns, risky international prefixes
-- **Dodgy QR Code** — upload a QR code image and it'll decode the URL, then run the same URL checks
-- **Something Else** — free-text fallback that runs all signals
+There's no input-type picker to fuss with. **The app works out what you gave it** and runs the right checks, tagging each thing it finds as a link 🔗, email 📧, phone 📞, or message 💬. Paste a blob with several of these in it and it'll analyse each one.
+
+Under the hood it runs:
+
+- **Links** — checks URLs against a live malware/phishing blocklist ([URLhaus](https://urlhaus.abuse.ch), from abuse.ch), URL-shortener expansion, suspicious TLDs, IP-address hosting, typosquatted AU brands, and phishing keywords.
+- **Text messages** — urgency language, reward bait, requests for sensitive info, embedded dodgy links, and government-agency impersonation.
+- **Emails** — all the message checks plus sender-domain analysis, generic greetings, and **email authentication** (SPF / DKIM / DMARC) parsed straight from the raw headers. Forwarded emails are unwrapped back to the original scam, and **tracking pixels** are detected and flagged.
+- **Phone numbers** — line-type detection (mobile / fixed / VoIP / premium / free-call), AU premium-rate ranges, wangiri (one-ring) and premium-rate country risk, and spoofing-risk notes.
+
+**Screenshots and QR codes:** drop or upload an image and it'll try to decode a QR code first (client-side via jsQR), then fall back to OCR (Tesseract.js) to pull out the text — then run all the checks above on whatever it finds.
+
+**Forward it in:** on your phone? Forward a dodgy email to the app's inbox and it emails you back a straight-up verdict. It's read on arrival and no copy is kept.
 
 ### Report a Scam
 Seen something dodgy? Lodge a report so others can be warned. Submissions are protected against bots with rate limiting, a honeypot field, timing checks, and duplicate detection. Reports that score too low on our own detector (i.e. the content looks legit) are flagged for review rather than published.
 
-### Poison Data Generator
-If a scammer is trying to harvest your details, feed them garbage instead. Generates fake but plausible Australian personal data — name, address, TFN, Medicare number, BSB, credit card (Luhn-valid but fake), the lot. Pollutes their database and wastes their time.
+### Learn
+A [`/learn`](app/learn/page.tsx) guide covering how to spot scams, how email authentication (SPF/DKIM/DMARC) works, common tactics, what to do if you've been caught, and where to report.
+
+### English or Aussie
+A language toggle switches the whole interface between plain **English** and full-noise **Aussie** — same detection, different voice.
 
 ---
 
@@ -55,23 +63,36 @@ The schema is created automatically on first run — no migrations to run.
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Handy commands
+
+```bash
+npm test         # run the Vitest suite
+npm run lint     # ESLint (Next 15.5 + strict react-hooks rules)
+npm run seed     # seed the database with sample reports
+npm run build    # production build
+```
+
 ---
 
 ## Tech stack
 
-- [Next.js](https://nextjs.org) (App Router)
-- TypeScript + Tailwind CSS
+- [Next.js 15](https://nextjs.org) (App Router) + [React 19](https://react.dev)
+- TypeScript (strict) + [Tailwind CSS v4](https://tailwindcss.com)
+- [Vitest](https://vitest.dev) for tests
+- [libSQL / Turso](https://turso.tech) in prod, local SQLite fallback in dev
 - [jsQR](https://github.com/cozmo/jsQR) — client-side QR code decoding
 - [Tesseract.js](https://tesseract.projectnaptha.com) — client-side OCR for screenshot uploads
-- No external scam database — all detection logic is in [`lib/scamDetector.ts`](lib/scamDetector.ts)
+- [URLhaus](https://urlhaus.abuse.ch) (abuse.ch) — live malware/phishing URL blocklist
 
 ---
 
 ## Detection logic
 
-All scam detection is rule-based and runs entirely in [`lib/scamDetector.ts`](lib/scamDetector.ts). It uses keyword lists, domain allowlists/denylists, regex patterns, and a weighted scoring system. No machine learning, no external API calls, no data sent anywhere for analysis.
+All scam detection is **rule-based** and runs in [`lib/`](lib/) — chiefly [`scamDetector.ts`](lib/scamDetector.ts), with [`phoneIntel.ts`](lib/phoneIntel.ts), [`emailHeaders.ts`](lib/emailHeaders.ts), [`urlSanitizer.ts`](lib/urlSanitizer.ts), and friends. It uses keyword lists, domain allowlists/denylists, regex patterns, and a weighted scoring system. **No machine learning, no LLM, and no user content sent anywhere for scoring.**
 
-Because the logic is heuristic and transparent, it's intentionally open source — obscuring the keyword lists doesn't protect against sophisticated scammers (who already know what triggers spam filters), but it does make it harder for the community to contribute improvements.
+The only outbound calls are to fixed, trusted infrastructure — the URLhaus blocklist (abuse.ch) and HEAD requests to a whitelist of known URL-shortener hosts to expand short links. Neither involves sending the content you paste off-device for analysis.
+
+Because the logic is heuristic and transparent, it's intentionally open source — obscuring the keyword lists wouldn't stop sophisticated scammers (who already know what triggers spam filters), but it would make it harder for the community to contribute improvements.
 
 ---
 
