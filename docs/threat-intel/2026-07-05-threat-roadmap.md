@@ -331,10 +331,23 @@ The PowerShell command downloads and installs **Vidar Stealer** malware (or othe
 
 ---
 
-## Issues to Open Manually
+## GitHub Issues Created (run 2026-07-05)
 
-> The following 6 HIGH-priority issues should be created in GitHub.
-> Labels to apply: `threat-intel` (if it exists in the repo).
+The following 6 HIGH-priority issues were opened automatically:
+
+- **#73** — [threat-intel] Add tax-time cost-of-living lure keywords to URGENCY_WORDS (ATO/myGov peak season)
+- **#74** — [threat-intel] Detect ClickFix "run a command" social engineering (fake CAPTCHA + PowerShell lure)
+- **#75** — [threat-intel] Detect device code / OAuth phishing language in checkEmail (EvilTokens / Kali365 escalation)
+- **#76** — [threat-intel] Detect WhatsApp investment group pig-butchering recruitment (ASIC 26-063MR / NASC alert)
+- **#77** — [threat-intel] Add .zip, .mov, .lat to SUSPICIOUS_TLDS
+- **#78** — [threat-intel] Detect SMS "Unverified" sender label override language (post-ACMA 1 July 2026 bypass)
+
+---
+
+## Issue Body Reference
+
+> The following section preserves the full issue bodies for traceability.
+> Issues A–F below correspond to #73–#78 above.
 
 ---
 
