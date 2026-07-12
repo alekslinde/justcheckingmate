@@ -286,14 +286,14 @@ The existing URGENCY_TOLL has: "unpaid toll", "outstanding toll", "overdue toll"
 
 The following HIGH-priority issues were opened automatically (capped at 6 per run):
 
-- **#79** — [threat-intel] Add "product recall" / "safety recall" SMS lure to URGENCY_WORDS (Amazon recall scam)
-- **#80** — [threat-intel] Add "qantas" and "velocity" to auBrands URL typosquatting check
-- **#81** — [threat-intel] Add Amazon and YouTube to brandMentions SMS check (fake recruiter campaigns)
-- **#82** — [threat-intel] Add Cloudflare R2 (r2.dev) to SUSPICIOUS_HOSTING
-- **#83** — [threat-intel] Extend URGENCY_TOLL with rego-restriction and toll-penalty vocabulary (Operation Road Trap)
-- **#84** — [threat-intel] Add celebrity/ASIC-claim investment bait keywords to REWARD_WORDS
+- **#80** — [threat-intel] Add "product recall" / "safety recall" SMS lure to URGENCY_WORDS (Amazon recall scam)
+- **#81** — [threat-intel] Add "qantas" and "velocity" to auBrands URL typosquatting check
+- **#82** — [threat-intel] Add Amazon and YouTube to brandMentions SMS check (fake recruiter campaigns)
+- **#83** — [threat-intel] Add Cloudflare R2 (r2.dev) to SUSPICIOUS_HOSTING
+- **#84** — [threat-intel] Extend URGENCY_TOLL with rego-restriction and toll-penalty vocabulary (Operation Road Trap)
+- **#85** — [threat-intel] Add celebrity/ASIC-claim investment bait keywords to REWARD_WORDS
 
-**Draft PR:** #85 — Weekly threat-intel roadmap — 2026-07-12
+**Draft PR:** See PR opened against `main` on branch `threat-intel/2026-07-12`
 
 ---
 
