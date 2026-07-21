@@ -38,6 +38,11 @@ const URGENCY_GENERIC = [
 const URGENCY_TOLL = [
   "unpaid toll", "outstanding toll", "overdue toll", "toll payment",
   "toll fine", "toll invoice", "final toll notice",
+  // Operation Road Trap escalation (D5 / #84 / Bitdefender April 2026). These
+  // threaten loss of vehicle registration — "rego" is AU-specific and unique to
+  // the escalated toll script, so FP risk is very low.
+  "rego restrictions", "toll penalty", "vehicle registration suspended",
+  "recovery action",
 ];
 
 // AusPost parcel/delivery lures (D10 / #48).
@@ -71,6 +76,27 @@ const URGENCY_SUPER = [
   "super fund deadline", "super account suspended",
 ];
 
+// Fake product-recall SMS lures (D1 / #80 / Amazon campaign May-June 2026).
+// Amazon, eBay, Kmart and Big W all have confirmed policies against using SMS
+// for product recalls, so "safety recall" in an SMS with a link is essentially
+// a confirmed scam signal. "safety review" is kept because it's the softened
+// variant used to widen hit-rate.
+const URGENCY_RECALL = [
+  "product recall", "safety recall", "recall alert", "recall notice",
+  "item has been recalled", "safety review",
+];
+
+// Tax-time cost-of-living lures (D1/D2/D10 / #73 / ATO-myGov peak season).
+// Scammers weaponise real government relief policies as bait. These appear in
+// legitimate gov comms too, so they lean on the compound scorer (govMentions +
+// URL) rather than firing hard on their own.
+const URGENCY_TAXTIME = [
+  "cost of living payment", "cost of living relief", "cost-of-living supplement",
+  "energy rebate", "energy bill relief", "electricity rebate",
+  "tax recalculation", "your tax has been recalculated", "compensation payment",
+  "government rebate", "tax refund waiting", "refund is waiting",
+];
+
 const URGENCY_WORDS = [
   ...URGENCY_GENERIC,
   ...URGENCY_TOLL,
@@ -78,6 +104,8 @@ const URGENCY_WORDS = [
   ...URGENCY_VOICE_CLONE,
   ...URGENCY_NBN,
   ...URGENCY_SUPER,
+  ...URGENCY_RECALL,
+  ...URGENCY_TAXTIME,
 ];
 
 const REWARD_WORDS = [
@@ -91,6 +119,14 @@ const REWARD_WORDS = [
   // or urgency signal.
   "points will expire", "points expiring", "reward points",
   "loyalty points", "points forfeited",
+  // Celebrity-deepfake / ASIC-claim investment bait (D6 / #85 / WA Gov 2026).
+  // ASIC-regulated products are legally prohibited from promising "guaranteed
+  // returns" or being "risk-free", so these phrases are red flags in the AU
+  // context. ASIC never proactively endorses platforms via SMS/email, so
+  // "verified by asic" / "asic-approved" is exclusively a false-legitimacy claim.
+  "guaranteed returns", "guaranteed profit", "risk-free investment",
+  "double your money", "exclusive investment opportunity",
+  "verified by asic", "asic-approved",
 ];
 
 const REQUEST_WORDS = [
@@ -115,6 +151,16 @@ const REQUEST_WORDS = [
   "access your super", "unlock your super", "smsf", "self managed super",
   "early super release", "super withdrawal", "superannuation transfer",
   "early access to super",
+  // ClickFix fake-CAPTCHA social engineering (D3 / #74 / ACSC advisory May 2026).
+  // Compromised sites display a fake Cloudflare overlay telling users to press
+  // Win+R, paste a PowerShell command and run it. No legitimate site asks this;
+  // the dedicated regex below scores the strongest variants far higher.
+  "press windows+r", "press win+r", "press windows + r",
+  "ctrl+v then enter", "ctrl v and enter",
+  "paste this command", "paste the following command", "paste the command below",
+  "run this to verify", "run the following to verify", "run this fix",
+  "open run dialog", "open the run dialog",
+  "copy and paste this fix", "paste to fix your browser",
 ];
 
 const SCAM_DOMAINS = [
@@ -129,6 +175,11 @@ const SUSPICIOUS_TLDS = [
   ".cyou", ".icu", ".sbs", ".cfd", ".bar", ".beauty", ".hair", ".makeup",
   // Immigration/visa scams using .pn (Pitcairn) to look semi-official (D14 / #50)
   ".pn",
+  // File-extension TLDs (Google 2023, D6 / #77) — auto-linked by some platforms
+  // to look like file downloads (invoice.zip, message.mov); no AU legitimate use.
+  ".zip", ".mov",
+  // .lat — high phishing-abuse ratio, appearing in AU-targeting campaigns 2025-26.
+  ".lat",
 ];
 
 // Public IPFS gateways — decentralised hosting used for takedown-resistant
@@ -147,6 +198,11 @@ const IPFS_GATEWAYS = new Set([
 const SUSPICIOUS_HOSTING = [
   "workers.dev", "pages.dev", "trycloudflare.com",
   "railway.app", "vercel.app",
+  // Cloudflare R2 object storage (D4 / #83) — named alongside workers.dev/
+  // pages.dev as a core phishing hosting layer in 2026 reporting; used to serve
+  // static credential-harvest pages. Scored lower (+25) like railway/vercel
+  // because R2 has legitimate public static-hosting use.
+  "r2.dev",
 ];
 
 const LEGIT_AU_DOMAINS = [
@@ -230,7 +286,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
   const hostingMatch = SUSPICIOUS_HOSTING.find((h) => hostname === h || hostname.endsWith("." + h));
   if (hostingMatch) {
     flags.push(`Hosted on ${hostingMatch} — a free developer platform frequently abused to host phishing pages because it inherits a trusted reputation`);
-    score += hostingMatch === "vercel.app" || hostingMatch === "railway.app" ? 25 : 35;
+    score += hostingMatch === "vercel.app" || hostingMatch === "railway.app" || hostingMatch === "r2.dev" ? 25 : 35;
   }
 
   // Trusted-service redirect abuse (D16 / roadmap). A legitimate host whose
@@ -252,7 +308,12 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
     // Food delivery platforms (D6 / #66)
     "doordash", "ubereats", "menulog", "deliveroo",
     // Super funds (D3/D4 / #64)
-    "australiansuper", "unisuper", "sunsuper", "cbus", "hesta", "ampsuper"];
+    "australiansuper", "unisuper", "sunsuper", "cbus", "hesta", "ampsuper",
+    // Loyalty programs (D2 / #81) — ACCC Feb 2026 Qantas impersonation alert;
+    // top-3 impersonated AU loyalty brands. Already in emailHeaders.ts
+    // IMPERSONATED_BRANDS; this closes the URL-checker gap. Real domains end in
+    // .com.au, which the guard below already excludes.
+    "qantas", "velocity"];
   for (const brand of auBrands) {
     if (hostname.includes(brand) && !hostname.endsWith(".gov.au") && !hostname.endsWith(".com.au")) {
       flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
@@ -358,6 +419,31 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     score += 20;
   }
 
+  // ClickFix "run a command" social engineering (D3 / #74 / ACSC advisory May
+  // 2026). A fake CAPTCHA overlay tells the user to press Win+R and paste a
+  // PowerShell command, running malware themselves. No legitimate entity asks
+  // this, so the fuzzy match scores near-certain.
+  if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
+      /powershell\s+-[ec]/i.test(text)) {
+    flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
+    score += 50;
+  }
+
+  // ACMA SMS Sender ID "Unverified" label override language (D7 / #78 / post-1
+  // July 2026). Since the register went live, unregistered senders show as
+  // "Unverified"; scammers pre-emptively explain the label away. No legitimate
+  // registered sender ever needs to — the language is self-identifying.
+  const unverifiedOverride =
+    /may\s+appear\s+(as\s+)?unverified/i.test(text) ||
+    /displayed?\s+as\s+unverified/i.test(text) ||
+    /ignore\s+(the\s+)?['"]?unverified['"]?/i.test(text) ||
+    /carrier\s+(has\s+not|hasn'?t)\s+updated\s+our\s+(registration|sender)/i.test(text) ||
+    /unverified\s+(label|tag|display)\s+is\s+a\s+(carrier\s+)?(error|delay|bug)/i.test(text);
+  if (unverifiedOverride) {
+    flags.push("'Unverified' label override attempt — since 1 July 2026, legitimate Australian senders must register their SMS Sender ID with ACMA. A message asking you to ignore an 'Unverified' label is almost certainly a scam.");
+    score += 35;
+  }
+
   // Fake task/job recruitment funnel for pig-butchering (D13 / #51). Composite:
   // require ≥2 distinct signals so legitimate job ads (which may use one of these
   // phrases) don't trip on their own.
@@ -373,6 +459,25 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     score += 25;
   }
 
+  // WhatsApp/Telegram investment-group pig-butchering funnel (D5 / #76 / ASIC
+  // 26-063MR). Distinct from jobSignals: this targets the investing aspiration,
+  // not the side-gig one. Require ≥2 signals, or 1 signal plus a crypto term, so
+  // legitimate mentions of investment communities don't trip it on their own.
+  const investmentGroupSignals = [
+    /join\s+(our|the)\s+(trading|stock|investment|crypto)\s+group/i,
+    /exclusive\s+(stock|trading|investment)\s+tips?/i,
+    /(vip|private)\s+(trading|investment|stock)\s+(signal|group|channel)/i,
+    /trading\s+signals?\s+(group|channel|community)/i,
+    /we\s+(made|returned|earned)\s+\$?\d+.*\b(from\s+)?(tips?|trading)/i,
+    /i'?ll?\s+add\s+you\s+(to\s+(our|the)\s+)?(whatsapp|telegram|signal)/i,
+  ].filter((re) => re.test(text)).length;
+  const hasCryptoSignal = ["crypto", "bitcoin", "wallet", "connect wallet", "sign transaction"]
+    .some((w) => lower.includes(w));
+  if (investmentGroupSignals >= 2 || (investmentGroupSignals >= 1 && hasCryptoSignal)) {
+    flags.push("Investment group recruitment pattern — scammers use 'private trading tip' groups as an entry point for pig-butchering investment fraud; real investment groups don't recruit via cold messages");
+    score += 30;
+  }
+
   // Sender mentions a gov agency but is a random number
   const govMentions = ["ato", "myGov", "mygov", "centrelink", "medicare", "services australia", "afp", "police",
     // ACSC/ASD impersonation (D7 / #55)
@@ -382,17 +487,35 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     "accc", "scamwatch", "national anti-scam centre", "nasc",
     "consumer watchdog", "competition and consumer commission",
     // Toll operators (D1 / #53) and AusPost parcel lures (D10 / #48)
-    "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost"];
+    "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost",
+    // myGov digital-identity layer rebranding to myID in 2026 (D2 / #73).
+    "myid", "my id app"];
   if (govMentions.some((g) => lower.includes(g.toLowerCase()))) {
     flags.push("Claims to be from a government agency — verify directly via official channels");
     score += 25;
+
+    // ATO/myGov/Medicare/Centrelink/Australia Post removed links from their
+    // unsolicited SMS in 2024 (D1 / #73) — so any link alongside one of these
+    // senders is a scam. Scoped to the confirmed no-link senders so the flag
+    // wording stays accurate (toll operators, by contrast, do use links).
+    const noLinkSenders = ["ato", "mygov", "myid", "medicare", "centrelink",
+      "services australia", "australia post", "auspost"];
+    if (urlMatch && noLinkSenders.some((s) => lower.includes(s))) {
+      flags.push("The ATO, myGov, Medicare, Centrelink and Australia Post removed links from their unsolicited SMS messages in 2024 — an SMS from one of these bodies with a clickable link is a scam");
+      score += 15;
+    }
   }
 
   // Consumer brands impersonated in SMS but not government agencies, so they get
   // their own flag wording. Food delivery platforms (D6 / #66) and NBN Co
   // disconnection-threat smishing (D7 / #67).
   const brandMentions = ["doordash", "uber eats", "ubereats", "menulog", "deliveroo",
-    "nbn co", "nbnco", "nbn", "national broadband network"];
+    "nbn co", "nbnco", "nbn", "national broadband network",
+    // Fake-recruiter SMS impersonation (D3 / #82 / Scamwatch June 2026). Amazon
+    // does text customers legitimately (medium FP for "amazon" alone); YouTube
+    // never cold-recruits by SMS. The jobSignals composite above is the stronger
+    // signal when the recruiter pattern is present.
+    "amazon", "youtube"];
   if (brandMentions.some((b) => lower.includes(b))) {
     flags.push("Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message");
     score += 20;
@@ -462,6 +585,23 @@ export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
   if (/open.{0,20}(attachment|file|document|invoice)/i.test(text)) {
     flags.push("Prompts you to open an attachment — common malware delivery method");
     score += 25;
+  }
+
+  // Device code / OAuth token phishing (D4 / #75 / FBI PSA260521). Attackers
+  // abuse Microsoft's OAuth device-code flow to steal a session token with no
+  // fake login page — the victim enters the code on the real microsoft.com but
+  // authorises the attacker's device. Legitimate device-code flows are
+  // user-initiated (e.g. smart-TV sign-in) and don't arrive unsolicited.
+  const deviceCodeHit =
+    /enter\s+(this\s+)?device\s+code/i.test(text) ||
+    /your\s+device\s+code\s+is/i.test(text) ||
+    /microsoft\.com\/devicelogin/i.test(text) ||
+    /device\s+auth(orization)?\s+code/i.test(text) ||
+    /activate\s+(your\s+)?new\s+device/i.test(text) ||
+    /verify\s+(your\s+)?new\s+device/i.test(text);
+  if (deviceCodeHit) {
+    flags.push("Device code phishing — scammers abuse Microsoft's OAuth device login flow to steal your account access without a fake login page. Do not enter any code at microsoft.com/devicelogin unless YOU initiated the login.");
+    score += 30;
   }
 
   score = Math.min(score, 100);
@@ -555,6 +695,15 @@ export function checkCustom(text: string, blocklist?: Set<string>): CheckResult 
     flags.push(`Contains ${urls.length} link(s) — checked separately`);
     const worst = urls.map((u) => checkUrl(u, blocklist)).sort((a, b) => b.score - a.score)[0];
     score += Math.floor(worst.score * 0.5);
+  }
+
+  // ClickFix "run a command" social engineering (D3 / #74). Pasted fake-CAPTCHA
+  // page text is the most likely input path for this here, so mirror the SMS
+  // fuzzy match. No legitimate site tells you to press Win+R and paste a command.
+  if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
+      /powershell\s+-[ec]/i.test(text)) {
+    flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
+    score += 50;
   }
 
   if (flags.length === 0) {
