@@ -653,3 +653,109 @@ describe("threat-intel roadmap — phone rules (D15 / #49)", () => {
     expect(result.phoneIntel?.spoofingRisk).toBe("high");
   });
 });
+
+describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
+  it("detects tax-time cost-of-living lure language (D1 / #73)", () => {
+    const result = checkSms("A $750 cost of living payment is waiting for you.");
+    expect(result.flags.some((f) => f.includes("cost of living payment"))).toBe(true);
+  });
+
+  it("treats myID as a government-agency mention (D2 / #73)", () => {
+    const result = checkSms("myID: verify your digital identity to keep your account active.");
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+
+  it("warns that gov bodies don't put links in unsolicited SMS (D1 / #73)", () => {
+    const result = checkSms("myGov: your tax has been recalculated. Confirm here: https://mygov-refund.xyz");
+    expect(result.flags.some((f) => f.includes("removed links from their unsolicited SMS"))).toBe(true);
+  });
+
+  it("does not add the no-link warning for a toll operator that does use links (#73)", () => {
+    const result = checkSms("Linkt: pay your outstanding toll at https://linkt-pay.example");
+    expect(result.flags.some((f) => f.includes("removed links from their unsolicited SMS"))).toBe(false);
+  });
+
+  it("detects ClickFix 'press Win+R' social engineering in SMS (D3 / #74)", () => {
+    const result = checkSms("Verify you are human: press Win+R, paste this command and hit enter.");
+    expect(result.flags.some((f) => f.includes("Press Win+R"))).toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(50);
+  });
+
+  it("detects ClickFix instructions in free-text / pasted page content (D3 / #74)", () => {
+    const result = checkCustom("To confirm you're human, press Windows+R and paste the following command.");
+    expect(result.flags.some((f) => f.includes("Press Win+R"))).toBe(true);
+  });
+
+  it("detects device-code / OAuth phishing language in email (D4 / #75)", () => {
+    const result = checkEmail(
+      "From: security@micros0ft-verify.com\n\nMicrosoft: enter this device code at microsoft.com/devicelogin to verify your new device.",
+    );
+    expect(result.flags.some((f) => f.includes("Device code phishing"))).toBe(true);
+  });
+
+  it("detects WhatsApp investment-group recruitment with 2+ signals (D5 / #76)", () => {
+    const result = checkSms("Join our crypto group — exclusive trading tips. I'll add you to our WhatsApp.");
+    expect(result.flags.some((f) => f.includes("Investment group recruitment"))).toBe(true);
+  });
+
+  it("does not trip the investment-group composite on a single benign signal (#76)", () => {
+    const result = checkSms("Join our investment group for our free weekly newsletter.");
+    expect(result.flags.some((f) => f.includes("Investment group recruitment"))).toBe(false);
+  });
+
+  it("flags .zip, .mov and .lat TLDs (D6 / #77)", () => {
+    for (const host of ["https://invoice-download.zip", "https://voicemail.mov", "https://claim-now.lat"]) {
+      const result = checkUrl(host);
+      expect(result.flags.some((f) => f.includes("top-level domain"))).toBe(true);
+    }
+  });
+
+  it("detects the ACMA 'Unverified' label override tactic (D7 / #78)", () => {
+    const result = checkSms("NAB: this message may appear as Unverified due to a carrier update — it is genuine.");
+    expect(result.flags.some((f) => f.includes("'Unverified' label override"))).toBe(true);
+  });
+});
+
+describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
+  it("detects fake product-recall SMS lure language (D1 / #80)", () => {
+    const result = checkSms("This is a product recall notice for your recent order.");
+    expect(result.flags.some((f) => f.includes("product recall"))).toBe(true);
+  });
+
+  it("flags Qantas and Velocity URL typosquats (D2 / #81)", () => {
+    for (const host of ["https://qantas-points-verify.xyz/login", "https://velocity-rewards.site"]) {
+      const result = checkUrl(host);
+      expect(result.score).toBeGreaterThanOrEqual(45);
+      expect(result.flags.some((f) => f.includes("impersonating"))).toBe(true);
+    }
+  });
+
+  it("does not flag the real qantas.com.au domain (#81)", () => {
+    const result = checkUrl("https://www.qantas.com.au/frequent-flyer");
+    expect(result.flags.some((f) => f.includes("impersonating"))).toBe(false);
+  });
+
+  it("flags Amazon and YouTube fake-recruiter SMS brand mentions (D3 / #82)", () => {
+    const amazon = checkSms("Amazon is hiring product testers, flexible hours. Reply to apply.");
+    expect(amazon.flags.some((f) => f.includes("well-known company"))).toBe(true);
+    const youtube = checkSms("YouTube Content Team: earn cash rating videos. Message us to join.");
+    expect(youtube.flags.some((f) => f.includes("well-known company"))).toBe(true);
+  });
+
+  it("flags Cloudflare R2 (r2.dev) phishing hosting (D4 / #83)", () => {
+    const result = checkUrl("https://pub-abc123.r2.dev/mygov-login.html");
+    expect(result.flags.some((f) => f.includes("r2.dev"))).toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(25);
+  });
+
+  it("detects Operation Road Trap rego/toll vocabulary (D5 / #84)", () => {
+    const result = checkSms("Your vehicle registration suspended due to rego restrictions.");
+    expect(result.flags.some((f) => f.includes("rego restrictions"))).toBe(true);
+  });
+
+  it("detects celebrity/ASIC-claim investment bait keywords (D6 / #85)", () => {
+    const result = checkSms("Exclusive investment opportunity: guaranteed returns, verified by ASIC. Double your money.");
+    expect(result.flags.some((f) => f.includes("reward language"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("guaranteed returns"))).toBe(true);
+  });
+});
