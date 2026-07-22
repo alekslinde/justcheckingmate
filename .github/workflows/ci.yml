@@ -1,0 +1,36 @@
+name: CI
+
+# Lint + test gate on every PR and on pushes to main. This is the green light
+# every merge relies on — a PR (Dependabot's or a human's) isn't safe to merge
+# until this passes. The production dependency audit lives in its own workflow
+# (dependency-audit.yml), triggered only when the dependency tree can actually
+# change, since its result is identical to main on any PR that doesn't touch
+# package files.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test

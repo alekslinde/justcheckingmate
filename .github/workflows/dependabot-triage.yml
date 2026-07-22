@@ -1,0 +1,39 @@
+name: Dependabot triage
+
+# Reads open Dependabot alerts from the GitHub API, assesses each one
+# (severity × reachability × fix-safety, with root-cause dedup), and refreshes a
+# single "🔒 Dependabot alert triage" issue with a pre-triaged digest. It FLAGS,
+# it does not merge or dismiss — same philosophy as spam-guard.yml.
+#
+# The alerts API isn't exposed to a checked-out clone, which is exactly why this
+# runs in Actions: the built-in GITHUB_TOKEN can read it with security-events.
+
+on:
+  schedule:
+    # Mondays 20:00 UTC ≈ 06:00 Australia/Sydney, just after the weekly
+    # Dependabot PRs are cut.
+    - cron: "0 20 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read          # read package-lock.json / source for local signals
+  security-events: read   # read Dependabot alerts
+  issues: write           # upsert the digest issue
+
+concurrency:
+  group: dependabot-triage
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assess alerts and refresh digest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/dependabot-triage.mjs

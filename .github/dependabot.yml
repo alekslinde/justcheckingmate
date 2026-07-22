@@ -1,0 +1,80 @@
+# Dependabot configuration.
+#
+# Two things run off this file:
+#   1. Dependabot security + version-update PRs (grouped, so one weekly PR per
+#      risk lane instead of a swarm of single-package PRs).
+#   2. The `dependabot-triage` workflow, which reads the resulting alerts from
+#      the Dependabot API and posts a pre-triaged digest. See
+#      .github/workflows/dependabot-triage.yml.
+#
+# Grouping mirrors the assessment lanes the triage uses: production deps get
+# their own PR (higher scrutiny — these are reachable at runtime), dev/build
+# deps get another (lower real-world risk). Majors are left ungrouped so a
+# breaking bump (e.g. Next 15 -> 16) always lands as its own reviewable PR.
+version: 2
+updates:
+  # ── Root app (Next.js / React / detection stack) ──────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Australia/Sydney"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── Inbound-email worker (its own package.json / own deps) ────────────────
+  - package-ecosystem: "npm"
+    directory: "/workers/inbound-email"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Australia/Sydney"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "worker"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      worker-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── GitHub Actions used by our workflows ──────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions-all:
+        update-types:
+          - "minor"
+          - "patch"
