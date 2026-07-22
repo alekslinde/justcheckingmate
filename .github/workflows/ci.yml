@@ -1,0 +1,51 @@
+name: CI
+
+# Test + lint gate on every PR and on pushes to main. This is the green light
+# the dependency automation relies on: a Dependabot PR (or any PR) can't be
+# considered safe to merge until this passes. The `audit` job is the security
+# half — it fails the build only on a *production* high/critical vulnerability,
+# so a dev-only advisory (eslint/build tooling) doesn't block shipping while a
+# runtime-reachable one does.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+
+  audit:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Gate on runtime-reachable vulnerabilities only. Dev/build-time advisories
+      # are surfaced by the weekly triage digest, not treated as a merge blocker.
+      - name: Audit production dependencies (high+)
+        run: npm audit --omit=dev --audit-level=high
