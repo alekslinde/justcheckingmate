@@ -1,0 +1,55 @@
+name: Dependency audit
+
+# The production-vulnerability merge gate, split out of ci.yml. An audit's
+# result depends only on the dependency tree, so running it on every PR is
+# redundant — on any PR that doesn't touch package files it just re-confirms
+# what main already says. So it runs when it can actually differ:
+#
+#   • PRs / pushes that change a package.json or lockfile (root or worker), and
+#   • weekly, to catch a newly-published advisory against unchanged deps.
+#
+# It fails only on a *production* high/critical vulnerability. Dev/build-time
+# advisories are surfaced by the weekly triage digest, not treated as blockers.
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "workers/inbound-email/package.json"
+      - "workers/inbound-email/package-lock.json"
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "workers/inbound-email/package.json"
+      - "workers/inbound-email/package-lock.json"
+  schedule:
+    # Mondays 19:00 UTC — an hour before the triage digest, so any newly-broken
+    # gate is visible when the digest is read.
+    - cron: "0 19 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Audit root app (production, high+)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit inbound-email worker (production, high+)
+        working-directory: workers/inbound-email
+        run: npm audit --omit=dev --audit-level=high
