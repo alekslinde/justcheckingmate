@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-// @ts-expect-error — plain .mjs script, no type declarations; tested for behaviour.
+// Types for the plain .mjs script come from its JSDoc via checkJs.
 import {
   parseVersion,
   compareVersions,
