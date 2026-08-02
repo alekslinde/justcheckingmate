@@ -205,6 +205,38 @@ const SUSPICIOUS_HOSTING = [
   "r2.dev",
 ];
 
+// Named fraudulent AI-trading platforms (D4 / #104). ASIC and Scamwatch have
+// issued explicit named warnings about each of these — they are promoted to
+// Australians via deepfake celebrity video ads. No legitimate AU financial
+// service uses any of these names, so a bare match is near-zero false-positive.
+const FAKE_INVESTMENT_PLATFORMS = [
+  "quantum ai", "quantum trade ai", "quantum trade wave",
+  "immediate edge", "immediate connect", "immediate x3",
+  "bitcoin era", "bitcoin trader",
+];
+
+// myID forced re-registration phishing (D6 / #106). The myGovID → myID rebrand
+// spawned a wave of "re-verify your digital identity" lures that deliberately
+// omit the word "myid" — so they slip past govMentions. These are long,
+// specific multi-word phrases, keeping false positives low even where "digital
+// identity" appears in legitimate HR/tech copy. Services Australia never sends
+// unsolicited re-verification requests.
+const MYID_REREG_PHRASES = [
+  "re-verify your digital identity", "digital identity verification",
+  "your identity verification has expired", "complete your identity verification",
+  "myid has been suspended", "set up your new digital identity",
+  "migrate to the new digital identity", "myid verification is pending",
+];
+
+// Cover brands for TOAD / callback phishing (D2 / #102). Fake subscription or
+// purchase-invoice emails naming one of these, with a phone number and NO link,
+// are the core signal — the scam happens on the phone, not via a URL. Confirmed
+// in the Scamwatch "Fake purchase callback scam" alert (June 2026).
+const CALLBACK_BRANDS = [
+  "norton", "mcafee", "geek squad", "geeksquad", "best buy",
+  "docusign", "coinbase", "bitcoin",
+];
+
 const LEGIT_AU_DOMAINS = [
   "gov.au", "ato.gov.au", "mygov.gov.au", "centrelink.gov.au",
   "myhealth.gov.au", "australia.gov.au", "afp.gov.au", "accc.gov.au",
@@ -534,6 +566,24 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     score += 10;
   }
 
+  // Named fraudulent investment platforms (D4 / #104). ASIC/Scamwatch have
+  // explicitly warned against these exact names — a single match is a
+  // high-confidence scam signal with essentially no legitimate use case.
+  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
+  if (platformHit) {
+    flags.push(`Named fraudulent investment platform detected ("${platformHit}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`);
+    score += 50;
+  }
+
+  // myID forced re-registration phishing (D6 / #106). Dedicated wording rather
+  // than a govMentions entry, because these are "digital identity" phrases, not
+  // an agency name — the govMentions "claims to be a government agency" flag
+  // would read wrong here.
+  if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
+    flags.push("myID/digital-identity re-registration lure — Services Australia and myID never send unsolicited requests to 're-verify' or 'set up' your digital identity. Go to my.gov.au directly, never via a message link.");
+    score += 25;
+  }
+
   score = Math.min(score, 100);
   return scoreToResult(score, flags, "SMS");
 }
@@ -602,6 +652,27 @@ export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
   if (deviceCodeHit) {
     flags.push("Device code phishing — scammers abuse Microsoft's OAuth device login flow to steal your account access without a fake login page. Do not enter any code at microsoft.com/devicelogin unless YOU initiated the login.");
     score += 30;
+  }
+
+  // TOAD / callback phishing (D2 / #102). A fake subscription or purchase
+  // invoice naming a cover brand, quoting a large charge, telling you to call to
+  // dispute it, and containing NO link. The four-factor compound is very
+  // specific — a genuine renewal email always links back to the vendor's site,
+  // so hasNoUrl alone rules most legitimate mail out. Scamwatch "Fake purchase
+  // callback scam" alert (June 2026).
+  const callbackBrandHits = CALLBACK_BRANDS.filter((b) => lower.includes(b)).length;
+  const hasCallToDispute =
+    /call\s.{0,30}(dispute|cancel|reverse|refund|unauthori[sz]ed)/i.test(text) ||
+    /to\s+(dispute|cancel|reverse)\s+(this|the)\s+(charge|payment|order|invoice|subscription)/i.test(text);
+  const hasLargeAmount = /\$\s*[2-9]\d{2}|\$\s*[1-9]\d{3}/.test(text);
+  const hasNoUrl = !/https?:\/\//i.test(text);
+
+  if (callbackBrandHits >= 1 && hasCallToDispute && hasLargeAmount && hasNoUrl) {
+    flags.push("Fake subscription callback scam — this looks like a fraudulent invoice designed to make you call a scammer. No legitimate company sends a billing dispute this way. Do not call the number.");
+    score += 45;
+  } else if (callbackBrandHits >= 2 && hasCallToDispute) {
+    flags.push("Possible fake invoice callback scam — multiple fake-subscription brand names combined with a call-to-dispute pattern.");
+    score += 25;
   }
 
   score = Math.min(score, 100);
@@ -704,6 +775,21 @@ export function checkCustom(text: string, blocklist?: Set<string>): CheckResult 
       /powershell\s+-[ec]/i.test(text)) {
     flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
     score += 50;
+  }
+
+  // Named fraudulent investment platforms (D4 / #104) — mirror of the checkSms
+  // rule so pasted ad text / recruitment messages are caught here too.
+  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
+  if (platformHit) {
+    flags.push(`Named fraudulent investment platform detected ("${platformHit}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`);
+    score += 50;
+  }
+
+  // myID forced re-registration phishing (D6 / #106) — mirror for pasted email
+  // bodies routed through the free-text checker.
+  if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
+    flags.push("myID/digital-identity re-registration lure — Services Australia and myID never send unsolicited requests to 're-verify' or 'set up' your digital identity. Go to my.gov.au directly, never via a message link.");
+    score += 25;
   }
 
   if (flags.length === 0) {
