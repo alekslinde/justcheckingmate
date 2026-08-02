@@ -828,3 +828,88 @@ describe("threat-intel roadmap 2026-07-26 (#102, #104, #106)", () => {
     expect(result.flags.some((f) => f.includes("Possible fake invoice callback scam"))).toBe(true);
   });
 });
+
+describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
+  // ── #101: high-abuse TLDs promoted from watchlist ───────────────────────────
+  it("flags each newly promoted high-abuse TLD (D1 / #101)", () => {
+    for (const host of [
+      "auspost-track.shop", "card-checkout.store", "invest-au.vip",
+      "verify-now.lol", "secure-login.monster",
+    ]) {
+      const result = checkUrl(`https://${host}/login`);
+      expect(result.flags.some((f) => f.includes("Dodgy top-level domain"))).toBe(true);
+    }
+  });
+
+  it("reaches a scam verdict when a promoted TLD compounds with other signals (D1 / #101)", () => {
+    const result = checkSms("URGENT: your AusPost parcel is held. Confirm identity at https://auspost-track.shop/verify");
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("does not flag an ordinary .com.au retailer (D1 / #101)", () => {
+    const result = checkUrl("https://www.woolworths.com.au/shop/browse/specials");
+    expect(result.flags.some((f) => f.includes("Dodgy top-level domain"))).toBe(false);
+  });
+
+  // ── #103: foreign authority impersonation ───────────────────────────────────
+  it("flags a Chinese police impersonation SMS (D3 / #103)", () => {
+    const result = checkSms(
+      "This is the Beijing police. You are subject to a money laundering investigation and an arrest warrant has been issued. Do not tell anyone. Call us immediately."
+    );
+    expect(result.flags.some((f) => f.includes("foreign police or government authority"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("flags each foreign-authority variant (D3 / #103)", () => {
+    for (const authority of [
+      "Chinese police", "Shanghai police", "Chinese consulate",
+      "Embassy of China", "Chinese customs", "Chinese authorities",
+    ]) {
+      const result = checkSms(`Notice from the ${authority}: your case requires a security deposit.`);
+      expect(result.flags.some((f) => f.includes("foreign police or government authority"))).toBe(true);
+    }
+  });
+
+  it("flags foreign-authority threat language as urgency (D3 / #103)", () => {
+    const result = checkSms("Final notice: a deportation notice has been filed and your visa will be cancelled.");
+    expect(result.flags.some((f) => f.includes("Urgency language"))).toBe(true);
+  });
+
+  it("flags a consulate impersonation targeting a student visa holder (D3 / #103)", () => {
+    const result = checkSms(
+      "Chinese consulate: you are involved in criminal activity in China. Transfer a security deposit via bitcoin or face detention."
+    );
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("does not flag ordinary travel or news copy mentioning China (D3 / #103)", () => {
+    const result = checkSms("Our flight to Shanghai is booked and the visa paperwork is done.");
+    expect(result.flags.some((f) => f.includes("foreign police or government authority"))).toBe(false);
+  });
+
+  // ── #105: rental/property bond redirect fraud ───────────────────────────────
+  it("flags an agency 'updated bank details' bond redirect (D5 / #105)", () => {
+    const result = checkSms(
+      "Hi, please note our agency has updated bank details for rental bond collection. New BSB: 062-111 Acc: 12345678. Please transfer your $4,200 bond today."
+    );
+    expect(result.flags.some((f) => f.includes("Property bond fraud pattern"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("flags a holding-deposit variant with a changed account (D5 / #105)", () => {
+    const result = checkSms(
+      "Your tenancy application was approved. Please pay the holding deposit $500 to our new account details (BSB changed last week): BSB 012-345 Acc 987654321."
+    );
+    expect(result.flags.some((f) => f.includes("Property bond fraud pattern"))).toBe(true);
+  });
+
+  it("does not fire the composite on rental context alone (D5 / #105)", () => {
+    const result = checkSms("Reminder: your lease agreement is due for renewal next month.");
+    expect(result.flags.some((f) => f.includes("Property bond fraud pattern"))).toBe(false);
+  });
+
+  it("does not fire the composite on a bank-detail mention alone (D5 / #105)", () => {
+    const result = checkSms("Your account number ending 4821 has been updated in our system.");
+    expect(result.flags.some((f) => f.includes("Property bond fraud pattern"))).toBe(false);
+  });
+});
