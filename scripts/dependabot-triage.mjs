@@ -71,10 +71,14 @@ export function isBreakingUpgrade(installed, fix) {
 /**
  * Turn one Dependabot alert + local repo context into a verdict.
  *
+ * Both ctx fields are optional: each falls back to an empty Map/Set below, so
+ * a caller with no repo context still gets a verdict (one that simply can't
+ * judge reachability or breaking-ness).
+ *
  * @param {object} alert  A GitHub Dependabot alert (REST shape).
- * @param {object} ctx
- * @param {Map<string,string>} ctx.installedVersions  package name -> resolved version
- * @param {Set<string>} ctx.directImports  package names imported from our source
+ * @param {object} [ctx]
+ * @param {Map<string,string>} [ctx.installedVersions]  package name -> resolved version
+ * @param {Set<string>} [ctx.directImports]  package names imported from our source
  * @returns {{
  *   number:number, package:string, ghsaId:string, severity:string,
  *   verdict:"auto"|"review"|"monitor", reasons:string[], priority:number,

@@ -50,7 +50,7 @@ async function streamToString(stream: ReadableStream, maxBytes: number): Promise
   return new TextDecoder().decode(merged);
 }
 
-export default {
+const handler = {
   async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
     const raw = await streamToString(message.raw, MAX_RAW_BYTES);
     if (!raw) return; // oversized or unreadable — silently drop
@@ -94,6 +94,11 @@ export default {
     }
   },
 };
+
+// The Email Routing runtime consumes this default export's `email` method.
+// Named before exporting to satisfy import/no-anonymous-default-export; the
+// exported shape is unchanged.
+export default handler;
 
 // Minimal ambient type for the Email Routing handler argument. The full type
 // ships with @cloudflare/workers-types; declared here so the file type-checks
