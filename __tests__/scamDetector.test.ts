@@ -759,3 +759,72 @@ describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
     expect(result.flags.some((f) => f.includes("guaranteed returns"))).toBe(true);
   });
 });
+
+describe("threat-intel roadmap 2026-07-26 (#102, #104, #106)", () => {
+  // ── #104: named fraudulent AI trading platforms ─────────────────────────────
+  it("flags a named fraudulent investment platform in an SMS (D4 / #104)", () => {
+    const result = checkSms("Join Quantum AI now — automated trading, sign up in 2 minutes.");
+    expect(result.flags.some((f) => f.includes("fraudulent investment platform"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("quantum ai"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("flags each ASIC-named platform variant (D4 / #104)", () => {
+    for (const name of ["Immediate Edge", "Immediate X3", "Bitcoin Era", "Quantum Trade Wave"]) {
+      const result = checkSms(`I made $8000 with ${name} last week, want in?`);
+      expect(result.flags.some((f) => f.includes("fraudulent investment platform"))).toBe(true);
+    }
+  });
+
+  it("flags a named platform in pasted free text (D4 / #104)", () => {
+    const result = checkCustom("Advertisement: Immediate Connect — the AI that trades crypto for you.");
+    expect(result.flags.some((f) => f.includes("fraudulent investment platform"))).toBe(true);
+  });
+
+  it("does not flag ordinary text that merely mentions AI or bitcoin (D4 / #104)", () => {
+    const result = checkSms("Our team is building an AI feature and researching bitcoin fees.");
+    expect(result.flags.some((f) => f.includes("fraudulent investment platform"))).toBe(false);
+  });
+
+  // ── #106: myID forced re-registration phishing ──────────────────────────────
+  it("flags a myID digital-identity re-registration lure (D6 / #106)", () => {
+    const result = checkSms("Your digital identity verification has expired. Re-verify now to keep your myGov access.");
+    expect(result.flags.some((f) => f.includes("re-registration lure"))).toBe(true);
+  });
+
+  it("flags a suspended-myID variant that omits an agency name (D6 / #106)", () => {
+    const result = checkSms("Notice: myID has been suspended. Complete your identity verification to restore access.");
+    expect(result.flags.some((f) => f.includes("re-registration lure"))).toBe(true);
+  });
+
+  it("does not flag an incidental mention of identity in ordinary copy (D6 / #106)", () => {
+    const result = checkSms("Thanks for updating your profile — your details are saved.");
+    expect(result.flags.some((f) => f.includes("re-registration lure"))).toBe(false);
+  });
+
+  // ── #102: TOAD / callback phishing email ────────────────────────────────────
+  it("flags a Norton fake-invoice callback email with a charge and no link (D2 / #102)", () => {
+    const email = "Your Norton Antivirus subscription has been renewed and $349.99 has been charged to your account. Call 1-800-555-0142 to cancel this charge or dispute the payment.";
+    const result = checkEmail(email);
+    expect(result.flags.some((f) => f.includes("Fake subscription callback scam"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("flags a McAfee dispute variant just over the amount threshold (D2 / #102)", () => {
+    const email = "McAfee invoice INV-0024819: you have been billed $299 for your annual plan. To dispute this charge, call our billing team immediately.";
+    const result = checkEmail(email);
+    expect(result.flags.some((f) => f.includes("Fake subscription callback scam"))).toBe(true);
+  });
+
+  it("does not flag a genuine Norton renewal email that links back to the vendor (D2 / #102)", () => {
+    const email = "Your Norton subscription renews for $349.99. Manage or cancel your plan anytime at https://my.norton.com/account.";
+    const result = checkEmail(email);
+    expect(result.flags.some((f) => f.includes("Fake subscription callback scam"))).toBe(false);
+  });
+
+  it("falls back to the softer flag for two brands without an amount (D2 / #102)", () => {
+    const email = "Notice regarding your McAfee and Norton subscriptions. To cancel this subscription, call the number below.";
+    const result = checkEmail(email);
+    expect(result.flags.some((f) => f.includes("Possible fake invoice callback scam"))).toBe(true);
+  });
+});
