@@ -6,6 +6,39 @@
 
 ---
 
+## Status — as at 2026-08-02
+
+Six of the seven proposals below have shipped. The research and rationale are
+kept as written on 2026-07-26; this block is the only part updated after the
+fact.
+
+| Proposal | Issue | Shipped in | Status |
+|---|---|---|---|
+| D1 — High-abuse TLDs (`.shop`, `.store`, `.vip`, `.lol`, `.monster`) | #101 | #111 | ✅ Shipped |
+| D2 — TOAD / callback phishing email | #102 | #109 | ✅ Shipped |
+| D3 — Chinese authority impersonation | #103 | #111 | ✅ Shipped |
+| D4 — Named deepfake investment platforms | #104 | #109 | ✅ Shipped |
+| D5 — Rental / property bond fraud | #105 | #111 | ✅ Shipped |
+| D6 — myID re-registration phishing | #106 | #109 | ✅ Shipped |
+| D7 — PDF + QR hybrid body signal | #113 | — | ⬜ Outstanding |
+
+**Two implementations deviated from the proposal as written.** Both are
+documented in #111; noted here so this file isn't read as a description of the
+shipped code:
+
+- **D3** — the foreign-authority terms did *not* go into `govMentions` as
+  proposed. That list emits "Claims to be from a government agency — verify
+  directly via official channels", which is actively wrong advice for a Chinese
+  police impersonation. They live in a separate `foreignAuthorityMentions` list
+  scored at +35 with its own flag wording.
+- **D5** — `"rental bond"` and `"holding deposit"` were *not* added to
+  `REQUEST_WORDS`. As bare tenancy vocabulary they would fire the "Asks for
+  sensitive info" flag on legitimate agency messages. They appear only in the
+  composite regex, consistent with this file's own note that "rental bond alone
+  is not scored, only in compound".
+
+---
+
 ## (a) Executive Summary — Top 5 Ship-This-Week Changes
 
 Ranked by **impact × ease** (all are string/regex additions to existing functions — no architecture changes required):
@@ -167,6 +200,12 @@ Victims are told they must pay "security deposits", "bail bonds", or wire funds 
 
 **Recommendation:** No new detection rule possible for the pure PDF-only case. However, adding `"scan the qr code in the attached"` and `"attachment contains a qr code"` to the existing QR prompt check in `checkSms()` (which feeds `checkEmail()`) would catch the hybrid case where the body references the PDF QR. Low-effort improvement, modest gain.
 
+> **Correction (2026-08-02):** the assessment above is half right. Tested against
+> the live regex: `"scan the QR code in the attached PDF…"` is already caught, so
+> that pattern is redundant. `"the attachment contains a QR code"` is **not**
+> caught — it inverts the sentence, so no "scan the QR code" verb phrase appears.
+> Only that second pattern is a real gap. Tracked in #113.
+
 **Sources:**
 - https://cybersecuritynews.com/new-qr-code-attack-via-pdfs/
 - https://www.barracuda.com/reports/2026-email-threats-report
@@ -199,7 +238,7 @@ Victims are told they must pay "security deposits", "bail bonds", or wire funds 
 | D4 | Named deepfake investment platforms | Add a new `FAKE_INVESTMENT_PLATFORMS` constant and check in `checkSms()` / `checkEmail()` / `checkCustom()`: `["quantum ai", "quantum trade ai", "immediate edge", "immediate connect", "immediate x3", "quantum trade wave", "bitcoin era", "bitcoin trader"]` — if any name is found, flag `"Named fraudulent investment platform — ASIC and Scamwatch have issued specific warnings about this platform; it is not a legitimate investment service"` (+50). Score should be high because these names have near-zero false-positive risk | `lib/scamDetector.ts` | Very low — ASIC and FCA have officially named and warned against exactly these platforms; encountering them in any message is a confirmed scam signal | HIGH |
 | D5 | Rental / property bond "updated bank details" fraud | Add to `URGENCY_WORDS` or a new `URGENCY_PROPERTY` sub-list: `"rental bond"`, `"holding deposit"`, `"lease agreement"` (as compound triggers). Add to `REQUEST_WORDS`: `"updated bank details"`, `"new account details"`, `"changed bank account"`, `"new bsb"` — these already compound with the existing `"bank details"` and `"bsb"` signals but the "updated" + rental context phrases are missing. Optionally add a composite: if `"rental bond"` OR `"holding deposit"` appears with `"bsb"` or `"bank details"`, score +25 additional | `lib/scamDetector.ts` | Low — "updated bank details" in context with a rental/property term is a highly specific scam signal; "rental bond" alone is not scored, only in compound | HIGH |
 | D6 | myID re-registration / identity verification phishing phrases | Add to `govMentions` (complementing the existing `"myid"` entry): `"re-verify your digital identity"`, `"digital identity verification"`, `"your identity verification has expired"`, `"complete your identity verification"`, `"myid has been suspended"`, `"set up your new digital identity"`. These trigger the existing +25 gov-agency flag and the no-link-from-gov-bodies secondary flag where appropriate | `lib/scamDetector.ts` | Low-Medium — "digital identity verification" could appear in legitimate HR/onboarding contexts; mitigated by the compound model (only scores high when combined with a link or urgency signal) | MEDIUM |
-| D7 | PDF + QR code hybrid body signal | In the QR scan prompt regex block in `checkSms()` (lines 416-420), extend with: `\bscan\s+the\s+qr\s*(code)?\s+in\s+the\s+(attached|attachment|pdf)\b` and `\battachment\s+contains\s+a\s+qr\s+code\b` — catches the body-text version of PDF-embedded quishing where the author mentions the PDF | `lib/scamDetector.ts` | Low — very specific phrasing | MEDIUM |
+| D7 | PDF + QR code hybrid body signal | In the QR scan prompt regex block in `checkSms()`, add `\battachment\s+contains\s+a\s+qr\s+code\b` — catches the body-text version of PDF-embedded quishing. **Scoped down 2026-08-02:** the originally proposed `scan the qr code in the attached…` pattern is redundant, verified against the current regex (see #113) | `lib/scamDetector.ts` | Low — very specific phrasing | MEDIUM |
 
 ---
 
@@ -264,6 +303,11 @@ Victims are told they must pay "security deposits", "bail bonds", or wire funds 
 ## Issues to Open Manually
 
 > GitHub issue creation via MCP tools — see below for the 6 HIGH-priority issue bodies.
+>
+> **Update 2026-08-02:** all six were opened as #101–#106 and are now closed
+> (shipped in #109 and #111). The bodies below are kept as the original drafts —
+> see the Status block at the top of this file for what actually shipped, including
+> the two D3/D5 deviations. D7 was not drafted here; it is now tracked in #113.
 
 ---
 
