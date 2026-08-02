@@ -37,7 +37,7 @@ jobs:
       # that doesn't exist yet fails (wrangler-action#162), so the worker must
       # exist before the secret step. `wrangler deploy` is idempotent on reruns.
       - name: Deploy worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -50,7 +50,7 @@ jobs:
       # only in GitHub repo secrets and the Worker — never in the repo. Must
       # match INBOUND_SECRET set on the Next app (Vercel env var).
       - name: Set INBOUND_SECRET
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
