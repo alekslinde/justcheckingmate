@@ -97,8 +97,21 @@ const URGENCY_TAXTIME = [
   "government rebate", "tax refund waiting", "refund is waiting",
 ];
 
+// Foreign-authority threat phrases (D3 / #103). AFP May 2026 and Victoria
+// Police advisories describe scammers impersonating Chinese police and
+// consular officials to threaten Australian residents — particularly
+// international students — with arrest or deportation unless a "security
+// deposit" is paid. In an AU consumer context these phrases arriving by
+// unsolicited SMS have no legitimate use.
+const URGENCY_FOREIGN_AUTHORITY = [
+  "arrest warrant", "detention order", "deportation notice",
+  "money laundering investigation", "your visa will be cancelled",
+  "involved in criminal activity",
+];
+
 const URGENCY_WORDS = [
   ...URGENCY_GENERIC,
+  ...URGENCY_FOREIGN_AUTHORITY,
   ...URGENCY_TOLL,
   ...URGENCY_PARCEL,
   ...URGENCY_VOICE_CLONE,
@@ -161,6 +174,13 @@ const REQUEST_WORDS = [
   "run this to verify", "run the following to verify", "run this fix",
   "open run dialog", "open the run dialog",
   "copy and paste this fix", "paste to fix your browser",
+  // Rental/property bond redirect fraud (D5 / #105). Scammers impersonate or
+  // intercept real estate agency comms and send "updated bank details" just
+  // before the bond is due. Legitimate agencies rarely change payment details
+  // and never under time pressure via SMS, so the "updated/new/changed"
+  // qualifier is the distinguishing signal — bare "rental bond" doesn't score.
+  "updated bank details", "new account details", "changed bank account",
+  "new bsb",
 ];
 
 const SCAM_DOMAINS = [
@@ -180,6 +200,14 @@ const SUSPICIOUS_TLDS = [
   ".zip", ".mov",
   // .lat — high phishing-abuse ratio, appearing in AU-targeting campaigns 2025-26.
   ".lat",
+  // High-abuse 2026 TLDs promoted from watchlist (D1 / #101). .shop and .store
+  // are top-10 globally abused TLDs (Brandsec AU 2025-2026) seen in AU
+  // fake-retail and subscription-renewal campaigns; .vip appears in the APWG
+  // top-10 and AU pig-butchering funnels; .lol and .monster are cheap ICANN
+  // TLDs that launched with >60% abuse rates. .shop/.store carry some
+  // legitimate e-commerce use, so they lean on compound scoring rather than
+  // reaching a scam verdict alone.
+  ".shop", ".store", ".vip", ".lol", ".monster",
 ];
 
 // Public IPFS gateways — decentralised hosting used for takedown-resistant
@@ -416,6 +444,17 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     score += Math.min(requestHits.length * 15, 50);
   }
 
+  // Rental/property bond redirect fraud (D5 / #105). Composite: a rental
+  // context plus a bank-detail ask. Neither half scores here on its own —
+  // "rental bond" is ordinary tenancy language and "bsb" already sits in
+  // REQUEST_WORDS — but together they're the signature of bond redirection.
+  const hasRentalContext = /rental bond|holding deposit|lease agreement|property manager/i.test(text);
+  const hasBankAsk = /bsb|bank details|account number|account no\b/i.test(text);
+  if (hasRentalContext && hasBankAsk) {
+    flags.push("Property bond fraud pattern — scammers intercept rental communications to redirect bond payments. Always verify bank detail changes by calling the agency on a number from their official website, never one in the message.");
+    score += 25;
+  }
+
   // Contains a URL
   const urlMatch = text.match(/https?:\/\/[^\s]+/gi);
   if (urlMatch) {
@@ -536,6 +575,22 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
       flags.push("The ATO, myGov, Medicare, Centrelink and Australia Post removed links from their unsolicited SMS messages in 2024 — an SMS from one of these bodies with a clickable link is a scam");
       score += 15;
     }
+  }
+
+  // Foreign-authority impersonation targeting the AU Chinese community (D3 /
+  // #103 / AFP May 2026). Kept separate from govMentions because the reasoning
+  // is different and stronger: Chinese police, customs and consular officials
+  // have no enforcement jurisdiction in Australia and never demand payment, so
+  // a claim of that authority is a scam signal on its own rather than a
+  // "verify via official channels" prompt. Scored +35 (vs +25).
+  const foreignAuthorityMentions = [
+    "chinese police", "beijing police", "shanghai police", "chinese consulate",
+    "embassy of china", "chinese customs", "chinese immigration authority",
+    "chinese authorities",
+  ];
+  if (foreignAuthorityMentions.some((a) => lower.includes(a))) {
+    flags.push("Claims to be a foreign police or government authority — Chinese police, customs and consulate officials have no law-enforcement powers in Australia and never demand payments, transfers or secrecy. This is a known scam targeting the Chinese-Australian community (AFP warning, May 2026).");
+    score += 35;
   }
 
   // Consumer brands impersonated in SMS but not government agencies, so they get
