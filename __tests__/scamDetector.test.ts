@@ -748,6 +748,40 @@ describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
     expect(result.score).toBeGreaterThanOrEqual(25);
   });
 
+  it("flags ngrok ephemeral tunnels as phishing hosting (D1 / #119)", () => {
+    // Bare tunnel: hosting signal alone (+35) lands in "suspicious".
+    const bare = checkUrl("https://abc123.ngrok-free.app");
+    expect(bare.flags.some((f) => f.includes("ngrok-free.app"))).toBe(true);
+    expect(bare.verdict).toBe("suspicious");
+
+    const tunnel = checkUrl("https://random.ngrok.io/ato");
+    expect(tunnel.flags.some((f) => f.includes("ngrok.io"))).toBe(true);
+    expect(tunnel.verdict).toBe("suspicious");
+
+    // Compounding with a credential-harvest path escalates past suspicious.
+    const login = checkUrl("https://abc123.ngrok-free.app/login");
+    expect(login.verdict).toBe("likely_scam");
+  });
+
+  it("flags github.io / netlify.app static-site phishing hosting (D2 / #120)", () => {
+    const gh = checkUrl("https://ato-verify.github.io/login");
+    expect(gh.flags.some((f) => f.includes("github.io"))).toBe(true);
+    expect(gh.score).toBeGreaterThanOrEqual(25);
+
+    const netlify = checkUrl("https://mygov-login.netlify.app");
+    expect(netlify.flags.some((f) => f.includes("netlify.app"))).toBe(true);
+    expect(netlify.score).toBeGreaterThanOrEqual(25);
+  });
+
+  it("does not flag a bare github.io project site as suspicious (#120 FP guard)", () => {
+    const result = checkUrl("https://username.github.io");
+    expect(result.verdict).toBe("safe");
+  });
+
+  it("still treats real AU government domains as safe (#119 regression)", () => {
+    expect(checkUrl("https://ato.gov.au").verdict).toBe("safe");
+  });
+
   it("detects Operation Road Trap rego/toll vocabulary (D5 / #84)", () => {
     const result = checkSms("Your vehicle registration suspended due to rego restrictions.");
     expect(result.flags.some((f) => f.includes("rego restrictions"))).toBe(true);
