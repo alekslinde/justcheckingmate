@@ -834,6 +834,36 @@ describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
     expect(result.flags.some((f) => f.includes("never ring customers"))).toBe(false);
   });
 
+  it("detects fake voicemail notification lures (D5 / #122)", () => {
+    const withUrl = checkSms("You have 1 new voicemail. Listen here: https://abc.ngrok-free.app/vm");
+    expect(withUrl.flags.some((f) => f.includes("Fake voicemail"))).toBe(true);
+    expect(withUrl.verdict).toBe("likely_scam");
+
+    // No URL — the lure still registers on its own.
+    const noUrl = checkSms("You have 2 unheard voicemails. Tap to listen.");
+    expect(noUrl.flags.some((f) => f.includes("Fake voicemail"))).toBe(true);
+
+    const missedCall = checkSms("Missed call notification: click to listen to your voicemail");
+    expect(missedCall.flags.some((f) => f.includes("Fake voicemail"))).toBe(true);
+
+    // checkEmail inherits the signal via its checkSms delegation.
+    const email = checkEmail("You have a new voicemail message waiting. Listen: https://vm-portal.xyz");
+    expect(email.flags.some((f) => f.includes("Fake voicemail"))).toBe(true);
+  });
+
+  it("does not flag conversational voicemail mentions (#122 FP guard)", () => {
+    for (const text of [
+      "I left you a voicemail, let me know if you got it",
+      "Sorry I missed your call, I left a voicemail",
+      "Your voicemail box is full",
+      "Can you check voicemail when you get a sec?",
+    ]) {
+      const result = checkSms(text);
+      expect(result.flags.some((f) => f.includes("Fake voicemail"))).toBe(false);
+      expect(result.verdict).toBe("safe");
+    }
+  });
+
   it("detects Operation Road Trap rego/toll vocabulary (D5 / #84)", () => {
     const result = checkSms("Your vehicle registration suspended due to rego restrictions.");
     expect(result.flags.some((f) => f.includes("rego restrictions"))).toBe(true);

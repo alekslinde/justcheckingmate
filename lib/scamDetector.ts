@@ -545,6 +545,26 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     score += 20;
   }
 
+  // Fake voicemail notification lures (D5 / #122). Flubot-era smishing
+  // (Scamwatch has a dedicated page) and the ongoing UpCrypter campaign both
+  // use "you have a new voicemail" to get a click — the payload is malware or
+  // a fake Microsoft 365 / Google Workspace credential page. Real voicemail
+  // services deliver audio or a transcript inline, or link into the
+  // authenticated app; they don't send a bare click-through in a separate SMS.
+  //
+  // Anchored on the *notification* shape rather than the bare word, so ordinary
+  // conversational use ("I left you a voicemail", "your voicemail box is full")
+  // stays clean. Scored +20 to match the QR-quishing prompt above: both are
+  // click-lures that need a URL, brand or urgency signal to escalate.
+  if (/you\s+have\s+(?:a|an|\d+|one|two|three)?\s*(?:new|unheard|missed|pending|urgent)?\s*voicemail/i.test(text) ||
+      /\d+\s+(?:new\s+|unheard\s+|pending\s+)?voicemail/i.test(text) ||
+      /listen\s+(?:to\s+)?(?:your\s+)?(?:new\s+)?voicemail/i.test(text) ||
+      /voicemail\s+(?:notification|alert|waiting|received|pending)/i.test(text) ||
+      /missed\s+call\s+(?:notification|alert)[\s\S]{0,30}(?:click|tap|visit|listen)/i.test(text)) {
+    flags.push("Fake voicemail notification — scammers send fake 'you have a new voicemail' messages to trick you into clicking a malicious link. Legitimate voicemail services never deliver audio via a separate SMS link.");
+    score += 20;
+  }
+
   // ClickFix "run a command" social engineering (D3 / #74 / ACSC advisory May
   // 2026). A fake CAPTCHA overlay tells the user to press Win+R and paste a
   // PowerShell command, running malware themselves. No legitimate entity asks
