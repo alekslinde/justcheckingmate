@@ -42,7 +42,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers/inbound-email
-          wranglerVersion: "3"
+          wranglerVersion: "4"
 
       # Now that the Worker exists, push the shared secret. The `secrets:` input
       # runs `wrangler secret put` for each name; `command: whoami` is a no-op
@@ -55,7 +55,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: workers/inbound-email
-          wranglerVersion: "3"
+          wranglerVersion: "4"
           command: whoami
           secrets: |
             INBOUND_SECRET
