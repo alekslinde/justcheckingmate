@@ -44,6 +44,13 @@ const IMPERSONATED_BRANDS = [
   // Super funds targeted by SMSF / early-access phishing (D3/D4 / #64)
   "australiansuper", "unisuper", "rest super", "hesta", "sunsuper",
   "cbus", "amp super", "mlc super",
+  // Energy retailers (D3 / #121). Matched against the From display name only,
+  // which is a far narrower surface than free text — short entries like "agl"
+  // are safe here in a way they are not in the SMS/URL checkers.
+  "agl", "origin energy", "energy australia", "energyaustralia",
+  "alinta energy", "alintaenergy",
+  // AU crypto exchanges (D6 / #123)
+  "coinspot", "swyftx", "binance", "binance au",
 ];
 
 // Domain of an email address: lowercased, everything after the last '@'.

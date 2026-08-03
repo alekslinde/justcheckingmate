@@ -237,6 +237,24 @@ describe("analyseEmailIdentities", () => {
     expect(r.flags.join(" ")).not.toMatch(/dmarc/i);
   });
 
+  it("flags energy retailer display-name impersonation (D3 / #121)", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "origin energy billing",
+      fromAddress: "billing@mail-refund-portal.xyz",
+      dmarc: "none",
+    });
+    expect(r.flags.join(" ")).toMatch(/no dmarc enforcement/i);
+  });
+
+  it("flags crypto exchange display-name impersonation (D6 / #123)", () => {
+    const r = analyseEmailIdentities({
+      fromDisplay: "coinspot security",
+      fromAddress: "security@account-verify-portal.com",
+      dmarc: "none",
+    });
+    expect(r.flags.join(" ")).toMatch(/no dmarc enforcement/i);
+  });
+
   it("flags DKIM signed by an unrelated domain", () => {
     const r = analyseEmailIdentities({
       fromAddress: "linus@uppent.se",
