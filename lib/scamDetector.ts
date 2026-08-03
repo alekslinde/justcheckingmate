@@ -231,7 +231,29 @@ const SUSPICIOUS_HOSTING = [
   // static credential-harvest pages. Scored lower (+25) like railway/vercel
   // because R2 has legitimate public static-hosting use.
   "r2.dev",
+  // ngrok ephemeral reverse-proxy tunnels (D1 / #119). Random-subdomain HTTPS
+  // URLs that inherit ngrok.com's reputation and bypass URL filters exactly
+  // like trycloudflare.com. No AU consumer service ships public ngrok URLs, so
+  // these sit at the full +35 tier.
+  "ngrok.io", "ngrok-free.app",
+  // Static-site platforms abused for "trusted reputation" phishing (D2 / #120).
+  // netlify.app matches the vercel.app FP profile (+25). github.io is scored
+  // lowest (+15) because legitimate developer portfolios and project docs are
+  // common there — it only matters when it compounds with another signal.
+  "github.io", "netlify.app",
 ];
+
+// Per-platform score overrides for SUSPICIOUS_HOSTING. Anything not listed here
+// scores the default +35 (see checkUrl). Lower tiers exist where the platform
+// has substantial legitimate consumer-visible use, so a bare URL shouldn't
+// reach a "suspicious" verdict on hosting alone.
+const HOSTING_SCORES: Record<string, number> = {
+  "vercel.app": 25,
+  "railway.app": 25,
+  "r2.dev": 25,
+  "netlify.app": 25,
+  "github.io": 15,
+};
 
 // Named fraudulent AI-trading platforms (D4 / #104). ASIC and Scamwatch have
 // issued explicit named warnings about each of these — they are promoted to
@@ -346,7 +368,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
   const hostingMatch = SUSPICIOUS_HOSTING.find((h) => hostname === h || hostname.endsWith("." + h));
   if (hostingMatch) {
     flags.push(`Hosted on ${hostingMatch} — a free developer platform frequently abused to host phishing pages because it inherits a trusted reputation`);
-    score += hostingMatch === "vercel.app" || hostingMatch === "railway.app" || hostingMatch === "r2.dev" ? 25 : 35;
+    score += HOSTING_SCORES[hostingMatch] ?? 35;
   }
 
   // Trusted-service redirect abuse (D16 / roadmap). A legitimate host whose
