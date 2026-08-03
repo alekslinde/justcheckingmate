@@ -7,6 +7,7 @@ import {
   assessAlert,
   dedupeAlerts,
   formatDigest,
+  isAlertsAccessDenied,
 } from "../scripts/dependabot-triage.mjs";
 
 // Minimal builder for the bits of a Dependabot alert the assessor reads.
@@ -154,5 +155,30 @@ describe("formatDigest", () => {
     expect(body).toContain("Safe to auto-merge");
     expect(body).toContain("**sharp**");
     expect(body).toContain("2026-07-22T00:00:00Z");
+  });
+});
+
+describe("isAlertsAccessDenied", () => {
+  it("is true for a 403 from the alerts endpoint (GITHUB_TOKEN lacks access)", () => {
+    const err = new Error(
+      "GitHub API GET /repos/o/r/dependabot/alerts?state=open&per_page=100 -> 403 " +
+        '{"message":"Resource not accessible by integration"}'
+    );
+    expect(isAlertsAccessDenied(err)).toBe(true);
+  });
+
+  it("is false for other HTTP errors (e.g. 404, 500) so they still surface", () => {
+    expect(isAlertsAccessDenied(new Error("GitHub API GET /x -> 404 not found"))).toBe(false);
+    expect(isAlertsAccessDenied(new Error("GitHub API GET /x -> 500 boom"))).toBe(false);
+  });
+
+  it("is false for a non-HTTP failure (network, undefined message)", () => {
+    expect(isAlertsAccessDenied(new Error("fetch failed"))).toBe(false);
+    expect(isAlertsAccessDenied(undefined)).toBe(false);
+  });
+
+  it("does not treat an incidental '403' elsewhere in the text as an access denial", () => {
+    // Must be the HTTP status right after the "-> " arrow, not a random 403.
+    expect(isAlertsAccessDenied(new Error("resolved version 4.403.0 -> 200 ok"))).toBe(false);
   });
 });
