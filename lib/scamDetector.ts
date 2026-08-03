@@ -97,6 +97,23 @@ const URGENCY_TAXTIME = [
   "government rebate", "tax refund waiting", "refund is waiting",
 ];
 
+// ATO debt / audit coercion lures (D7 / #124). The threat framing is
+// psychologically distinct from the refund lures above and reaches a different
+// demographic (business owners, contractors, older Australians) ahead of EOFY
+// and the August BAS deadline. The real ATO does contact people about genuine
+// debts, so these lean on the compound scorer the same way URGENCY_TAXTIME
+// does — a govMentions "ato" hit alongside one of these is what escalates.
+// "arrest warrant" is deliberately absent: it already lives in
+// URGENCY_FOREIGN_AUTHORITY and listing it twice would double-score.
+const URGENCY_TAXTIME_THREAT = [
+  "tax debt", "outstanding tax", "overdue tax", "unpaid tax",
+  "tax liability", "ato debt",
+  "audit notice", "tax audit", "subject to audit",
+  "tfn suspended", "tfn cancell", "tax file number suspended",
+  "legal action will be taken", "warrant issued", "federal police",
+  "your assets will be",
+];
+
 // Foreign-authority threat phrases (D3 / #103). AFP May 2026 and Victoria
 // Police advisories describe scammers impersonating Chinese police and
 // consular officials to threaten Australian residents — particularly
@@ -119,6 +136,7 @@ const URGENCY_WORDS = [
   ...URGENCY_SUPER,
   ...URGENCY_RECALL,
   ...URGENCY_TAXTIME,
+  ...URGENCY_TAXTIME_THREAT,
 ];
 
 const REWARD_WORDS = [
@@ -285,6 +303,11 @@ const MYID_REREG_PHRASES = [
 const CALLBACK_BRANDS = [
   "norton", "mcafee", "geek squad", "geeksquad", "best buy",
   "docusign", "coinbase", "bitcoin",
+  // AU crypto exchanges (D6 / #123). The TOAD variant sends "account suspended,
+  // call support" with a phone number and no link — the same shape as the
+  // existing coinbase/bitcoin entries, so it reuses this signal rather than
+  // adding a parallel one.
+  "coinspot", "swyftx", "binance",
 ];
 
 const LEGIT_AU_DOMAINS = [
@@ -395,7 +418,17 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
     // top-3 impersonated AU loyalty brands. Already in emailHeaders.ts
     // IMPERSONATED_BRANDS; this closes the URL-checker gap. Real domains end in
     // .com.au, which the guard below already excludes.
-    "qantas", "velocity"];
+    "qantas", "velocity",
+    // Energy retailers (D3 / #121). AGL and Origin Energy both have documented
+    // AU phishing campaigns; August is peak winter billing season. NOTE: bare
+    // "agl" is deliberately NOT listed here — this list is matched with
+    // hostname.includes(), so "agl" would score +45 on eagle.org, flagler.com,
+    // bagelshop.io and similar. The longer "agl-" prefixed forms below carry
+    // the same campaign signal without the collision.
+    "originenergy", "energyaustralia", "alintaenergy",
+    // Crypto exchanges (D6 / #123). Same substring caveat: "binance" is safe
+    // (long enough to be distinctive), but see brandMentions for the SMS side.
+    "coinspot", "swyftx", "binance"];
   for (const brand of auBrands) {
     if (hostname.includes(brand) && !hostname.endsWith(".gov.au") && !hostname.endsWith(".com.au")) {
       flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
@@ -624,8 +657,24 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     // does text customers legitimately (medium FP for "amazon" alone); YouTube
     // never cold-recruits by SMS. The jobSignals composite above is the stronger
     // signal when the recruiter pattern is present.
-    "amazon", "youtube"];
-  if (brandMentions.some((b) => lower.includes(b))) {
+    "amazon", "youtube",
+    // Energy retailers impersonated in billing/refund SMS scams (D3 / #121).
+    // MailGuard documented multi-step Origin Energy "$150 overpayment" and
+    // "billing error" campaigns; AGL warns customers about fake-site SMS.
+    "origin energy", "originenergy", "energy australia", "energyaustralia",
+    "alinta energy",
+    // AU crypto exchanges (D6 / #123) — "suspicious login" / "account
+    // suspended" credential and 2FA harvesting.
+    "coinspot", "swyftx", "binance", "crypto exchange"];
+
+  // Brands too short to match as bare substrings — "agl" would fire on "bagel",
+  // "eagle" and "flagship", so these are matched on word boundaries instead.
+  // Same flag and score as brandMentions; separated only by matching strategy.
+  const shortBrandMentions = ["agl"];
+  const shortBrandHit = shortBrandMentions.some((b) =>
+    new RegExp(`\\b${b}\\b`, "i").test(lower));
+
+  if (shortBrandHit || brandMentions.some((b) => lower.includes(b))) {
     flags.push("Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message");
     score += 20;
   }
@@ -634,6 +683,23 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   if (/call\s+(back|now|us|this number)/i.test(text)) {
     flags.push("Asks you to call a number — scammers use this to run up your phone bill or gather info");
     score += 20;
+  }
+
+  // Crypto-exchange TOAD composite (D6 / #123). An exchange name plus a phone
+  // number to ring and no link is the telephone-oriented attack: the scam runs
+  // on the call, where a "support agent" walks the victim through handing over
+  // 2FA codes or moving funds to a "safe wallet". Real exchanges never phone
+  // customers about account security. Requires an explicit number so ordinary
+  // "your CoinSpot deposit cleared" texts stay unflagged.
+  const CRYPTO_TOAD_BRANDS = ["coinspot", "swyftx", "binance"];
+  const hasCryptoBrand = CRYPTO_TOAD_BRANDS.some((b) => lower.includes(b));
+  const hasPhoneNumber = /(\+?61|0)[\s-]?[2-478](?:[\s-]?\d){8}|\b1[38]00[\s-]?\d{3}[\s-]?\d{3}\b/.test(text);
+  const mentionsCalling = /\bcall\b|\bphone\b|\bcontact (support|us)\b|\bhelpline\b/i.test(text);
+  const hasUrl = /https?:\/\/|www\.|\.[a-z]{2,}\//i.test(text);
+
+  if (hasCryptoBrand && hasPhoneNumber && mentionsCalling && !hasUrl) {
+    flags.push("Crypto exchange asking you to phone them — CoinSpot, Swyftx and Binance never ring customers or ask you to call about account security. The scam happens on the call: they'll talk you through handing over 2FA codes or moving funds to a \"safe wallet\". Hang up and log in through the official app instead.");
+    score += 30;
   }
 
   // Grammar/typo signals

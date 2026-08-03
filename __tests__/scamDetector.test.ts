@@ -782,6 +782,58 @@ describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
     expect(checkUrl("https://ato.gov.au").verdict).toBe("safe");
   });
 
+  it("detects ATO tax debt / audit coercion language (D7 / #124)", () => {
+    const debt = checkSms("URGENT: The ATO has identified an outstanding tax debt of $4,219. Your TFN will be suspended in 24 hours. Call 1300 555 111.");
+    expect(debt.verdict).toBe("likely_scam");
+
+    const audit = checkSms("You have been selected for a tax audit. Failure to respond in 48 hours will result in legal action will be taken. ATO Compliance.");
+    expect(audit.verdict).toBe("likely_scam");
+  });
+
+  it("still scores ATO refund lures correctly (#124 regression)", () => {
+    const refund = checkSms("Your tax refund waiting to be claimed via myGov.");
+    expect(refund.verdict).toBe("likely_scam");
+  });
+
+  it("detects energy retailer impersonation (D3 / #121)", () => {
+    const origin = checkSms("Origin Energy: We detected a billing error. Claim your $150 refund: http://originenergy-billing.xyz");
+    expect(origin.verdict).toBe("likely_scam");
+
+    const agl = checkSms("AGL: A credit of $86.50 has been applied to your account. Verify bank details now.");
+    expect(agl.flags.some((f) => f.includes("well-known company"))).toBe(true);
+
+    expect(checkUrl("https://originenergy-billing.xyz").verdict).toBe("likely_scam");
+  });
+
+  it("does not flag 'agl' inside ordinary words (#121 FP guard)", () => {
+    const result = checkSms("Your bagel order from the eagle cafe is ready for pickup.");
+    expect(result.flags.some((f) => f.includes("well-known company"))).toBe(false);
+    expect(result.verdict).toBe("safe");
+    // Same collision via the URL checker's substring match.
+    expect(checkUrl("https://eagle.org").verdict).toBe("safe");
+    expect(checkUrl("https://flagler.com").verdict).toBe("safe");
+  });
+
+  it("detects AU crypto exchange impersonation (D6 / #123)", () => {
+    const url = checkUrl("https://coinspot-login.pages.dev");
+    expect(url.verdict).toBe("likely_scam");
+    expect(url.flags.some((f) => f.includes("coinspot"))).toBe(true);
+  });
+
+  it("detects crypto-exchange TOAD callback lures (D6 / #123)", () => {
+    const coinspot = checkSms("Your CoinSpot account has been suspended. Call 1800 555 222 immediately.");
+    expect(coinspot.verdict).toBe("likely_scam");
+    expect(coinspot.flags.some((f) => f.includes("never ring customers"))).toBe(true);
+
+    const swyftx = checkSms("Swyftx security: suspicious login detected. Contact support on 1300 111 222.");
+    expect(swyftx.verdict).toBe("likely_scam");
+  });
+
+  it("does not fire crypto TOAD without a callback number (#123 FP guard)", () => {
+    const result = checkSms("Your CoinSpot deposit of $50 has cleared.");
+    expect(result.flags.some((f) => f.includes("never ring customers"))).toBe(false);
+  });
+
   it("detects Operation Road Trap rego/toll vocabulary (D5 / #84)", () => {
     const result = checkSms("Your vehicle registration suspended due to rego restrictions.");
     expect(result.flags.some((f) => f.includes("rego restrictions"))).toBe(true);
