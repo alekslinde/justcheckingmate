@@ -864,6 +864,43 @@ describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
     }
   });
 
+  it("detects PDF-embedded QR 'Scanception' phrasing (D7 / #113)", () => {
+    for (const text of [
+      "The attachment contains a QR code — scan it to confirm delivery.",
+      "See attached invoice. The attachment contains a QR code.",
+      "The attached PDF contains a QR code.",
+      "This attachment includes a QR code to scan.",
+      "The attached document has a QR code.",
+    ]) {
+      expect(checkSms(text).flags.some((f) => f.includes("quishing"))).toBe(true);
+    }
+
+    // checkEmail inherits the signal via its checkSms delegation.
+    const email = checkEmail("See attached invoice. The attachment contains a QR code.");
+    expect(email.flags.some((f) => f.includes("quishing"))).toBe(true);
+  });
+
+  it("still catches the original 'scan the QR code' phrasings (#113 regression)", () => {
+    for (const text of [
+      "Please scan the QR code in the attached PDF to verify your invoice.",
+      "Please find attached. Scan the QR code in the attachment.",
+    ]) {
+      expect(checkSms(text).flags.some((f) => f.includes("quishing"))).toBe(true);
+    }
+  });
+
+  it("does not flag legitimate attached-QR mentions (#113 FP guard)", () => {
+    for (const text of [
+      "I've attached the conference poster, the QR code links to the schedule.",
+      "The QR code on the attached flyer goes to our booking page.",
+      "The attachment contains a summary of last quarter.",
+    ]) {
+      const result = checkSms(text);
+      expect(result.flags.some((f) => f.includes("quishing"))).toBe(false);
+      expect(result.verdict).toBe("safe");
+    }
+  });
+
   it("detects Operation Road Trap rego/toll vocabulary (D5 / #84)", () => {
     const result = checkSms("Your vehicle registration suspended due to rego restrictions.");
     expect(result.flags.some((f) => f.includes("rego restrictions"))).toBe(true);
