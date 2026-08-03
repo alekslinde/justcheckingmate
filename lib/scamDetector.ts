@@ -540,7 +540,17 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   // QR-code "quishing" prompts (D11 / part of roadmap). The URL hides inside an
   // image, so the prompt language is the only text-side signal.
   if (/scan\s+(the\s+|this\s+)?(qr\s*code|code)\s*(to|and)?/i.test(text) ||
-      /\bscan\s+to\s+(verify|update|claim|pay|confirm)/i.test(text)) {
+      /\bscan\s+to\s+(verify|update|claim|pay|confirm)/i.test(text) ||
+      // PDF-embedded "Scanception" quishing (D7 / #113). Attackers put the QR
+      // inside a PDF so email filters can't scan it, then reference it from the
+      // body. The inverted phrasing ("the attachment contains a QR code") has no
+      // "scan the QR code" verb phrase for the patterns above to latch onto —
+      // the scan instruction comes later as a bare pronoun ("scan it") or is
+      // left implicit. Requires the attachment noun and the QR mention in the
+      // same clause, so a legitimate "the QR code on the attached flyer" stays
+      // clean. Reuses the flag and +20 score — the existing wording already
+      // describes this variant correctly.
+      /\b(?:attachment|attached|(?:attached\s+)?(?:pdf|file|document|invoice))\s+(?:\w+\s+){0,2}?(?:contains?|includes?|has)\s+(?:a\s+|the\s+)?qr\s*code\b/i.test(text)) {
     flags.push("QR code scan prompt — 'quishing' attacks hide malicious URLs inside QR images to dodge link scanners");
     score += 20;
   }
