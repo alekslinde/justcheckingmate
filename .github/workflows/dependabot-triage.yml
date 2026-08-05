@@ -5,8 +5,14 @@ name: Dependabot triage
 # single "🔒 Dependabot alert triage" issue with a pre-triaged digest. It FLAGS,
 # it does not merge or dismiss — same philosophy as spam-guard.yml.
 #
-# The alerts API isn't exposed to a checked-out clone, which is exactly why this
-# runs in Actions: the built-in GITHUB_TOKEN can read it with security-events.
+# The alerts API isn't exposed to a checked-out clone, which is why this runs in
+# Actions. NOTE: the built-in GITHUB_TOKEN CANNOT read the Dependabot alerts API
+# — `security-events` only covers code/secret scanning, and the Actions app is
+# not granted the separate "Dependabot alerts" permission (GitHub returns 403
+# "Resource not accessible by integration"). Supply a fine-grained PAT with
+# "Dependabot alerts: read" (+ Issues: read/write, Contents: read) as the
+# DEPENDABOT_ALERTS_TOKEN repository secret. Without it the job no longer fails —
+# the script skips with an actionable note in the run summary.
 
 on:
   schedule:
@@ -16,9 +22,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read          # read package-lock.json / source for local signals
-  security-events: read   # read Dependabot alerts
-  issues: write           # upsert the digest issue
+  contents: read   # read package-lock.json / source for local signals (fallback token)
+  issues: write    # upsert the digest issue (fallback token)
 
 concurrency:
   group: dependabot-triage
@@ -34,6 +39,8 @@ jobs:
           node-version: 22
       - name: Assess alerts and refresh digest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer the PAT that can actually read Dependabot alerts; fall back to
+          # GITHUB_TOKEN (which will 403 on the alerts API, handled gracefully).
+          GITHUB_TOKEN: ${{ secrets.DEPENDABOT_ALERTS_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/dependabot-triage.mjs
