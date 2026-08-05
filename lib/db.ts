@@ -62,6 +62,10 @@ async function setup(): Promise<void> {
   // Coarse submission location (state for AU, country otherwise) derived from
   // geo headers at submission time. The reporter's IP is never stored.
   await db.execute(`ALTER TABLE reports ADD COLUMN location     TEXT    NOT NULL DEFAULT ''`).catch(() => {});
+  // Region pack used to assess this report (ISO 3166-1 alpha-2). Distinct from
+  // `location`, which is display text: this records which detection ruleset ran,
+  // so coverage gaps by region are measurable. Empty for rows predating it.
+  await db.execute(`ALTER TABLE reports ADD COLUMN region       TEXT    NOT NULL DEFAULT ''`).catch(() => {});
 }
 
 export async function getDb(): Promise<Client> {

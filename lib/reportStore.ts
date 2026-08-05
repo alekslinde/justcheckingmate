@@ -24,6 +24,9 @@ export interface Report {
   scamEmail: string;
   scamReplyTo: string;
   emailAuth?: string; // compact SPF/DKIM/DMARC summary; absent for non-email reports
+  // Region pack that assessed this report (ISO 3166-1 alpha-2). Operational
+  // data for measuring coverage gaps — not surfaced in the public feed.
+  region?: string;
 }
 
 // ── Rate limiter ──────────────────────────────────────────────────────────────
@@ -106,13 +109,13 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
   await db.execute({
     sql: `INSERT INTO reports
             (id, type, content, description, contact, submitted_at, suspect,
-             scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count, location)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             scam_url, scam_phone, scam_email, scam_reply_to, email_auth, report_count, location, region)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       report.id, report.type, report.content, report.description, report.contact,
       report.submittedAt, suspect ? 1 : 0,
       report.scamUrl, report.scamPhone, report.scamEmail, report.scamReplyTo,
-      report.emailAuth ?? "", reportCount, report.location,
+      report.emailAuth ?? "", reportCount, report.location, report.region ?? "",
     ],
   });
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeContent } from "@/lib/scamDetector";
 import { incrementCheckCount } from "@/lib/reportStore";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
+import { resolveRegion } from "@/lib/regionResolver";
 
 // IMPORTANT: This route performs ONLY string analysis on the submitted content.
 // It must NEVER make an outbound HTTP request, DNS lookup, or socket connection
@@ -15,11 +16,15 @@ import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 
 export async function POST(req: NextRequest) {
   try {
-    const { content }: { content: string } = await req.json();
+    const { content, region }: { content: string; region?: string } = await req.json();
 
     if (!content?.trim()) {
       return NextResponse.json({ error: "Missing content" }, { status: 400 });
     }
+
+    // Explicit choice wins over the platform geo header; falls back to the
+    // default region when neither is available (e.g. local dev).
+    const resolvedRegion = resolveRegion(req.headers, region);
 
     // Fetch the live blocklist in parallel with nothing else — it's cached for
     // 6 hours so this is effectively free on all but the first request per window.
@@ -27,10 +32,10 @@ export async function POST(req: NextRequest) {
 
     // Pull each identifier out of the input and assess it on its own. All
     // analysis is pure string work — no outbound request is made to the input.
-    const results = await analyzeContent(content, blocklist);
+    const results = await analyzeContent(content, blocklist, resolvedRegion);
 
     incrementCheckCount().catch(() => {});
-    return NextResponse.json({ results });
+    return NextResponse.json({ results, region: resolvedRegion });
   } catch {
     return NextResponse.json({ error: "Something went sideways on our end" }, { status: 500 });
   }

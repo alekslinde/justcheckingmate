@@ -6,6 +6,7 @@ import { summariseAuth } from "@/lib/emailHeaders";
 import { scrubPii } from "@/lib/piiScrubber";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { locationFromHeaders } from "@/lib/geo";
+import { resolveRegion } from "@/lib/regionResolver";
 
 // The client IP is used ONLY for transient, in-memory rate limiting inside
 // guardSubmission. It is never written to the database — the only geographic
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
       contact:     String(body.contact ?? "").slice(0, 200),
       submittedAt: Date.now(),
       location:    locationFromHeaders(req.headers),
+      region:      resolveRegion(req.headers, body.region),
       scamUrl:     safeScamUrl,
       scamPhone:   String(body.scamPhone ?? "").slice(0, 50),
       scamEmail:   String(body.scamEmail ?? "").slice(0, 200),

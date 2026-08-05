@@ -3,6 +3,7 @@ import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanit
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl } from "@/lib/urlExpander";
+import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 export type { PhoneIntel };
@@ -15,313 +16,38 @@ export interface CheckResult {
   category?: string;
   phoneIntel?: PhoneIntel;
   expandedUrl?: string; // defanged real destination when the input was a shortened URL
+  // Detection coverage of the region pack that produced this result. Present on
+  // every result; consumers must not render a confident "safe" when this is
+  // "partial" or "none" — a low score there can mean "no rules matched" rather
+  // than "nothing wrong". See downgradeForCoverage.
+  coverage?: RegionCoverage;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Shared signal lists
+// Signal lists
 // ────────────────────────────────────────────────────────────────────────────
-
-// Urgency signals, grouped by campaign so each can be tuned or removed
-// independently. URGENCY_WORDS below is the flat union these compose into —
-// the SMS/email/custom checkers consume the flat list, order-independent.
-
-// Generic pressure/urgency language common to nearly all scam messaging.
-const URGENCY_GENERIC = [
-  "urgent", "immediately", "act now", "limited time", "expires today",
-  "account suspended", "verify now", "confirm now", "last chance",
-  "final notice", "your account", "security alert", "unusual activity",
-  "click here", "click link", "tap here", "don't ignore", "action required",
-  "respond immediately", "within 24 hours", "within 48 hours",
-];
-
-// Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns.
-const URGENCY_TOLL = [
-  "unpaid toll", "outstanding toll", "overdue toll", "toll payment",
-  "toll fine", "toll invoice", "final toll notice",
-  // Operation Road Trap escalation (D5 / #84 / Bitdefender April 2026). These
-  // threaten loss of vehicle registration — "rego" is AU-specific and unique to
-  // the escalated toll script, so FP risk is very low.
-  "rego restrictions", "toll penalty", "vehicle registration suspended",
-  "recovery action",
-];
-
-// AusPost parcel/delivery lures (D10 / #48).
-const URGENCY_PARCEL = [
-  "parcel held", "delivery failed", "couldn't be delivered",
-  "redelivery fee", "invalid postal code",
-];
-
-// AI voice-clone scams. The first block is the original "Hi Mum" follow-up
-// signals (D17 — watchlist); the second is the 2026 bail/kidnap/stranded
-// escalation (D8 / #68), arriving as text after a cloned-voice call.
-const URGENCY_VOICE_CLONE = [
-  "i've been in an accident", "don't tell mum", "don't tell anyone",
-  "western union", "wire transfer",
-  "bail money", "need bail", "post bail", "get me out of jail",
-  "stranded overseas", "stuck overseas", "stranded abroad", "wallet stolen overseas",
-  "do not call police", "don't call the police", "don't contact police",
-  "emergency transfer", "emergency funds needed", "we have your",
-];
-
-// NBN Co disconnection-threat smishing (D7 / #67).
-const URGENCY_NBN = [
-  "internet will be disconnected", "broadband will be cut off",
-  "nbn technician", "service disconnected within", "disconnected within 24 hours",
-  "internet disconnected", "broadband disconnected",
-];
-
-// Superannuation phishing urgency (D3/D4/D11 / #64).
-const URGENCY_SUPER = [
-  "secure your super", "your super balance", "preservation age",
-  "super fund deadline", "super account suspended",
-];
-
-// Fake product-recall SMS lures (D1 / #80 / Amazon campaign May-June 2026).
-// Amazon, eBay, Kmart and Big W all have confirmed policies against using SMS
-// for product recalls, so "safety recall" in an SMS with a link is essentially
-// a confirmed scam signal. "safety review" is kept because it's the softened
-// variant used to widen hit-rate.
-const URGENCY_RECALL = [
-  "product recall", "safety recall", "recall alert", "recall notice",
-  "item has been recalled", "safety review",
-];
-
-// Tax-time cost-of-living lures (D1/D2/D10 / #73 / ATO-myGov peak season).
-// Scammers weaponise real government relief policies as bait. These appear in
-// legitimate gov comms too, so they lean on the compound scorer (govMentions +
-// URL) rather than firing hard on their own.
-const URGENCY_TAXTIME = [
-  "cost of living payment", "cost of living relief", "cost-of-living supplement",
-  "energy rebate", "energy bill relief", "electricity rebate",
-  "tax recalculation", "your tax has been recalculated", "compensation payment",
-  "government rebate", "tax refund waiting", "refund is waiting",
-];
-
-// ATO debt / audit coercion lures (D7 / #124). The threat framing is
-// psychologically distinct from the refund lures above and reaches a different
-// demographic (business owners, contractors, older Australians) ahead of EOFY
-// and the August BAS deadline. The real ATO does contact people about genuine
-// debts, so these lean on the compound scorer the same way URGENCY_TAXTIME
-// does — a govMentions "ato" hit alongside one of these is what escalates.
-// "arrest warrant" is deliberately absent: it already lives in
-// URGENCY_FOREIGN_AUTHORITY and listing it twice would double-score.
-const URGENCY_TAXTIME_THREAT = [
-  "tax debt", "outstanding tax", "overdue tax", "unpaid tax",
-  "tax liability", "ato debt",
-  "audit notice", "tax audit", "subject to audit",
-  "tfn suspended", "tfn cancell", "tax file number suspended",
-  "legal action will be taken", "warrant issued", "federal police",
-  "your assets will be",
-];
-
-// Foreign-authority threat phrases (D3 / #103). AFP May 2026 and Victoria
-// Police advisories describe scammers impersonating Chinese police and
-// consular officials to threaten Australian residents — particularly
-// international students — with arrest or deportation unless a "security
-// deposit" is paid. In an AU consumer context these phrases arriving by
-// unsolicited SMS have no legitimate use.
-const URGENCY_FOREIGN_AUTHORITY = [
-  "arrest warrant", "detention order", "deportation notice",
-  "money laundering investigation", "your visa will be cancelled",
-  "involved in criminal activity",
-];
-
-const URGENCY_WORDS = [
-  ...URGENCY_GENERIC,
-  ...URGENCY_FOREIGN_AUTHORITY,
-  ...URGENCY_TOLL,
-  ...URGENCY_PARCEL,
-  ...URGENCY_VOICE_CLONE,
-  ...URGENCY_NBN,
-  ...URGENCY_SUPER,
-  ...URGENCY_RECALL,
-  ...URGENCY_TAXTIME,
-  ...URGENCY_TAXTIME_THREAT,
-];
-
-const REWARD_WORDS = [
-  "winner", "won", "congratulations", "prize", "reward", "free",
-  "gift card", "voucher", "lucky", "selected", "chosen", "claim",
-  "unclaimed", "$1000", "$500", "cash", "jackpot",
-  // Loyalty-points expiry phishing (D6 / #57). "reward points"/"loyalty
-  // points" are deliberately the longer two-word phrases, not bare "points",
-  // to keep legitimate transactional mail from tripping on a single word —
-  // and the scorer only reaches likely_scam when these compound with a URL
-  // or urgency signal.
-  "points will expire", "points expiring", "reward points",
-  "loyalty points", "points forfeited",
-  // Celebrity-deepfake / ASIC-claim investment bait (D6 / #85 / WA Gov 2026).
-  // ASIC-regulated products are legally prohibited from promising "guaranteed
-  // returns" or being "risk-free", so these phrases are red flags in the AU
-  // context. ASIC never proactively endorses platforms via SMS/email, so
-  // "verified by asic" / "asic-approved" is exclusively a false-legitimacy claim.
-  "guaranteed returns", "guaranteed profit", "risk-free investment",
-  "double your money", "exclusive investment opportunity",
-  "verified by asic", "asic-approved",
-];
-
-const REQUEST_WORDS = [
-  "bank details", "credit card", "password", "pin", "medicare",
-  "tax file number", "tfn", "mygovid", "mygov", "centrelink",
-  "ato", "date of birth", "social security", "confirm identity",
-  "verify identity", "personal information", "account number", "bsb",
-  "crypto", "bitcoin", "gift card", "itunes", "google play",
-  // Remote-access-tool scams — ACSC/ASD impersonation (D8 / #55)
-  "teamviewer", "anydesk", "remote access", "remote desktop",
-  "download software", "install software", "give us access",
-  // Pig-butchering / wallet-approval phishing (D12 / #51)
-  "connect wallet", "approve transaction", "wallet approval",
-  "sign transaction", "recharge your account", "top up your account",
-  // Bank "safe account" tag-team scam (#47). SMS primes the victim, then a
-  // spoofed-number caller tells them to move money to a "safe account" — a
-  // phrase real banks never use (CBA/NAB/AFP advisories confirm this).
-  "safe account", "safe transfer", "safe wallet",
-  "move your funds", "transfer to safe", "protect your money",
-  // Superannuation early-access phishing (D3/D4/D11 / #64). "smsf" and "early
-  // super release" are AU-specific regulatory terms rarely seen outside a scam.
-  "access your super", "unlock your super", "smsf", "self managed super",
-  "early super release", "super withdrawal", "superannuation transfer",
-  "early access to super",
-  // ClickFix fake-CAPTCHA social engineering (D3 / #74 / ACSC advisory May 2026).
-  // Compromised sites display a fake Cloudflare overlay telling users to press
-  // Win+R, paste a PowerShell command and run it. No legitimate site asks this;
-  // the dedicated regex below scores the strongest variants far higher.
-  "press windows+r", "press win+r", "press windows + r",
-  "ctrl+v then enter", "ctrl v and enter",
-  "paste this command", "paste the following command", "paste the command below",
-  "run this to verify", "run the following to verify", "run this fix",
-  "open run dialog", "open the run dialog",
-  "copy and paste this fix", "paste to fix your browser",
-  // Rental/property bond redirect fraud (D5 / #105). Scammers impersonate or
-  // intercept real estate agency comms and send "updated bank details" just
-  // before the bond is due. Legitimate agencies rarely change payment details
-  // and never under time pressure via SMS, so the "updated/new/changed"
-  // qualifier is the distinguishing signal — bare "rental bond" doesn't score.
-  "updated bank details", "new account details", "changed bank account",
-  "new bsb",
-];
-
-const SCAM_DOMAINS = [
-  "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "short.io",
-  "rb.gy", "cutt.ly", "is.gd", "v.gd", "tiny.cc", "shorte.st",
-];
-
-const SUSPICIOUS_TLDS = [
-  ".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".win",
-  ".loan", ".work", ".click", ".link", ".online", ".site", ".live",
-  // High-abuse 2026 TLDs (D4 / #50, #58) — Shortdot-managed + ICANN expansion
-  ".cyou", ".icu", ".sbs", ".cfd", ".bar", ".beauty", ".hair", ".makeup",
-  // Immigration/visa scams using .pn (Pitcairn) to look semi-official (D14 / #50)
-  ".pn",
-  // File-extension TLDs (Google 2023, D6 / #77) — auto-linked by some platforms
-  // to look like file downloads (invoice.zip, message.mov); no AU legitimate use.
-  ".zip", ".mov",
-  // .lat — high phishing-abuse ratio, appearing in AU-targeting campaigns 2025-26.
-  ".lat",
-  // High-abuse 2026 TLDs promoted from watchlist (D1 / #101). .shop and .store
-  // are top-10 globally abused TLDs (Brandsec AU 2025-2026) seen in AU
-  // fake-retail and subscription-renewal campaigns; .vip appears in the APWG
-  // top-10 and AU pig-butchering funnels; .lol and .monster are cheap ICANN
-  // TLDs that launched with >60% abuse rates. .shop/.store carry some
-  // legitimate e-commerce use, so they lean on compound scoring rather than
-  // reaching a scam verdict alone.
-  ".shop", ".store", ".vip", ".lol", ".monster",
-];
-
-// Public IPFS gateways — decentralised hosting used for takedown-resistant
-// phishing. Any host serving the /ipfs/<CID> path is also caught in checkUrl.
-const IPFS_GATEWAYS = new Set([
-  "ipfs.io", "dweb.link", "cloudflare-ipfs.com",
-  "w3s.link", "gateway.pinata.cloud", "nftstorage.link", "ipfs.fleek.co",
-]);
-
-// Free-tier cloud dev platforms used as phishing hosting infrastructure (D1/D2
-// / #63). workers.dev, pages.dev (Cloudflare) and trycloudflare.com (ephemeral
-// tunnels) are rated "trusted" by URL filters but are the dominant PhaaS hosting
-// substrate of 2025-2026. railway.app and vercel.app are abused as
-// credential-exfiltration endpoints in multi-hop chains — scored lower because
-// legitimate preview sites on those two are more common.
-const SUSPICIOUS_HOSTING = [
-  "workers.dev", "pages.dev", "trycloudflare.com",
-  "railway.app", "vercel.app",
-  // Cloudflare R2 object storage (D4 / #83) — named alongside workers.dev/
-  // pages.dev as a core phishing hosting layer in 2026 reporting; used to serve
-  // static credential-harvest pages. Scored lower (+25) like railway/vercel
-  // because R2 has legitimate public static-hosting use.
-  "r2.dev",
-  // ngrok ephemeral reverse-proxy tunnels (D1 / #119). Random-subdomain HTTPS
-  // URLs that inherit ngrok.com's reputation and bypass URL filters exactly
-  // like trycloudflare.com. No AU consumer service ships public ngrok URLs, so
-  // these sit at the full +35 tier.
-  "ngrok.io", "ngrok-free.app",
-  // Static-site platforms abused for "trusted reputation" phishing (D2 / #120).
-  // netlify.app matches the vercel.app FP profile (+25). github.io is scored
-  // lowest (+15) because legitimate developer portfolios and project docs are
-  // common there — it only matters when it compounds with another signal.
-  "github.io", "netlify.app",
-];
-
-// Per-platform score overrides for SUSPICIOUS_HOSTING. Anything not listed here
-// scores the default +35 (see checkUrl). Lower tiers exist where the platform
-// has substantial legitimate consumer-visible use, so a bare URL shouldn't
-// reach a "suspicious" verdict on hosting alone.
-const HOSTING_SCORES: Record<string, number> = {
-  "vercel.app": 25,
-  "railway.app": 25,
-  "r2.dev": 25,
-  "netlify.app": 25,
-  "github.io": 15,
-};
-
-// Named fraudulent AI-trading platforms (D4 / #104). ASIC and Scamwatch have
-// issued explicit named warnings about each of these — they are promoted to
-// Australians via deepfake celebrity video ads. No legitimate AU financial
-// service uses any of these names, so a bare match is near-zero false-positive.
-const FAKE_INVESTMENT_PLATFORMS = [
-  "quantum ai", "quantum trade ai", "quantum trade wave",
-  "immediate edge", "immediate connect", "immediate x3",
-  "bitcoin era", "bitcoin trader",
-];
-
-// myID forced re-registration phishing (D6 / #106). The myGovID → myID rebrand
-// spawned a wave of "re-verify your digital identity" lures that deliberately
-// omit the word "myid" — so they slip past govMentions. These are long,
-// specific multi-word phrases, keeping false positives low even where "digital
-// identity" appears in legitimate HR/tech copy. Services Australia never sends
-// unsolicited re-verification requests.
-const MYID_REREG_PHRASES = [
-  "re-verify your digital identity", "digital identity verification",
-  "your identity verification has expired", "complete your identity verification",
-  "myid has been suspended", "set up your new digital identity",
-  "migrate to the new digital identity", "myid verification is pending",
-];
-
-// Cover brands for TOAD / callback phishing (D2 / #102). Fake subscription or
-// purchase-invoice emails naming one of these, with a phone number and NO link,
-// are the core signal — the scam happens on the phone, not via a URL. Confirmed
-// in the Scamwatch "Fake purchase callback scam" alert (June 2026).
-const CALLBACK_BRANDS = [
-  "norton", "mcafee", "geek squad", "geeksquad", "best buy",
-  "docusign", "coinbase", "bitcoin",
-  // AU crypto exchanges (D6 / #123). The TOAD variant sends "account suspended,
-  // call support" with a phone number and no link — the same shape as the
-  // existing coinbase/bitcoin entries, so it reuses this signal rather than
-  // adding a parallel one.
-  "coinspot", "swyftx", "binance",
-];
-
-const LEGIT_AU_DOMAINS = [
-  "gov.au", "ato.gov.au", "mygov.gov.au", "centrelink.gov.au",
-  "myhealth.gov.au", "australia.gov.au", "afp.gov.au", "accc.gov.au",
-  "scamwatch.gov.au", "cyber.gov.au", "servicesaustralia.gov.au",
-  "medicare.gov.au", "abf.gov.au", "homeaffairs.gov.au",
-];
+//
+// Signals live in region packs (lib/regions/), not here. The scoring logic below
+// is shared by every region; only the data it matches against changes.
+//
+// Every checker takes an optional region code and resolves its pack per call.
+// Resolution is memoised and falls back to DEFAULT_REGION for anything
+// unrecognised, so omitting the argument preserves the original AU behaviour.
 
 // ────────────────────────────────────────────────────────────────────────────
 // URL checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
+export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    shortenerDomains: SCAM_DOMAINS,
+    suspiciousTlds: SUSPICIOUS_TLDS,
+    ipfsGateways: IPFS_GATEWAYS,
+    suspiciousHosting: SUSPICIOUS_HOSTING,
+    hostingScores: HOSTING_SCORES,
+    legitDomains: LEGIT_AU_DOMAINS,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   let urlObj: URL | null = null;
@@ -331,25 +57,35 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
   try {
     urlObj = new URL(input);
   } catch {
+    // A positive detection, so coverage doesn't gate it — but carry the value
+    // through so consumers can still see which pack ran.
     return {
       verdict: "suspicious",
       score: 60,
       flags: ["Couldn't parse this as a valid URL — dodgy already"],
       details: "The link format looks off. Legit sites don't usually send malformed URLs.",
+      coverage: PACK.coverage,
     };
   }
 
   const hostname = urlObj.hostname.toLowerCase();
   const fullUrl = input.toLowerCase();
 
-  // Legit AU gov domains — strong positive signal
+  // Known-legitimate domains for this region — strong positive signal. Routed
+  // through the coverage gate because the allowlist is itself regional: under
+  // partial coverage the list is thin, so a miss here means "not on our short
+  // list", not "not legitimate".
   if (LEGIT_AU_DOMAINS.some((d) => hostname === d || hostname.endsWith("." + d))) {
-    return {
-      verdict: "safe",
-      score: 5,
-      flags: ["Verified Australian government domain"],
-      details: "This looks like a legit Aussie government website. Still be cautious about what you're entering.",
-    };
+    return downgradeForCoverage(
+      {
+        verdict: "safe",
+        score: 5,
+        flags: [PACK.legitDomainFlag],
+        details: PACK.legitDomainDetails,
+        coverage: PACK.coverage,
+      },
+      PACK.coverage,
+    );
   }
 
   // URLhaus live blocklist — hostname confirmed malicious by abuse.ch reporters
@@ -469,14 +205,22 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "URL");
+  return scoreToResult(score, flags, "URL", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // SMS checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
+export function checkSms(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    urgencyWords: URGENCY_WORDS,
+    rewardWords: REWARD_WORDS,
+    requestWords: REQUEST_WORDS,
+    fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
+    identityRereg: MYID_REREG_PHRASES,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -516,7 +260,7 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     flags.push(`Contains link: ${urlMatch[0].slice(0, 50)}...`);
     score += 15;
     // Check the embedded URL too
-    const urlCheck = checkUrl(urlMatch[0], blocklist);
+    const urlCheck = checkUrl(urlMatch[0], blocklist, region);
     if (urlCheck.score > 40) {
       flags.push("...and that link looks dodgy too");
       score += 20;
@@ -595,8 +339,10 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
     /ignore\s+(the\s+)?['"]?unverified['"]?/i.test(text) ||
     /carrier\s+(has\s+not|hasn'?t)\s+updated\s+our\s+(registration|sender)/i.test(text) ||
     /unverified\s+(label|tag|display)\s+is\s+a\s+(carrier\s+)?(error|delay|bug)/i.test(text);
-  if (unverifiedOverride) {
-    flags.push("'Unverified' label override attempt — since 1 July 2026, legitimate Australian senders must register their SMS Sender ID with ACMA. A message asking you to ignore an 'Unverified' label is almost certainly a scam.");
+  // Only scored where the region actually runs a sender-ID registration
+  // scheme — asserting foreign regulation to users elsewhere would be false.
+  if (unverifiedOverride && PACK.senderIdFlag) {
+    flags.push(PACK.senderIdFlag);
     score += 35;
   }
 
@@ -635,46 +381,27 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   }
 
   // Sender mentions a gov agency but is a random number
-  const govMentions = ["ato", "myGov", "mygov", "centrelink", "medicare", "services australia", "afp", "police",
-    // ACSC/ASD impersonation (D7 / #55)
-    "acsc", "asd", "cyber security centre", "australian signals directorate", "cyber.gov.au",
-    // ACCC / Scamwatch / NASC impersonation (D5 / #65) — the fraud-reporting
-    // authority is itself used as a lure. The ACCC never cold-calls consumers.
-    "accc", "scamwatch", "national anti-scam centre", "nasc",
-    "consumer watchdog", "competition and consumer commission",
-    // Toll operators (D1 / #53) and AusPost parcel lures (D10 / #48)
-    "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost",
-    // myGov digital-identity layer rebranding to myID in 2026 (D2 / #73).
-    "myid", "my id app"];
-  if (govMentions.some((g) => lower.includes(g.toLowerCase()))) {
+  if (PACK.authorityMentions.some((g) => lower.includes(g.toLowerCase()))) {
     flags.push("Claims to be from a government agency — verify directly via official channels");
     score += 25;
 
-    // ATO/myGov/Medicare/Centrelink/Australia Post removed links from their
-    // unsolicited SMS in 2024 (D1 / #73) — so any link alongside one of these
-    // senders is a scam. Scoped to the confirmed no-link senders so the flag
-    // wording stays accurate (toll operators, by contrast, do use links).
-    const noLinkSenders = ["ato", "mygov", "myid", "medicare", "centrelink",
-      "services australia", "australia post", "auspost"];
-    if (urlMatch && noLinkSenders.some((s) => lower.includes(s))) {
-      flags.push("The ATO, myGov, Medicare, Centrelink and Australia Post removed links from their unsolicited SMS messages in 2024 — an SMS from one of these bodies with a clickable link is a scam");
+    // Senders that have publicly removed links from their unsolicited SMS — a
+    // link alongside one of these is a scam. Scoped to the confirmed no-link
+    // senders so the flag wording stays accurate (toll operators, by contrast,
+    // do use links).
+    if (urlMatch && PACK.noLinkSenders.some((s) => lower.includes(s))) {
+      flags.push(PACK.noLinkSendersFlag);
       score += 15;
     }
   }
 
-  // Foreign-authority impersonation targeting the AU Chinese community (D3 /
-  // #103 / AFP May 2026). Kept separate from govMentions because the reasoning
-  // is different and stronger: Chinese police, customs and consular officials
-  // have no enforcement jurisdiction in Australia and never demand payment, so
-  // a claim of that authority is a scam signal on its own rather than a
-  // "verify via official channels" prompt. Scored +35 (vs +25).
-  const foreignAuthorityMentions = [
-    "chinese police", "beijing police", "shanghai police", "chinese consulate",
-    "embassy of china", "chinese customs", "chinese immigration authority",
-    "chinese authorities",
-  ];
-  if (foreignAuthorityMentions.some((a) => lower.includes(a))) {
-    flags.push("Claims to be a foreign police or government authority — Chinese police, customs and consulate officials have no law-enforcement powers in Australia and never demand payments, transfers or secrecy. This is a known scam targeting the Chinese-Australian community (AFP warning, May 2026).");
+  // Foreign-authority impersonation (D3 / #103 / AFP May 2026). Kept separate
+  // from authorityMentions because the reasoning is different and stronger: an
+  // authority with no enforcement jurisdiction here demanding payment is a scam
+  // signal on its own, rather than a "verify via official channels" prompt.
+  // Scored +35 (vs +25).
+  if (PACK.foreignAuthorityMentions.some((a) => lower.includes(a))) {
+    flags.push(PACK.foreignAuthorityFlag);
     score += 35;
   }
 
@@ -744,7 +471,7 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   // high-confidence scam signal with essentially no legitimate use case.
   const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
   if (platformHit) {
-    flags.push(`Named fraudulent investment platform detected ("${platformHit}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`);
+    flags.push(PACK.fakeInvestmentPlatformFlag(platformHit));
     score += 50;
   }
 
@@ -753,19 +480,24 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
   // an agency name — the govMentions "claims to be a government agency" flag
   // would read wrong here.
   if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
-    flags.push("myID/digital-identity re-registration lure — Services Australia and myID never send unsolicited requests to 're-verify' or 'set up' your digital identity. Go to my.gov.au directly, never via a message link.");
+    flags.push(PACK.identityReregFlag);
     score += 25;
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "SMS");
+  return scoreToResult(score, flags, "SMS", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Email checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
+export function checkEmail(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    suspiciousTlds: SUSPICIOUS_TLDS,
+    callbackBrands: CALLBACK_BRANDS,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -849,14 +581,18 @@ export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Email");
+  return scoreToResult(score, flags, "Email", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Phone number checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkPhone(number: string): CheckResult {
+// The region currently drives only the coverage gate: phone *analysis* is still
+// hardcoded to the AU number plan inside phoneIntel. Phase 4 generalises that
+// and will use the region for parsing too.
+export function checkPhone(number: string, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
   const intel = analysePhone(number);
   const flags: string[] = [];
   let score = 0;
@@ -911,7 +647,7 @@ export function checkPhone(number: string): CheckResult {
   }
 
   score = Math.min(score, 100);
-  const result = scoreToResult(score, flags, "Phone Number");
+  const result = scoreToResult(score, flags, "Phone Number", PACK.coverage, PACK.reportingBody);
   result.phoneIntel = intel;
   return result;
 }
@@ -920,7 +656,15 @@ export function checkPhone(number: string): CheckResult {
 // Custom / free-text checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkCustom(text: string, blocklist?: Set<string>): CheckResult {
+export function checkCustom(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    urgencyWords: URGENCY_WORDS,
+    rewardWords: REWARD_WORDS,
+    requestWords: REQUEST_WORDS,
+    fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
+    identityRereg: MYID_REREG_PHRASES,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -937,7 +681,7 @@ export function checkCustom(text: string, blocklist?: Set<string>): CheckResult 
   const urls = text.match(/https?:\/\/[^\s]+/gi);
   if (urls) {
     flags.push(`Contains ${urls.length} link(s) — checked separately`);
-    const worst = urls.map((u) => checkUrl(u, blocklist)).sort((a, b) => b.score - a.score)[0];
+    const worst = urls.map((u) => checkUrl(u, blocklist, region)).sort((a, b) => b.score - a.score)[0];
     score += Math.floor(worst.score * 0.5);
   }
 
@@ -954,14 +698,14 @@ export function checkCustom(text: string, blocklist?: Set<string>): CheckResult 
   // rule so pasted ad text / recruitment messages are caught here too.
   const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
   if (platformHit) {
-    flags.push(`Named fraudulent investment platform detected ("${platformHit}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`);
+    flags.push(PACK.fakeInvestmentPlatformFlag(platformHit));
     score += 50;
   }
 
   // myID forced re-registration phishing (D6 / #106) — mirror for pasted email
   // bodies routed through the free-text checker.
   if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
-    flags.push("myID/digital-identity re-registration lure — Services Australia and myID never send unsolicited requests to 're-verify' or 'set up' your digital identity. Go to my.gov.au directly, never via a message link.");
+    flags.push(PACK.identityReregFlag);
     score += 25;
   }
 
@@ -971,14 +715,44 @@ export function checkCustom(text: string, blocklist?: Set<string>): CheckResult 
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Custom");
+  return scoreToResult(score, flags, "Custom", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function scoreToResult(score: number, flags: string[], category: string): CheckResult {
+// Coverage honesty: a "safe" verdict asserts we looked and found nothing. That
+// assertion is only true where we have rules to look with. Under partial or no
+// regional coverage a low score can equally mean "no rule matched because no
+// rule exists", so a clean result is downgraded to "unknown" — not enough to go
+// on, rather than a confident pass.
+//
+// Only the clean case is touched. A positive detection is still a positive
+// detection: base signals (shorteners, abused TLDs, credential asks) fire
+// everywhere, so anything they caught is reported as found, regardless of
+// coverage.
+function downgradeForCoverage(result: CheckResult, coverage: RegionCoverage): CheckResult {
+  if (coverage === "full" || result.verdict !== "safe") return result;
+  return {
+    ...result,
+    verdict: "unknown",
+    details:
+      "We don't have full scam-detection rules for your region yet, so we can't give this a clean bill of health. " +
+      "Nothing in our universal checks flagged it — but treat that as 'not checked', not 'safe'.",
+  };
+}
+
+function scoreToResult(
+  score: number,
+  flags: string[],
+  category: string,
+  coverage: RegionCoverage = "full",
+  // Where to report a confirmed scam. Named per region — telling a UK or US
+  // user to contact Scamwatch would send them to an agency with no remit
+  // over their case.
+  reportingBody: string = resolveRegionPack(DEFAULT_REGION).reportingBody,
+): CheckResult {
   let verdict: CheckResult["verdict"];
   let details: string;
 
@@ -993,10 +767,10 @@ function scoreToResult(score: number, flags: string[], category: string): CheckR
     details = "This is giving strong scam vibes. Do NOT engage, click links, or provide any information.";
   } else {
     verdict = "likely_scam";
-    details = "Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to Scamwatch.";
+    details = `Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to ${reportingBody}.`;
   }
 
-  return { verdict, score, flags, details, category };
+  return downgradeForCoverage({ verdict, score, flags, details, category, coverage }, coverage);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1018,13 +792,13 @@ const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
 // Expands a shortened URL and merges the destination analysis into the base result.
 // If expansion fails or times out, the base result is returned unchanged.
-async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>): Promise<CheckResult> {
+async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput): Promise<CheckResult> {
   if (!isShortened(url)) return base;
 
   const { expandedUrl, hops } = await expandUrl(url);
   if (!expandedUrl) return base;
 
-  const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist);
+  const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
   const destDefanged = defang(expandedUrl);
   const mergedScore = Math.min(Math.max(base.score, destResult.score), 100);
   const mergedFlags = [
@@ -1033,11 +807,12 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
     ...destResult.flags,
     ...(hops.length > 1 ? [`Multi-hop chain (${hops.length} redirects) — extra suspicious`] : []),
   ];
-  const { verdict, details } = scoreToResult(mergedScore, mergedFlags, "URL");
-  return { verdict, score: mergedScore, flags: mergedFlags, details, expandedUrl: destDefanged, category: "URL" };
+  const pack = resolveRegionPack(region);
+  const merged = scoreToResult(mergedScore, mergedFlags, "URL", pack.coverage, pack.reportingBody);
+  return { ...merged, score: mergedScore, flags: mergedFlags, expandedUrl: destDefanged, category: "URL" };
 }
 
-export async function analyzeContent(content: string, blocklist?: Set<string>): Promise<AnalyzedIdentifier[]> {
+export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput): Promise<AnalyzedIdentifier[]> {
   const text = content.trim();
   if (!text) return [];
 
@@ -1053,37 +828,37 @@ export async function analyzeContent(content: string, blocklist?: Set<string>): 
 
   // Overall "message" assessment, by detected type.
   if (type === "email") {
-    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text, blocklist) });
+    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text, blocklist, region) });
   } else if (type === "sms") {
-    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text, blocklist) });
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text, blocklist, region) });
   } else if (type === "phone") {
-    out.push({ kind: "phone", value: text, result: checkPhone(text) });
+    out.push({ kind: "phone", value: text, result: checkPhone(text, region) });
   } else if (type === "url") {
     // A bare URL is assessed by the per-URL cards below; if the regex missed it
     // (e.g. a "www." host with no scheme), assess the whole string as a URL.
     if (urls.length === 0) {
       const normalised = normaliseForAnalysis(text);
-      const base = checkUrl(normalised, blocklist);
-      const result = await applyExpansion(normalised, base, blocklist);
+      const base = checkUrl(normalised, blocklist, region);
+      const result = await applyExpansion(normalised, base, blocklist, region);
       out.push({ kind: "url", value: text, result });
     }
   } else {
-    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist, region) });
   }
 
   // A card per embedded URL (normalised first to close percent-encoding tricks).
   // Expansion runs for each URL that resolves to a known shortener host.
   for (const u of urls) {
     const normalised = normaliseForAnalysis(u);
-    const base = checkUrl(normalised, blocklist);
-    const result = await applyExpansion(normalised, base, blocklist);
+    const base = checkUrl(normalised, blocklist, region);
+    const result = await applyExpansion(normalised, base, blocklist, region);
     out.push({ kind: "url", value: u, result });
   }
 
   // Phone card only when the whole input is a number (extractIdentifiers is
   // deliberately conservative about in-text numbers).
   if (ids.scamPhone && type !== "phone") {
-    out.push({ kind: "phone", value: ids.scamPhone, result: checkPhone(ids.scamPhone) });
+    out.push({ kind: "phone", value: ids.scamPhone, result: checkPhone(ids.scamPhone, region) });
   }
 
   // De-dup by kind+value, keep highest score first, always return ≥1 card.
@@ -1095,7 +870,7 @@ export async function analyzeContent(content: string, blocklist?: Set<string>): 
     return true;
   });
   if (deduped.length === 0) {
-    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
+    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist, region) });
   }
   return deduped.sort((a, b) => b.result.score - a.result.score).slice(0, MAX_CARDS);
 }

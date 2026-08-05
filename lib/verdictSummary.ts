@@ -9,6 +9,7 @@
 // Pure module: no React, no I/O. Safe to unit test and to import from a route.
 
 import { AnalyzedIdentifier, CheckResult } from "@/lib/scamDetector";
+import type { RegionCoverage } from "@/lib/regions";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 import { TrackingFinding } from "@/lib/emailTracking";
 import { defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
@@ -94,6 +95,9 @@ export function overallVerdict(
 // "Clean" means nothing flagged it — every identifier safe AND no tracking
 // pixel (a pixel pushes the overall verdict to suspicious). Mirrors the CTA
 // gating on the Check page.
+//
+// Under partial/no regional coverage the checkers already downgrade "safe" to
+// "unknown", so an incompletely-covered result can never satisfy this.
 export function isClean(
   results: AnalyzedIdentifier[],
   pixelReport: TrackingPixelReport | null,
@@ -105,6 +109,18 @@ export function isClean(
     !pixelReport &&
     emailFlags.length === 0
   );
+}
+
+// The weakest coverage across all scored identifiers — the honest level to
+// report for the check as a whole, since one uncovered identifier means the
+// overall picture is incomplete. Absent coverage is treated as "full" so
+// results predating the field (and non-region paths) read as they always did.
+export function overallCoverage(results: AnalyzedIdentifier[]): RegionCoverage {
+  const RANK: Record<RegionCoverage, number> = { full: 0, partial: 1, none: 2 };
+  return results.reduce<RegionCoverage>((worst, r) => {
+    const c = r.result.coverage ?? "full";
+    return RANK[c] > RANK[worst] ? c : worst;
+  }, "full");
 }
 
 // ── Email reply formatting ─────────────────────────────────────────────────────
@@ -173,6 +189,15 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     flagLines.push(`Tracking pixel: ${pixelReport.summary}`);
   }
 
+  // Coverage caveat — stated before the advice so a reader can't take a quiet
+  // result as a clean bill of health for a region we don't fully cover.
+  const coverage = overallCoverage(results);
+  const coverageNote =
+    coverage === "full"
+      ? ""
+      : "Heads up: we don't have full scam-detection rules for this region yet, so " +
+        "this check is less thorough than usual. Treat a quiet result as 'not checked', not 'safe'.";
+
   const footer =
     "What to do next: don't click links or reply. If you've lost money or shared " +
     "details, contact IDCARE on 1800 595 160. You can also report scams to Scamwatch " +
@@ -184,6 +209,7 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     "",
     ...(breakdown.length ? ["What we checked:", ...breakdown.map((b) => `  • ${b}`), ""] : []),
     ...(flagLines.length ? ["Why:", ...flagLines.map((f) => `  • ${f}`), ""] : []),
+    ...(coverageNote ? [coverageNote, ""] : []),
     footer,
     "",
     "— Just Checking, Mate",
@@ -196,6 +222,7 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     `<p style="font-size:16px;font-weight:bold">${escapeHtml(`${head.emoji} ${head.line}`)}</p>`,
     breakdown.length ? `<p><strong>What we checked:</strong></p><ul>${li(breakdown)}</ul>` : "",
     flagLines.length ? `<p><strong>Why:</strong></p><ul>${li(flagLines)}</ul>` : "",
+    coverageNote ? `<p style="color:#8a6d3b;font-size:13px">${escapeHtml(coverageNote)}</p>` : "",
     `<p style="color:#555;font-size:13px">${escapeHtml(footer)}</p>`,
     `<p style="color:#888;font-size:13px">— Just Checking, Mate</p>`,
   ];
