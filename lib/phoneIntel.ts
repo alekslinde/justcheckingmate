@@ -17,7 +17,7 @@
 // prefixes, high-scam and elevated-volume country codes, spoofing risk, and the
 // per-region number-plan semantics carried on the region pack's phonePlan.
 
-import { parsePhoneNumberFromString, type PhoneNumber } from "libphonenumber-js/max";
+import { parsePhoneNumberFromString, isSupportedCountry, type PhoneNumber } from "libphonenumber-js/max";
 import { resolveRegionPack, DEFAULT_REGION, FALLBACK_REGION, type RegionInput } from "@/lib/regions";
 import type { PhonePlan } from "@/lib/regions/types";
 
@@ -331,6 +331,27 @@ function lookupCountry(digits: string): string {
 const MOBILE_TYPES = new Set(["MOBILE", "FIXED_LINE_OR_MOBILE"]);
 
 /**
+ * Emergency numbers that must never be scored as suspicious, anywhere.
+ *
+ * Kept outside the region packs deliberately. A pack's phonePlan is withheld
+ * for regions we have no pack for, and emergency numbers are the one rule that
+ * must survive that: they are short enough to trip the "too short to be real"
+ * guard, so without this a UK user checking 999 — or anyone checking the
+ * GSM-universal 112 — was told their caller ID had been manipulated.
+ *
+ * Union rather than per-region: dialling another country's emergency number is
+ * not a scam signal, and treating an unrecognised one as fabricated is the
+ * failure mode worth avoiding.
+ */
+const EMERGENCY_NUMBERS = new Set([
+  "000", "112", "106",  // AU (112 is GSM-universal, 106 is the AU TTY line)
+  "999",                // UK, IE, and much of the Commonwealth
+  "911",                // US, CA and the NANP
+  "111",                // NZ
+  "110", "119", "118",  // widely used across Asia and parts of Europe
+]);
+
+/**
  * Territories that share a country's numbering plan closely enough that a
  * number resolving to one should still count as domestic for the other.
  *
@@ -370,8 +391,12 @@ function sameCountry(parsed: PhoneNumber, home: string): boolean {
  */
 function parsingCountry(region: RegionInput, packCode: string): string {
   const requested = (region ?? "").toString().toUpperCase();
-  // Two ASCII letters is the shape of an ISO 3166-1 alpha-2 code.
-  if (/^[A-Z]{2}$/.test(requested) && requested !== FALLBACK_REGION) return requested;
+  // Validated against libphonenumber's own country list rather than by shape.
+  // The value can be an arbitrary header, and a plausible-looking non-code is
+  // worse than no code at all: libphonenumber resolves "UK" and "EN" (neither
+  // is an ISO 3166-1 code — the UK is "GB") to Switzerland, so a valid AU
+  // number came back "may be fabricated" at high risk.
+  if (requested !== FALLBACK_REGION && isSupportedCountry(requested)) return requested;
   // ZZ is the base-only fallback pack, not a country, so it has no number plan
   // of its own. International-format input still parses correctly on its
   // country code; national-format input has to be read against *some* plan, and
@@ -434,7 +459,8 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
 
   // Emergency numbers are checked before anything else — they are short enough
   // to trip the "too short" guard, and must never be scored as suspicious.
-  if (plan.emergencyNumbers?.includes(cleaned)) {
+  // The universal set applies regardless of region; a pack may add its own.
+  if (EMERGENCY_NUMBERS.has(cleaned) || plan.emergencyNumbers?.includes(cleaned)) {
     return {
       lineType: "emergency",
       country: homeName,
@@ -480,7 +506,11 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
   // ── Premium rate ───────────────────────────────────────────────────────────
   // Checked before validity: libphonenumber rejects AU 190x as invalid, but
   // "you will be charged premium rates" is far better advice than "invalid".
-  const isDomesticFormat = !parsed || parsed.country === undefined || parsed.country === homeCountry;
+  // An explicit foreign country code disqualifies the domestic premium rule —
+  // otherwise an unparseable foreign number could be reported as a domestic
+  // premium line. Unparseable input with no country resolved still qualifies,
+  // since that is how AU 190x arrives (libphonenumber rejects it as invalid).
+  const isDomesticFormat = parsed ? (!parsed.country || sameCountry(parsed, homeCountry)) : !raw.trim().startsWith("+");
   if (isDomesticFormat && plan.premiumPrefixes?.some((p) => national.startsWith(p))) {
     if (plan.premiumFlag) spoofingNotes.push(plan.premiumFlag);
     bump("very_high");
@@ -503,7 +533,11 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     return {
       lineType: "unknown",
       country: parsed?.country ? countryName(parsed.country) : lookupCountry(cleaned.replace(/^0+/, "")),
-      isDomestic: parsed?.country === homeCountry,
+      // sameCountry, not raw equality: `country` above already maps shared-plan
+      // territories to their parent, so comparing raw codes here would report a
+      // Northern Marianas number as "United States" yet not domestic for a US
+      // user — the same object disagreeing with itself.
+      isDomestic: parsed ? sameCountry(parsed, homeCountry) : false,
       wangiriRisk: false,
       highScamCountry: false,
       spoofingRisk,

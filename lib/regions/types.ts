@@ -97,7 +97,12 @@ export interface PhonePlan {
   /** Geographic area/STD codes → human-readable area, in national form. */
   areaCodes?: Record<string, string>;
 
-  /** Emergency numbers, which must never be scored as suspicious. */
+  /**
+   * Region-specific emergency numbers, added to the universal set in
+   * phoneIntel. That set (000/999/911/111/112…) already covers the common
+   * ones and applies regardless of region — a pack must not be required for an
+   * emergency number to be recognised. Use this only for national additions.
+   */
   emergencyNumbers?: string[];
 
   /**

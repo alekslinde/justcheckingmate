@@ -184,10 +184,35 @@ Scope: `lib/scamDetector.ts`, `lib/verdictSummary.ts`, `lib/regionResolver.ts`,
   AU's external territories onto AU, and the NANP territories onto US, for both
   domesticity and display.
 
-**Gate:** ✅ `npm test` green — 632 passing, with the pre-existing 609
+**Post-review fixes.** Code review found three further bugs, all downstream of
+the same seam — `plan` and `homeCountry` derive from different sources that
+disagree for any region without a pack:
+
+- **Emergency numbers were scored `very_high` outside AU.** The pack's plan is
+  withheld for uncovered regions, so `plan.emergencyNumbers` was undefined and
+  `999`/`911`/`111` fell through to the "too short to be real" guard —
+  "caller ID has been manipulated" for a fire brigade. Now a universal
+  `EMERGENCY_NUMBERS` set in `phoneIntel`, outside the packs; `phonePlan` only
+  adds national extras.
+- **Region codes were validated by shape, not membership.** Any two ASCII
+  letters went straight to libphonenumber, and it resolves `"UK"` and `"EN"`
+  (neither is ISO 3166-1 — the UK is `GB`) to *Switzerland*, so a valid AU
+  number came back "may be fabricated" at high risk. Now checked with
+  `isSupportedCountry`.
+- **The unparseable branch disagreed with itself.** It compared raw country
+  codes while `country` applied the shared-plan parent mapping, so a Northern
+  Marianas number read as "United States" yet not domestic for a US user. Now
+  uses `sameCountry`. The domestic-premium guard was tightened at the same
+  time so an unparseable *foreign* number can't be labelled domestic premium.
+
+Two further findings did not reproduce: AU short shared-cost (`13 25 62`) and
+premium `190x` both classify correctly in every input format. Regression tests
+were added for them regardless, since both are load-bearing AU behaviour.
+
+**Gate:** ✅ `npm test` green — 638 passing, with the pre-existing 609
 untouched. New `__tests__/phoneIntel.test.ts` covers AU depth, UK and US
-classification, region-relative domesticity, and that AU specifics don't leak
-into other regions' copy.
+classification, region-relative domesticity, that AU specifics don't leak into
+other regions' copy, and the four regressions above.
 
 Scope: `lib/phoneIntel.ts`, `lib/scamDetector.ts` (`checkPhone` copy),
 `lib/regions/types.ts`, `lib/regions/au.ts`, `lib/regions/index.ts`,

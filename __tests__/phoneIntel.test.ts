@@ -47,6 +47,21 @@ describe("analysePhone — AU (region with a full pack)", () => {
     }
   });
 
+  it("keeps the short shared-cost 13xxxx range", () => {
+    // 13 25 62 is the ATO's own number — the impersonation the copy targets.
+    for (const n of ["132562", "13 25 62", "131114"]) {
+      expect(analysePhone(n, "AU").lineType).toBe("shared_cost");
+    }
+  });
+
+  it("catches premium 190x in every input format", () => {
+    for (const n of ["+61190012345", "0190012345", "190012345"]) {
+      const intel = analysePhone(n, "AU");
+      expect(intel.lineType).toBe("premium");
+      expect(intel.spoofingRisk).toBe("very_high");
+    }
+  });
+
   it("maps geographic area codes to a named region", () => {
     expect(analysePhone("+61280001234", "AU").region).toBe("New South Wales / ACT");
     expect(analysePhone("+61390001234", "AU").region).toBe("Victoria / Tasmania");
@@ -85,6 +100,15 @@ describe("analysePhone — UK", () => {
     expect(intel.isDomestic).toBe(false);
     expect(intel.country).toBe("Australia");
   });
+
+  it("reports country and domesticity consistently for unparseable input", () => {
+    // Regression: the unparseable branch compared raw country codes while
+    // `country` applied the shared-plan parent mapping, so a Northern Marianas
+    // number read as "United States" yet not domestic for a US user.
+    const intel = analysePhone("+16701234", "US");
+    expect(intel.country).toBe("United States");
+    expect(intel.isDomestic).toBe(true);
+  });
 });
 
 describe("analysePhone — US", () => {
@@ -122,6 +146,37 @@ describe("analysePhone — region-relative domesticity", () => {
     expect(intel.lineType).toBe("mobile");
     expect(analysePhone("1300975707", FALLBACK_REGION).spoofingNotes.join(" "))
       .not.toMatch(/ATO|myGov|Centrelink/);
+  });
+});
+
+describe("analysePhone — emergency numbers are never suspicious", () => {
+  // Regression: these were scored very_high ("caller ID has been manipulated")
+  // outside AU. The pack's phonePlan is withheld for regions we have no pack
+  // for, and emergency numbers are short enough to trip the "too short" guard,
+  // so the list has to live outside the packs.
+  it("recognises emergency numbers in regions with no pack", () => {
+    for (const [n, region] of [["999", "GB"], ["911", "US"], ["111", "NZ"], ["112", "GB"]]) {
+      const intel = analysePhone(n, region);
+      expect(intel.lineType).toBe("emergency");
+      expect(intel.spoofingRisk).toBe("low");
+    }
+  });
+
+  it("never reports an emergency number as a scam risk", () => {
+    expect(checkPhone("999", "GB").score).toBeLessThanOrEqual(20);
+  });
+});
+
+describe("analysePhone — invalid region input", () => {
+  // Regression: any two ASCII letters were passed straight to libphonenumber.
+  // "UK" and "EN" are not ISO 3166-1 codes (the UK is "GB") and both resolve
+  // to Switzerland, so a valid AU number came back "may be fabricated".
+  it("ignores region codes that are not real countries", () => {
+    for (const region of ["UK", "EN", "XX", "!!", "australia", ""]) {
+      const intel = analysePhone("0412345678", region);
+      expect(intel.lineType).toBe("mobile");
+      expect(intel.spoofingRisk).toBe("low");
+    }
   });
 });
 
