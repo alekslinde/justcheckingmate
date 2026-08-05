@@ -167,6 +167,14 @@ describe("isAlertsAccessDenied", () => {
     expect(isAlertsAccessDenied(err)).toBe(true);
   });
 
+  it("is true for a 401 (expired/revoked PAT) so token lapse pauses instead of failing", () => {
+    const err = new Error(
+      "GitHub API GET /repos/o/r/dependabot/alerts?state=open&per_page=100 -> 401 " +
+        '{"message":"Bad credentials"}'
+    );
+    expect(isAlertsAccessDenied(err)).toBe(true);
+  });
+
   it("is false for other HTTP errors (e.g. 404, 500) so they still surface", () => {
     expect(isAlertsAccessDenied(new Error("GitHub API GET /x -> 404 not found"))).toBe(false);
     expect(isAlertsAccessDenied(new Error("GitHub API GET /x -> 500 boom"))).toBe(false);

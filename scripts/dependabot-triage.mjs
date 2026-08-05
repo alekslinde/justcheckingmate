@@ -261,14 +261,15 @@ async function ghFetch(path, token, init = {}) {
 }
 
 /**
- * True when a Dependabot-alerts fetch failed with HTTP 403. The built-in
- * GITHUB_TOKEN cannot read that API — `security-events` does not cover
- * Dependabot alerts and the Actions app lacks the dedicated "Dependabot alerts"
- * permission — so callers treat a 403 as "no access" and degrade gracefully
- * instead of failing the whole scheduled run.
+ * True when a Dependabot-alerts fetch failed because the token can't read the
+ * API — either 403 (the built-in GITHUB_TOKEN lacks the "Dependabot alerts"
+ * permission; `security-events` does not cover it) or 401 (the PAT is expired,
+ * revoked, or otherwise invalid). Both are treated as "no access" so callers
+ * degrade gracefully instead of failing the whole scheduled run — notably, an
+ * expired DEPENDABOT_ALERTS_TOKEN pauses triage rather than turning CI red.
  */
 export function isAlertsAccessDenied(err) {
-  return /->\s*403\b/.test(String(err?.message ?? ""));
+  return /->\s*40[13]\b/.test(String(err?.message ?? ""));
 }
 
 /** Build the local-signal context: installed versions + directly-imported packages. */
@@ -341,19 +342,26 @@ async function main() {
     try {
       alerts = await ghFetch(`/repos/${repo}/dependabot/alerts?state=open&per_page=100`, token);
     } catch (err) {
-      // The built-in GITHUB_TOKEN can't read the Dependabot alerts API (403).
-      // A fine-grained PAT with "Dependabot alerts: read" must be supplied via
-      // the DEPENDABOT_ALERTS_TOKEN secret; until one is, skip cleanly rather
-      // than failing every scheduled run.
+      // The token can't read the Dependabot alerts API: 403 (built-in
+      // GITHUB_TOKEN lacks the permission) or 401 (the PAT is expired/revoked/
+      // invalid). Either way, skip cleanly rather than failing every scheduled
+      // run — a lapsed DEPENDABOT_ALERTS_TOKEN pauses triage, it doesn't break CI.
       if (!isAlertsAccessDenied(err)) throw err;
-      const note =
-        "### 🔒 Dependabot alert triage skipped\n\n" +
-        "The configured token can't read the Dependabot alerts API (HTTP 403). The " +
-        "built-in `GITHUB_TOKEN` cannot access this endpoint even with " +
-        "`security-events: read`.\n\n" +
-        "**Fix:** create a fine-grained PAT with **Dependabot alerts: read** (plus " +
-        "**Issues: read/write** and **Contents: read**) and add it as the " +
-        "`DEPENDABOT_ALERTS_TOKEN` repository secret.\n";
+      const expired = /->\s*401\b/.test(String(err?.message ?? ""));
+      const note = expired
+        ? "### 🔒 Dependabot alert triage skipped\n\n" +
+          "The `DEPENDABOT_ALERTS_TOKEN` was rejected (HTTP 401) — it is most likely " +
+          "**expired or revoked**.\n\n" +
+          "**Fix:** regenerate the fine-grained PAT (**Dependabot alerts: read**, plus " +
+          "**Issues: read/write** and **Contents: read**) and update the " +
+          "`DEPENDABOT_ALERTS_TOKEN` repository secret with the new value.\n"
+        : "### 🔒 Dependabot alert triage skipped\n\n" +
+          "The configured token can't read the Dependabot alerts API (HTTP 403). The " +
+          "built-in `GITHUB_TOKEN` cannot access this endpoint even with " +
+          "`security-events: read`.\n\n" +
+          "**Fix:** create a fine-grained PAT with **Dependabot alerts: read** (plus " +
+          "**Issues: read/write** and **Contents: read**) and add it as the " +
+          "`DEPENDABOT_ALERTS_TOKEN` repository secret.\n";
       process.stderr.write(note + "\n");
       if (process.env.GITHUB_STEP_SUMMARY) {
         try { execFileSync("bash", ["-c", `cat >> "$GITHUB_STEP_SUMMARY"`], { input: note }); } catch { /* best effort */ }
