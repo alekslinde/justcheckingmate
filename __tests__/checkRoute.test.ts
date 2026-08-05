@@ -42,10 +42,18 @@ describe("POST /api/check region resolution", () => {
     expect((await res.json()).region).toBe("AU");
   });
 
-  it("degrades to the default for an unsupported region rather than erroring", async () => {
-    const res = await POST(check({ content: SCAM, region: "ZZ" }));
+  it("degrades to the default for an unparseable region rather than erroring", async () => {
+    const res = await POST(check({ content: SCAM, region: "QQ" }));
     expect(res.status).toBe(200);
     expect((await res.json()).region).toBe(DEFAULT_REGION);
+  });
+
+  it("uses the base-only pack for a known-but-uncovered country", async () => {
+    const res = await POST(check({ content: SCAM }, { "x-vercel-ip-country": "DE" }));
+    const json = await res.json();
+    expect(json.region).toBe("ZZ");
+    // Universal signals still fire — the .xyz link is caught regardless.
+    expect(JSON.stringify(json.results)).toContain("Dodgy top-level domain");
   });
 
   it("ignores a non-string region without erroring", async () => {

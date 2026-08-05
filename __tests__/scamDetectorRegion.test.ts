@@ -20,7 +20,7 @@ describe("region argument plumbing", () => {
     expect(checkPhone("+61412345678")).toEqual(checkPhone("+61412345678", DEFAULT_REGION));
   });
 
-  it.each(["ZZ", "", "not-a-region", null, undefined])(
+  it.each(["QQ", "", "not-a-region", null, undefined])(
     "degrades to the default region for %p rather than throwing",
     (region) => {
       expect(checkSms(AU_SMS, undefined, region)).toEqual(checkSms(AU_SMS, undefined, DEFAULT_REGION));
@@ -45,8 +45,8 @@ describe("analyzeContent region forwarding", () => {
     expect(withRegion).toEqual(without);
   });
 
-  it("degrades to the default for an unknown region", async () => {
-    const unknown = await analyzeContent(AU_SMS, undefined, "ZZ");
+  it("degrades to the default for an unparseable region", async () => {
+    const unknown = await analyzeContent(AU_SMS, undefined, "QQ");
     const base = await analyzeContent(AU_SMS, undefined, DEFAULT_REGION);
     expect(unknown).toEqual(base);
   });

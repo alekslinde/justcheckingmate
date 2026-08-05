@@ -3,7 +3,7 @@ import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanit
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl } from "@/lib/urlExpander";
-import { resolveRegionPack, type RegionInput } from "@/lib/regions";
+import { resolveRegionPack, type RegionInput, type RegionCoverage } from "@/lib/regions";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 export type { PhoneIntel };
@@ -16,6 +16,11 @@ export interface CheckResult {
   category?: string;
   phoneIntel?: PhoneIntel;
   expandedUrl?: string; // defanged real destination when the input was a shortened URL
+  // Detection coverage of the region pack that produced this result. Present on
+  // every result; consumers must not render a confident "safe" when this is
+  // "partial" or "none" — a low score there can mean "no rules matched" rather
+  // than "nothing wrong". See downgradeForCoverage.
+  coverage?: RegionCoverage;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -52,25 +57,35 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
   try {
     urlObj = new URL(input);
   } catch {
+    // A positive detection, so coverage doesn't gate it — but carry the value
+    // through so consumers can still see which pack ran.
     return {
       verdict: "suspicious",
       score: 60,
       flags: ["Couldn't parse this as a valid URL — dodgy already"],
       details: "The link format looks off. Legit sites don't usually send malformed URLs.",
+      coverage: PACK.coverage,
     };
   }
 
   const hostname = urlObj.hostname.toLowerCase();
   const fullUrl = input.toLowerCase();
 
-  // Legit AU gov domains — strong positive signal
+  // Known-legitimate domains for this region — strong positive signal. Routed
+  // through the coverage gate because the allowlist is itself regional: under
+  // partial coverage the list is thin, so a miss here means "not on our short
+  // list", not "not legitimate".
   if (LEGIT_AU_DOMAINS.some((d) => hostname === d || hostname.endsWith("." + d))) {
-    return {
-      verdict: "safe",
-      score: 5,
-      flags: ["Verified Australian government domain"],
-      details: "This looks like a legit Aussie government website. Still be cautious about what you're entering.",
-    };
+    return downgradeForCoverage(
+      {
+        verdict: "safe",
+        score: 5,
+        flags: ["Verified Australian government domain"],
+        details: "This looks like a legit Aussie government website. Still be cautious about what you're entering.",
+        coverage: PACK.coverage,
+      },
+      PACK.coverage,
+    );
   }
 
   // URLhaus live blocklist — hostname confirmed malicious by abuse.ch reporters
@@ -190,7 +205,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "URL");
+  return scoreToResult(score, flags, "URL", PACK.coverage);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -468,7 +483,7 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "SMS");
+  return scoreToResult(score, flags, "SMS", PACK.coverage);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -564,17 +579,18 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Email");
+  return scoreToResult(score, flags, "Email", PACK.coverage);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Phone number checker
 // ────────────────────────────────────────────────────────────────────────────
 
-// `_region` is accepted but unused: phone analysis is still hardcoded to the AU
-// number plan inside phoneIntel. Phase 4 generalises that and will consume this
-// argument — taking it now means callers and tests don't churn again then.
-export function checkPhone(number: string, _region?: RegionInput): CheckResult {
+// The region currently drives only the coverage gate: phone *analysis* is still
+// hardcoded to the AU number plan inside phoneIntel. Phase 4 generalises that
+// and will use the region for parsing too.
+export function checkPhone(number: string, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
   const intel = analysePhone(number);
   const flags: string[] = [];
   let score = 0;
@@ -629,7 +645,7 @@ export function checkPhone(number: string, _region?: RegionInput): CheckResult {
   }
 
   score = Math.min(score, 100);
-  const result = scoreToResult(score, flags, "Phone Number");
+  const result = scoreToResult(score, flags, "Phone Number", PACK.coverage);
   result.phoneIntel = intel;
   return result;
 }
@@ -697,14 +713,40 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Custom");
+  return scoreToResult(score, flags, "Custom", PACK.coverage);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function scoreToResult(score: number, flags: string[], category: string): CheckResult {
+// Coverage honesty: a "safe" verdict asserts we looked and found nothing. That
+// assertion is only true where we have rules to look with. Under partial or no
+// regional coverage a low score can equally mean "no rule matched because no
+// rule exists", so a clean result is downgraded to "unknown" — not enough to go
+// on, rather than a confident pass.
+//
+// Only the clean case is touched. A positive detection is still a positive
+// detection: base signals (shorteners, abused TLDs, credential asks) fire
+// everywhere, so anything they caught is reported as found, regardless of
+// coverage.
+function downgradeForCoverage(result: CheckResult, coverage: RegionCoverage): CheckResult {
+  if (coverage === "full" || result.verdict !== "safe") return result;
+  return {
+    ...result,
+    verdict: "unknown",
+    details:
+      "We don't have full scam-detection rules for your region yet, so we can't give this a clean bill of health. " +
+      "Nothing in our universal checks flagged it — but treat that as 'not checked', not 'safe'.",
+  };
+}
+
+function scoreToResult(
+  score: number,
+  flags: string[],
+  category: string,
+  coverage: RegionCoverage = "full",
+): CheckResult {
   let verdict: CheckResult["verdict"];
   let details: string;
 
@@ -722,7 +764,7 @@ function scoreToResult(score: number, flags: string[], category: string): CheckR
     details = "Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to Scamwatch.";
   }
 
-  return { verdict, score, flags, details, category };
+  return downgradeForCoverage({ verdict, score, flags, details, category, coverage }, coverage);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -759,8 +801,9 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
     ...destResult.flags,
     ...(hops.length > 1 ? [`Multi-hop chain (${hops.length} redirects) — extra suspicious`] : []),
   ];
-  const { verdict, details } = scoreToResult(mergedScore, mergedFlags, "URL");
-  return { verdict, score: mergedScore, flags: mergedFlags, details, expandedUrl: destDefanged, category: "URL" };
+  const coverage = resolveRegionPack(region).coverage;
+  const merged = scoreToResult(mergedScore, mergedFlags, "URL", coverage);
+  return { ...merged, score: mergedScore, flags: mergedFlags, expandedUrl: destDefanged, category: "URL" };
 }
 
 export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput): Promise<AnalyzedIdentifier[]> {

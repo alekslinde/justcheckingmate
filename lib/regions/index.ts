@@ -3,6 +3,7 @@
 
 import { BASE_SIGNALS } from "./base";
 import { AU } from "./au";
+import { REST_OF_WORLD } from "./rest-of-world";
 import type { RegionCode, RegionDefinition, RegionPack } from "./types";
 
 export type { RegionCode, RegionCoverage, RegionPack } from "./types";
@@ -15,11 +16,19 @@ export type { RegionCode, RegionCoverage, RegionPack } from "./types";
  */
 export type RegionInput = RegionCode | string | null | undefined;
 
-/** The region used when none is specified. */
+/**
+ * The region used when we have no signal at all about where someone is —
+ * absent geo headers, local dev. Not used for *unknown* countries: those
+ * resolve to REST_OF_WORLD, which is honest about having no local rules.
+ */
 export const DEFAULT_REGION: RegionCode = "AU";
+
+/** The base-only pack for countries with no national layer. */
+export const FALLBACK_REGION: RegionCode = "ZZ";
 
 const REGIONS: Record<RegionCode, RegionDefinition> = {
   AU,
+  ZZ: REST_OF_WORLD,
 };
 
 function buildPack(region: RegionDefinition): RegionPack {

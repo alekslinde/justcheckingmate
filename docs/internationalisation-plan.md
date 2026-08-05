@@ -40,7 +40,7 @@ rewrite.
 
 ---
 
-## Phase 1 — Extract AU into a region pack (no behaviour change)
+## Phase 1 — Extract AU into a region pack (no behaviour change) ✅ done
 
 **Outcome:** `lib/regions/au.ts` exists, `scamDetector.ts` imports from it, all
 existing tests pass untouched. Nothing else changes.
@@ -70,7 +70,7 @@ Scope: `lib/scamDetector.ts`, new `lib/regions/*`.
 
 ---
 
-## Phase 2 — Thread region through the API
+## Phase 2 — Thread region through the API ✅ done
 
 **Outcome:** detection is region-parameterised end-to-end; AU is the default so
 behaviour is unchanged.
@@ -79,8 +79,11 @@ behaviour is unchanged.
    `checkCustom`, `analyzeContent` — defaulting to `"AU"`.
 2. Resolve region in the API layer (`app/api/check/route.ts`) with precedence:
    explicit user selection → geo header (`lib/geo.ts`) → `AU`.
-3. Generalise `lib/geo.ts` — drop the AU-only branch, return country + optional
-   subdivision uniformly. Keep the coarse-granularity privacy rule intact.
+3. ~~Generalise `lib/geo.ts` — drop the AU-only branch~~ **Revised:** added
+   `countryFromHeaders` for machine-readable region selection and left
+   `locationFromHeaders` alone. Its AU-subdivision-vs-country split is a
+   deliberate privacy decision (coarse enough not to identify a reporter), not
+   AU coupling.
 4. Persist the resolved region on reports so we can later see coverage gaps by
    region (`lib/reportStore.ts`, migration).
 
@@ -92,23 +95,37 @@ Scope: `lib/scamDetector.ts`, `app/api/check/route.ts`, `lib/geo.ts`,
 
 ---
 
-## Phase 3 — Coverage honesty
+## Phase 3 — Coverage honesty ✅ done
 
 **Outcome:** the product tells the truth about what it does and doesn't know.
-Do this *before* adding regions, so region #2 ships with the guardrail already in place.
+Done *before* adding regions, so region #2 ships with the guardrail in place.
 
-1. Add `coverage: "full" | "partial" | "none"` to each region pack.
-2. `CheckResult` gains a coverage signal; low scores from a `none`/`partial`
-   region must not render as a confident "looks fine".
-3. Verdict copy + `VerdictBadge` / `CheckFlow`: show "we don't have strong rules
-   for your region yet — here's what to look for generally" and fall back to the
-   universal base-pack signals plus generic education.
-4. Strings into `messages/`.
+1. ✅ `coverage: "full" | "partial" | "none"` on each pack (declared in Phase 1).
+2. ✅ `CheckResult.coverage` carries it; `downgradeForCoverage` in
+   `scoreToResult` turns a clean verdict into `unknown` under partial/no
+   coverage. Positive detections are untouched — base signals fire everywhere,
+   so a real finding is still reported as found.
+3. ✅ `CoverageNotice` above the verdict card in `CheckFlow`, plus a caveat in
+   the forward-to-us email reply.
+4. ✅ Strings in `messages/` (both tone bundles).
 
-**Gate:** tests asserting an uncovered region never produces a confident-safe
-verdict on content that would score low purely from missing rules.
+**Added beyond the original plan:** `lib/regions/rest-of-world.ts` — a
+base-only `coverage: "none"` pack (code `ZZ`). Without it there was nothing to
+test the gate against, and more importantly `resolveRegion` was sending unknown
+countries to AU, silently applying Australian agency rules to everyone. Now a
+known-but-uncovered country resolves to the fallback pack; only a *missing* geo
+signal falls back to AU.
 
-Scope: `lib/scamDetector.ts`, `lib/verdictSummary.ts`, `components/VerdictBadge.tsx`,
+**Note:** `VerdictBadge` was left unchanged. The downgrade happens upstream in
+the verdict itself, so the badge renders "unknown" correctly with no edit —
+touching it would have duplicated the rule in a second place.
+
+**Gate:** ✅ `__tests__/coverage.test.ts` asserts an uncovered region never
+produces a confident-safe verdict, that positive detections survive unchanged,
+and that `isClean` / the email reply respect coverage.
+
+Scope: `lib/scamDetector.ts`, `lib/verdictSummary.ts`, `lib/regionResolver.ts`,
+`lib/regions/rest-of-world.ts`, `components/CoverageNotice.tsx`,
 `components/CheckFlow.tsx`, `messages/`.
 
 ---

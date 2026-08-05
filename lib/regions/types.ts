@@ -15,7 +15,7 @@
 // in base so a new region inherits it for free.
 
 /** ISO 3166-1 alpha-2, uppercase. */
-export type RegionCode = "AU";
+export type RegionCode = "AU" | "ZZ";
 
 /**
  * How much detection coverage a region actually has.

@@ -8,10 +8,11 @@ import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
 import { parseEmailHeaders, summariseAuth } from "@/lib/emailHeaders";
 import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
-import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean } from "@/lib/verdictSummary";
+import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
+import CoverageNotice from "./CoverageNotice";
 import ReportForm from "./ReportForm";
 
 type Step = "input" | "result" | "report";
@@ -358,6 +359,10 @@ export default function CheckFlow() {
 
             return (
               <>
+                {/* Coverage honesty — sits above the verdict so it frames how the
+                    result should be read, rather than being a footnote to it. */}
+                <CoverageNotice coverage={overallCoverage(results)} />
+
                 {/* Single coloured verdict card — the only full-colour element. */}
                 <div className="space-y-2">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">

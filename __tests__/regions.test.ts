@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveRegionPack, supportedRegions, DEFAULT_REGION } from "@/lib/regions";
+import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@/lib/regions";
 import { BASE_SIGNALS } from "@/lib/regions/base";
 import { AU } from "@/lib/regions/au";
 
@@ -16,7 +16,7 @@ describe("resolveRegionPack", () => {
   });
 
   // An unknown region must degrade to a working checker, never break the check.
-  it.each([undefined, null, "", "ZZ", "not-a-region"])(
+  it.each([undefined, null, "", "QQ", "not-a-region"])(
     "falls back to the default region for %p",
     (input) => {
       expect(resolveRegionPack(input).code).toBe(DEFAULT_REGION);
@@ -29,6 +29,19 @@ describe("resolveRegionPack", () => {
 
   it("lists every region that has a pack", () => {
     expect(supportedRegions()).toContain(DEFAULT_REGION);
+    expect(supportedRegions()).toContain(FALLBACK_REGION);
+  });
+
+  it("resolves the base-only fallback pack", () => {
+    const pack = resolveRegionPack(FALLBACK_REGION);
+    expect(pack.code).toBe(FALLBACK_REGION);
+    expect(pack.coverage).toBe("none");
+    // Universal signals still run — real detections must still fire.
+    expect(pack.suspiciousTlds.length).toBeGreaterThan(0);
+    expect(pack.requestWords.length).toBeGreaterThan(0);
+    // But there is no national layer to lean on.
+    expect(pack.authorityMentions).toEqual([]);
+    expect(pack.legitDomains).toEqual([]);
   });
 });
 

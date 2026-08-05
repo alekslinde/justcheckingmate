@@ -10,7 +10,7 @@
 // two-letter country code the edge already derived.
 
 import { countryFromHeaders } from "@/lib/geo";
-import { resolveRegionPack, DEFAULT_REGION, type RegionCode } from "@/lib/regions";
+import { resolveRegionPack, DEFAULT_REGION, FALLBACK_REGION, type RegionCode } from "@/lib/regions";
 
 export function resolveRegion(headers: Headers, requested?: unknown): RegionCode {
   // A request may carry an unsupported or junk region; resolveRegionPack
@@ -24,7 +24,16 @@ export function resolveRegion(headers: Headers, requested?: unknown): RegionCode
   }
 
   const geo = countryFromHeaders(headers);
-  if (geo) return resolveRegionPack(geo).code;
+  if (geo) {
+    const pack = resolveRegionPack(geo);
+    // A country we have a national layer for uses it. Anywhere else gets the
+    // base-only pack rather than AU's rules: applying Australian agency and
+    // brand lists to, say, a German user would be both useless and misleading,
+    // and its "full" coverage would wrongly claim a thorough check.
+    return pack.code === geo ? pack.code : FALLBACK_REGION;
+  }
 
+  // No geo signal at all (local dev, privacy proxies). Distinct from "we know
+  // where you are and don't cover it" — this is the historical default.
   return DEFAULT_REGION;
 }
