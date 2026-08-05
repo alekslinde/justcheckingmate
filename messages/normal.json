@@ -1,28 +1,22 @@
 {
   "a11y.newTab": "opens in a new tab",
-
   "nav.learn": "Learn",
   "nav.reports": "Reports",
   "nav.about": "About",
-
   "home.title": "Got a suspicious message or call?",
   "home.subtitle": "Paste it below — links, texts, emails, and phone numbers — and we'll check it for you, without ever storing it, sharing it, or opening its links.",
-
   "stats.checked.one": "scam checked",
   "stats.checked.many": "scams checked",
   "stats.reported.one": "report submitted",
   "stats.reported.many": "reports submitted",
-
   "footer.built": "Built for Australians",
   "footer.by": "by",
   "footer.tagline": "— always check before you act.",
   "footer.about": "About & Privacy — what we store and what we never store",
-
   "kind.url": "Link",
   "kind.email": "Sender",
   "kind.phone": "Phone number",
   "kind.message": "Message",
-
   "check.step.input": "Check a suspicious message",
   "check.step.result": "Check results",
   "check.step.report": "Report a scam",
@@ -63,7 +57,6 @@
   "check.analysing": "Analysing…",
   "check.submit": "Check This Now",
   "check.serverError": "Something went wrong on our end — please try again.",
-
   "verdict.safe.label": "Looks Good",
   "verdict.safe.sub": "No red flags found — but always stay cautious.",
   "verdict.suspicious.label": "Proceed with Caution",
@@ -104,13 +97,11 @@
   "tracking.heading": "Tracking in this email",
   "tracking.none": "No tracking mechanisms were triggered — and because we analysed the source without rendering it, nothing here ever phoned home.",
   "tracking.safe": "Opening this in a previewing mail client could have triggered the items above. We analysed the source without rendering it, so none of them fired here.",
-
   "email.analysis.heading": "Email sender analysis",
   "email.analysis.from": "From:",
   "email.analysis.replyTo": "Reply-To:",
   "email.analysis.auth": "Authentication:",
   "email.analysis.clean": "No sender-spoofing signals found in the headers.",
-
   "phone.heading": "Phone details",
   "phone.type": "Type",
   "phone.country": "Country",
@@ -121,8 +112,8 @@
   "phone.lineType.fixed": "Fixed landline",
   "phone.lineType.voip": "Internet phone (easy to fake)",
   "phone.lineType.premium": "Premium rate — costs extra to call",
-  "phone.lineType.freecall": "Free call (1800)",
-  "phone.lineType.shared": "Shared cost (1300 / 13xx)",
+  "phone.lineType.freecall": "Free call",
+  "phone.lineType.shared": "Shared cost",
   "phone.lineType.emergency": "Emergency services",
   "phone.lineType.unknown": "Unknown type",
   "phone.risk.low": "Low",
@@ -135,7 +126,6 @@
   "phone.spoof.body": "Yes — scammers can display any number they want as the caller ID. It costs them nothing and is very common. The real source is only known to the phone company and can only be traced by police.",
   "phone.spoof.report.pre": "If you've been scammed, report it to",
   "phone.spoof.report.post": "and your telco — they can help trace and block the source.",
-
   "report.urgent": "For urgent matters, contact Scamwatch, your bank, or the Australian Federal Police directly — this tool is not a substitute for official reporting channels.",
   "report.valuable": "Your report is valuable. Every submission helps raise awareness and protects others from the same scam.",
   "report.required.pre": "Fields marked",
@@ -213,7 +203,6 @@
   "report.success.official.pre": "For immediate help, report to",
   "report.success.official.or": "or call",
   "report.success.idcare": "IDCARE on 1800 595 160",
-
   "subs.title": "Community Submissions",
   "subs.subtitle": "Scams reported by Australians — unverified, anonymised",
   "subs.search.placeholder": "Search by keyword, phone number, email, URL or report ID…",
@@ -241,7 +230,6 @@
   "subs.empty.title": "No reports match these filters",
   "subs.empty.searchHint": "Try a different search term",
   "subs.empty.filterHint": "Try a different type or time period",
-
   "subs.id.link": "Link",
   "subs.id.phone": "Phone",
   "subs.id.email": "Email",
@@ -258,7 +246,6 @@
   "subs.stats.breakdown": "By type",
   "subs.stats.total.one": "{n} report total",
   "subs.stats.total.many": "{n} reports total",
-
   "bug.button": "Report a bug",
   "bug.title.auto": "Something went wrong",
   "bug.title.manual": "Report a bug",
@@ -288,7 +275,6 @@
   "bug.action.check": "Checking for scams",
   "bug.action.report": "Submitting a report",
   "bug.action.manual": "General feedback",
-
   "learn.title": "Learn",
   "learn.intro": "How scammers work, where scams come from, how to handle one — and what to do if you've already been caught.",
   "learn.part.spot.heading": "Spotting scams",
@@ -341,7 +327,6 @@
   "learn.auth.spf.desc": "Sender Policy Framework — confirms the sending server is on the list of servers authorised to send on behalf of this domain. A fail means the email came from somewhere it shouldn't.",
   "learn.auth.dkim.desc": "DomainKeys Identified Mail — a cryptographic signature proving the message wasn't tampered with. Pass is good, but only if the signing domain matches the sender. A pass from an unrelated domain (e.g. a Microsoft tenant) is a red flag.",
   "learn.auth.dmarc.desc": "Domain-based Message Authentication — the domain owner's own policy tying SPF and DKIM together. A fail means the message violated the sender's own rules. None means the domain publishes no enforcement — scammers love this.",
-
   "learn.flags.heading": "Common Scam Red Flags",
   "learn.flags.1": "Asks for bank, tax file number (TFN) or Medicare details",
   "learn.flags.2": "Creates urgent pressure to act right now",

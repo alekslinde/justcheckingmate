@@ -62,6 +62,53 @@ export interface UrgencyGroups {
   taxThreat: string[];
 }
 
+/**
+ * National number-plan semantics that libphonenumber cannot supply.
+ *
+ * The library owns parsing, validity, line type and country — that is a static
+ * lookup table, not a model, so it fits the rule-based constraint. What it has
+ * no opinion on is *scam* semantics: which ranges scammers favour, and which
+ * number shapes get impersonated here. That judgement is regional, so it lives
+ * in the pack.
+ *
+ * A region may omit this entirely; phone analysis then relies on libphonenumber
+ * plus the universal signals (wangiri, high-scam country codes) alone.
+ */
+export interface PhonePlan {
+  /**
+   * Premium-rate prefixes in national (0-prefixed) form.
+   *
+   * Deliberately ours rather than the library's: libphonenumber rejects AU
+   * `190x` numbers as invalid, so deferring to it would downgrade a "you will
+   * be charged premium rates" warning into a generic "invalid number" — less
+   * useful advice for exactly the case that costs money.
+   */
+  premiumPrefixes?: string[];
+  /** Copy for the premium-rate flag; names the local range, so it's regional. */
+  premiumFlag?: string;
+
+  /**
+   * Mobile prefixes commonly allocated to VoIP / virtual-number providers.
+   * Number portability makes carrier attribution unreliable, so this is a hint,
+   * not an assertion — it only nudges risk to medium.
+   */
+  voipMobilePrefixes?: string[];
+
+  /** Geographic area/STD codes → human-readable area, in national form. */
+  areaCodes?: Record<string, string>;
+
+  /** Emergency numbers, which must never be scored as suspicious. */
+  emergencyNumbers?: string[];
+
+  /**
+   * Copy for toll-free and shared-cost lines. Both are heavily impersonated,
+   * but the number ranges and the bodies scammers pose as differ per country,
+   * so the wording is authored regionally rather than templated.
+   */
+  tollFreeFlag?: string;
+  sharedCostFlag?: string;
+}
+
 /** Signals with no national tie — shared by every region. */
 export interface BaseSignals {
   urgency: Pick<UrgencyGroups, "generic" | "voiceClone">;
@@ -144,6 +191,9 @@ export interface RegionDefinition {
   /** Where to report a confirmed scam — the agency differs per jurisdiction. */
   reportingBody: string;
 
+  /** National number-plan semantics. Omitted where we have none authored. */
+  phonePlan?: PhonePlan;
+
   /** Region-specific brands appended to the base callback-brand list. */
   callbackBrands?: string[];
   /** Region-specific fraudulent platforms appended to the base list. */
@@ -193,4 +243,6 @@ export interface RegionPack {
   legitDomainDetails: string;
   senderIdFlag?: string;
   reportingBody: string;
+  /** Always present on a resolved pack; an empty plan where none is authored. */
+  phonePlan: PhonePlan;
 }

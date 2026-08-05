@@ -88,6 +88,9 @@ function buildPack(region: RegionDefinition): RegionPack {
     legitDomainDetails: region.legitDomainDetails,
     senderIdFlag: region.senderIdFlag,
     reportingBody: region.reportingBody,
+    // Normalised to an object so phoneIntel can read fields unconditionally;
+    // a region with no authored plan simply has every field undefined.
+    phonePlan: region.phonePlan ?? {},
   };
 }
 
