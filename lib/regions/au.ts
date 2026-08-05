@@ -198,6 +198,18 @@ export const AU: RegionDefinition = {
     `Named fraudulent investment platform detected ("${platform}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`,
 
   legitDomains: LEGIT_DOMAINS,
+  legitDomainFlag: "Verified Australian government domain",
+  legitDomainDetails:
+    "This looks like a legit Aussie government website. Still be cautious about what you're entering.",
+
+  // ACMA Sender ID register (D2 / #122). Since 1 July 2026 legitimate AU
+  // senders must register their SMS Sender ID, so "ignore the Unverified
+  // label" is a scam tell — but only in Australia, hence its place here.
+  senderIdFlag:
+    "'Unverified' label override attempt — since 1 July 2026, legitimate Australian senders must register their SMS Sender ID with ACMA. A message asking you to ignore an 'Unverified' label is almost certainly a scam.",
+
+  reportingBody: "Scamwatch",
+
   callbackBrands: CALLBACK_BRANDS,
   rewardWords: REWARD_WORDS,
   requestWords: REQUEST_WORDS,

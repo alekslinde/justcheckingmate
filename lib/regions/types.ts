@@ -128,6 +128,21 @@ export interface RegionDefinition {
 
   /** Known-legitimate domains that should short-circuit URL scoring. */
   legitDomains: string[];
+  /** Copy for the legit-domain pass; names the jurisdiction, so it's regional. */
+  legitDomainFlag: string;
+  /** Details line for the legit-domain pass. */
+  legitDomainDetails: string;
+
+  /**
+   * Sender-ID registration scheme, where the region has one. Scammers tell
+   * victims to ignore an "Unverified" label; that only means something where
+   * such a scheme exists, so a region without one omits this and the rule is
+   * skipped rather than asserting foreign regulation.
+   */
+  senderIdFlag?: string;
+
+  /** Where to report a confirmed scam — the agency differs per jurisdiction. */
+  reportingBody: string;
 
   /** Region-specific brands appended to the base callback-brand list. */
   callbackBrands?: string[];
@@ -174,4 +189,8 @@ export interface RegionPack {
   identityReregFlag: string;
   fakeInvestmentPlatformFlag: (platform: string) => string;
   legitDomains: string[];
+  legitDomainFlag: string;
+  legitDomainDetails: string;
+  senderIdFlag?: string;
+  reportingBody: string;
 }

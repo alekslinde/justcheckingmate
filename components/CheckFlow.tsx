@@ -94,6 +94,8 @@ export default function CheckFlow() {
   const [step, setStep] = useState<Step>("input");
   const [content, setContent] = useState("");
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
+  // Region the server used for the last check. Null until a check has run.
+  const [region, setRegion] = useState<string | null>(null);
   const [checkLoading, setCheckLoading] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -229,7 +231,10 @@ export default function CheckFlow() {
     else handleEmlUpload(file);
   }
 
-  async function runCheck() {
+  // `overrideRegion` re-runs the same content against a region the user picked,
+  // correcting a wrong geo guess. Omitted on the first check so the server
+  // resolves from geo headers.
+  async function runCheck(overrideRegion?: string) {
     if (!content.trim()) return;
     setCheckLoading(true);
     setCheckError(null);
@@ -237,17 +242,20 @@ export default function CheckFlow() {
       const res = await fetch("/api/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(overrideRegion ? { content, region: overrideRegion } : { content }),
       });
       if (!res.ok) throw new Error("Server error");
-      const data = await res.json() as { results: AnalyzedIdentifier[] };
+      const data = await res.json() as { results: AnalyzedIdentifier[]; region?: string };
       setResults(data.results ?? []);
+      // Remember which pack actually ran, so the coverage notice reflects the
+      // server's decision rather than being re-derived on the client.
+      setRegion(data.region ?? null);
       // Run the shared email-source analysis — unwraps a forwarded email to the
       // original first, so tracking and sender analysis cover the scammer's
       // message, not the forwarder's. Same path as ReportForm and /api/inbound.
       setEmailAnalysis(analyseEmailSource(content));
       setShareCopied(false);
-      goForward("result");
+      if (!overrideRegion) goForward("result");
     } catch (err) {
       setCheckError(t("check.serverError"));
       reportFailure("check", err);
@@ -361,7 +369,11 @@ export default function CheckFlow() {
               <>
                 {/* Coverage honesty — sits above the verdict so it frames how the
                     result should be read, rather than being a footnote to it. */}
-                <CoverageNotice coverage={overallCoverage(results)} />
+                <CoverageNotice
+                  coverage={overallCoverage(results)}
+                  region={region}
+                  onRegionChange={(code) => runCheck(code)}
+                />
 
                 {/* Single coloured verdict card — the only full-colour element. */}
                 <div className="space-y-2">
@@ -688,7 +700,7 @@ export default function CheckFlow() {
       </div>
 
       <button
-        onClick={runCheck}
+        onClick={() => runCheck()}
         disabled={checkLoading || !content.trim()}
         aria-busy={checkLoading}
         className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold rounded-lg transition-colors text-base uppercase tracking-wide"

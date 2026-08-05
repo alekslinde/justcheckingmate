@@ -15,7 +15,7 @@ import type { RegionDefinition } from "./types";
 
 export const REST_OF_WORLD: RegionDefinition = {
   code: "ZZ", // ISO 3166-1 user-assigned range — not a real country
-  name: "your region",
+  name: "Somewhere else / not listed",
   coverage: "none",
 
   // No national campaign signals. The base groups (generic urgency,
@@ -47,4 +47,14 @@ export const REST_OF_WORLD: RegionDefinition = {
     `Named fraudulent investment platform detected ("${platform}") — financial regulators have issued specific warnings that this is a scam. Do not invest.`,
 
   legitDomains: [],
+  // No allowlist, so these are never reached — present to satisfy the shape.
+  legitDomainFlag: "",
+  legitDomainDetails: "",
+
+  // senderIdFlag deliberately omitted: sender-ID registration is a national
+  // scheme, and asserting one where none exists would be simply false.
+
+  // Generic wording — naming a specific agency would be wrong for most of the
+  // world. Regions with a known reporting body name it.
+  reportingBody: "your local consumer protection or cybercrime authority",
 };

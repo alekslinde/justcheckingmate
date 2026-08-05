@@ -88,6 +88,7 @@
   "verdict.suspicious.status": "Suspicious",
   "verdict.likely_scam.status": "Scam",
   "verdict.unknown.status": "Unclear",
+  "verdict.coverage.regionLabel": "Not where you are? Pick your region:",
   "verdict.coverage.title": "Limited coverage for your region",
   "verdict.coverage.body": "We don't have full scam-detection rules for your region yet. We still ran our universal checks — links, shorteners, tracking, and requests for personal details — but we can't be as thorough as we are in regions we cover fully.",
   "verdict.coverage.advice": "Treat a quiet result as \"not checked\", not \"safe\".",

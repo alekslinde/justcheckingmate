@@ -84,6 +84,10 @@ function buildPack(region: RegionDefinition): RegionPack {
     identityReregFlag: region.identityReregFlag,
     fakeInvestmentPlatformFlag: region.fakeInvestmentPlatformFlag,
     legitDomains: region.legitDomains,
+    legitDomainFlag: region.legitDomainFlag,
+    legitDomainDetails: region.legitDomainDetails,
+    senderIdFlag: region.senderIdFlag,
+    reportingBody: region.reportingBody,
   };
 }
 
@@ -111,3 +115,14 @@ export function resolveRegionPack(code?: string | null): RegionPack {
 export function supportedRegions(): RegionCode[] {
   return Object.keys(REGIONS) as RegionCode[];
 }
+
+/**
+ * Selectable regions for the UI, covered regions first and the base-only
+ * fallback last — it's the "none of these" option, not a peer.
+ */
+export const REGION_OPTIONS: { code: RegionCode; name: string }[] =
+  (Object.keys(REGIONS) as RegionCode[])
+    .map((code) => ({ code, name: REGIONS[code].name }))
+    .sort((a, b) =>
+      a.code === FALLBACK_REGION ? 1 : b.code === FALLBACK_REGION ? -1 : a.name.localeCompare(b.name),
+    );

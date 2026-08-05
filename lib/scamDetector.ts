@@ -3,7 +3,7 @@ import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanit
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl } from "@/lib/urlExpander";
-import { resolveRegionPack, type RegionInput, type RegionCoverage } from "@/lib/regions";
+import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 export type { PhoneIntel };
@@ -80,8 +80,8 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
       {
         verdict: "safe",
         score: 5,
-        flags: ["Verified Australian government domain"],
-        details: "This looks like a legit Aussie government website. Still be cautious about what you're entering.",
+        flags: [PACK.legitDomainFlag],
+        details: PACK.legitDomainDetails,
         coverage: PACK.coverage,
       },
       PACK.coverage,
@@ -205,7 +205,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "URL", PACK.coverage);
+  return scoreToResult(score, flags, "URL", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     flags.push(`Contains link: ${urlMatch[0].slice(0, 50)}...`);
     score += 15;
     // Check the embedded URL too
-    const urlCheck = checkUrl(urlMatch[0], blocklist);
+    const urlCheck = checkUrl(urlMatch[0], blocklist, region);
     if (urlCheck.score > 40) {
       flags.push("...and that link looks dodgy too");
       score += 20;
@@ -339,8 +339,10 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     /ignore\s+(the\s+)?['"]?unverified['"]?/i.test(text) ||
     /carrier\s+(has\s+not|hasn'?t)\s+updated\s+our\s+(registration|sender)/i.test(text) ||
     /unverified\s+(label|tag|display)\s+is\s+a\s+(carrier\s+)?(error|delay|bug)/i.test(text);
-  if (unverifiedOverride) {
-    flags.push("'Unverified' label override attempt — since 1 July 2026, legitimate Australian senders must register their SMS Sender ID with ACMA. A message asking you to ignore an 'Unverified' label is almost certainly a scam.");
+  // Only scored where the region actually runs a sender-ID registration
+  // scheme — asserting foreign regulation to users elsewhere would be false.
+  if (unverifiedOverride && PACK.senderIdFlag) {
+    flags.push(PACK.senderIdFlag);
     score += 35;
   }
 
@@ -483,7 +485,7 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "SMS", PACK.coverage);
+  return scoreToResult(score, flags, "SMS", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -579,7 +581,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Email", PACK.coverage);
+  return scoreToResult(score, flags, "Email", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -645,7 +647,7 @@ export function checkPhone(number: string, region?: RegionInput): CheckResult {
   }
 
   score = Math.min(score, 100);
-  const result = scoreToResult(score, flags, "Phone Number", PACK.coverage);
+  const result = scoreToResult(score, flags, "Phone Number", PACK.coverage, PACK.reportingBody);
   result.phoneIntel = intel;
   return result;
 }
@@ -679,7 +681,7 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   const urls = text.match(/https?:\/\/[^\s]+/gi);
   if (urls) {
     flags.push(`Contains ${urls.length} link(s) — checked separately`);
-    const worst = urls.map((u) => checkUrl(u, blocklist)).sort((a, b) => b.score - a.score)[0];
+    const worst = urls.map((u) => checkUrl(u, blocklist, region)).sort((a, b) => b.score - a.score)[0];
     score += Math.floor(worst.score * 0.5);
   }
 
@@ -713,7 +715,7 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   }
 
   score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Custom", PACK.coverage);
+  return scoreToResult(score, flags, "Custom", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -746,6 +748,10 @@ function scoreToResult(
   flags: string[],
   category: string,
   coverage: RegionCoverage = "full",
+  // Where to report a confirmed scam. Named per region — telling a UK or US
+  // user to contact Scamwatch would send them to an agency with no remit
+  // over their case.
+  reportingBody: string = resolveRegionPack(DEFAULT_REGION).reportingBody,
 ): CheckResult {
   let verdict: CheckResult["verdict"];
   let details: string;
@@ -761,7 +767,7 @@ function scoreToResult(
     details = "This is giving strong scam vibes. Do NOT engage, click links, or provide any information.";
   } else {
     verdict = "likely_scam";
-    details = "Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to Scamwatch.";
+    details = `Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to ${reportingBody}.`;
   }
 
   return downgradeForCoverage({ verdict, score, flags, details, category, coverage }, coverage);
@@ -801,8 +807,8 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
     ...destResult.flags,
     ...(hops.length > 1 ? [`Multi-hop chain (${hops.length} redirects) — extra suspicious`] : []),
   ];
-  const coverage = resolveRegionPack(region).coverage;
-  const merged = scoreToResult(mergedScore, mergedFlags, "URL", coverage);
+  const pack = resolveRegionPack(region);
+  const merged = scoreToResult(mergedScore, mergedFlags, "URL", pack.coverage, pack.reportingBody);
   return { ...merged, score: mergedScore, flags: mergedFlags, expandedUrl: destDefanged, category: "URL" };
 }
 

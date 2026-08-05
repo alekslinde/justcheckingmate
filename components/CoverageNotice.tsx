@@ -1,7 +1,7 @@
 "use client";
 
 import { useLang } from "@/lib/lang";
-import type { RegionCoverage } from "@/lib/regions";
+import { REGION_OPTIONS, type RegionCoverage } from "@/lib/regions";
 
 // Shown when the region pack that ran has less than full detection coverage.
 //
@@ -13,7 +13,17 @@ import type { RegionCoverage } from "@/lib/regions";
 //
 // Deliberately not styled as an alarm: this is a statement about our coverage,
 // not a finding about their message.
-export default function CoverageNotice({ coverage }: { coverage: RegionCoverage }) {
+export default function CoverageNotice({
+  coverage,
+  region,
+  onRegionChange,
+}: {
+  coverage: RegionCoverage;
+  region?: string | null;
+  // When provided, the user can correct a wrong geo guess — geo-IP misfires for
+  // roaming users and VPNs, and without this there is no way to say so.
+  onRegionChange?: (code: string) => void;
+}) {
   const { t } = useLang();
   if (coverage === "full") return null;
 
@@ -34,6 +44,24 @@ export default function CoverageNotice({ coverage }: { coverage: RegionCoverage 
           <p className="text-sm font-medium text-gray-200">{t("verdict.coverage.advice")}</p>
         </div>
       </div>
+
+      {onRegionChange && (
+        <div className="border-t border-sky-900/50 pt-3 space-y-1.5">
+          <label htmlFor="region-select" className="block text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            {t("verdict.coverage.regionLabel")}
+          </label>
+          <select
+            id="region-select"
+            value={region ?? ""}
+            onChange={(e) => onRegionChange(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200"
+          >
+            {REGION_OPTIONS.map((o) => (
+              <option key={o.code} value={o.code}>{o.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="border-t border-sky-900/50 pt-3 space-y-1.5">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
