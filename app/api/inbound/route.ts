@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
     const { source, original, identityFlags, tracking } = analyseEmailSource(raw);
 
     const blocklist = await getUrlhausBlocklist();
+    // No region argument: this request originates from the inbound-email
+    // Worker, so geo headers describe the Worker's edge location, not the
+    // forwarder's. Guessing from them would be worse than the default. If
+    // per-region email checking is wanted later, derive it from the
+    // forwarding address, not the connection.
     const results = await analyzeContent(original, blocklist);
 
     const pixelReport = tracking.pixelReport.hasTrackingPixels ? tracking.pixelReport : null;

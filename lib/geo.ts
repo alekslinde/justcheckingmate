@@ -11,9 +11,24 @@
 
 const AU_REGIONS = new Set(["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]);
 
-export function locationFromHeaders(headers: Headers): string {
+/**
+ * ISO 3166-1 alpha-2 country code from the platform geo headers, or "" when
+ * absent or malformed.
+ *
+ * Separate from locationFromHeaders: this feeds region-pack selection, which
+ * needs a machine-readable code, while locationFromHeaders produces the coarse
+ * human-readable string that gets stored. Callers must treat "" as "unknown"
+ * and fall back to the default region — geo headers are absent in local dev and
+ * behind some privacy proxies.
+ */
+export function countryFromHeaders(headers: Headers): string {
   const country = (headers.get("x-vercel-ip-country") ?? "").toUpperCase();
-  if (!/^[A-Z]{2}$/.test(country)) return "";
+  return /^[A-Z]{2}$/.test(country) ? country : "";
+}
+
+export function locationFromHeaders(headers: Headers): string {
+  const country = countryFromHeaders(headers);
+  if (!country) return "";
 
   if (country === "AU") {
     const region = (headers.get("x-vercel-ip-country-region") ?? "").toUpperCase();

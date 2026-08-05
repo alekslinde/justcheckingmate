@@ -3,7 +3,7 @@ import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanit
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl } from "@/lib/urlExpander";
-import { resolveRegionPack, DEFAULT_REGION } from "@/lib/regions";
+import { resolveRegionPack, type RegionInput } from "@/lib/regions";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 export type { PhoneIntel };
@@ -25,31 +25,24 @@ export interface CheckResult {
 // Signals live in region packs (lib/regions/), not here. The scoring logic below
 // is shared by every region; only the data it matches against changes.
 //
-// Phase 1 resolves the default pack at module load, preserving today's
-// AU-only behaviour exactly. Phase 2 threads a region argument through the
-// checkers so this becomes a per-call lookup.
-const PACK = resolveRegionPack(DEFAULT_REGION);
-
-const {
-  urgencyWords: URGENCY_WORDS,
-  rewardWords: REWARD_WORDS,
-  requestWords: REQUEST_WORDS,
-  shortenerDomains: SCAM_DOMAINS,
-  suspiciousTlds: SUSPICIOUS_TLDS,
-  ipfsGateways: IPFS_GATEWAYS,
-  suspiciousHosting: SUSPICIOUS_HOSTING,
-  hostingScores: HOSTING_SCORES,
-  fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
-  callbackBrands: CALLBACK_BRANDS,
-  identityRereg: MYID_REREG_PHRASES,
-  legitDomains: LEGIT_AU_DOMAINS,
-} = PACK;
+// Every checker takes an optional region code and resolves its pack per call.
+// Resolution is memoised and falls back to DEFAULT_REGION for anything
+// unrecognised, so omitting the argument preserves the original AU behaviour.
 
 // ────────────────────────────────────────────────────────────────────────────
 // URL checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
+export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    shortenerDomains: SCAM_DOMAINS,
+    suspiciousTlds: SUSPICIOUS_TLDS,
+    ipfsGateways: IPFS_GATEWAYS,
+    suspiciousHosting: SUSPICIOUS_HOSTING,
+    hostingScores: HOSTING_SCORES,
+    legitDomains: LEGIT_AU_DOMAINS,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   let urlObj: URL | null = null;
@@ -204,7 +197,15 @@ export function checkUrl(raw: string, blocklist?: Set<string>): CheckResult {
 // SMS checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
+export function checkSms(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    urgencyWords: URGENCY_WORDS,
+    rewardWords: REWARD_WORDS,
+    requestWords: REQUEST_WORDS,
+    fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
+    identityRereg: MYID_REREG_PHRASES,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -474,7 +475,12 @@ export function checkSms(text: string, blocklist?: Set<string>): CheckResult {
 // Email checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
+export function checkEmail(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    suspiciousTlds: SUSPICIOUS_TLDS,
+    callbackBrands: CALLBACK_BRANDS,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -565,7 +571,10 @@ export function checkEmail(text: string, blocklist?: Set<string>): CheckResult {
 // Phone number checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkPhone(number: string): CheckResult {
+// `_region` is accepted but unused: phone analysis is still hardcoded to the AU
+// number plan inside phoneIntel. Phase 4 generalises that and will consume this
+// argument — taking it now means callers and tests don't churn again then.
+export function checkPhone(number: string, _region?: RegionInput): CheckResult {
   const intel = analysePhone(number);
   const flags: string[] = [];
   let score = 0;
@@ -629,7 +638,15 @@ export function checkPhone(number: string): CheckResult {
 // Custom / free-text checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkCustom(text: string, blocklist?: Set<string>): CheckResult {
+export function checkCustom(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+  const PACK = resolveRegionPack(region);
+  const {
+    urgencyWords: URGENCY_WORDS,
+    rewardWords: REWARD_WORDS,
+    requestWords: REQUEST_WORDS,
+    fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
+    identityRereg: MYID_REREG_PHRASES,
+  } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -727,13 +744,13 @@ const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
 // Expands a shortened URL and merges the destination analysis into the base result.
 // If expansion fails or times out, the base result is returned unchanged.
-async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>): Promise<CheckResult> {
+async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput): Promise<CheckResult> {
   if (!isShortened(url)) return base;
 
   const { expandedUrl, hops } = await expandUrl(url);
   if (!expandedUrl) return base;
 
-  const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist);
+  const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
   const destDefanged = defang(expandedUrl);
   const mergedScore = Math.min(Math.max(base.score, destResult.score), 100);
   const mergedFlags = [
@@ -746,7 +763,7 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
   return { verdict, score: mergedScore, flags: mergedFlags, details, expandedUrl: destDefanged, category: "URL" };
 }
 
-export async function analyzeContent(content: string, blocklist?: Set<string>): Promise<AnalyzedIdentifier[]> {
+export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput): Promise<AnalyzedIdentifier[]> {
   const text = content.trim();
   if (!text) return [];
 
@@ -762,37 +779,37 @@ export async function analyzeContent(content: string, blocklist?: Set<string>): 
 
   // Overall "message" assessment, by detected type.
   if (type === "email") {
-    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text, blocklist) });
+    out.push({ kind: "email", value: headers.fromAddress || ids.scamEmail || "sender", result: checkEmail(text, blocklist, region) });
   } else if (type === "sms") {
-    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text, blocklist) });
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkSms(text, blocklist, region) });
   } else if (type === "phone") {
-    out.push({ kind: "phone", value: text, result: checkPhone(text) });
+    out.push({ kind: "phone", value: text, result: checkPhone(text, region) });
   } else if (type === "url") {
     // A bare URL is assessed by the per-URL cards below; if the regex missed it
     // (e.g. a "www." host with no scheme), assess the whole string as a URL.
     if (urls.length === 0) {
       const normalised = normaliseForAnalysis(text);
-      const base = checkUrl(normalised, blocklist);
-      const result = await applyExpansion(normalised, base, blocklist);
+      const base = checkUrl(normalised, blocklist, region);
+      const result = await applyExpansion(normalised, base, blocklist, region);
       out.push({ kind: "url", value: text, result });
     }
   } else {
-    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
+    out.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist, region) });
   }
 
   // A card per embedded URL (normalised first to close percent-encoding tricks).
   // Expansion runs for each URL that resolves to a known shortener host.
   for (const u of urls) {
     const normalised = normaliseForAnalysis(u);
-    const base = checkUrl(normalised, blocklist);
-    const result = await applyExpansion(normalised, base, blocklist);
+    const base = checkUrl(normalised, blocklist, region);
+    const result = await applyExpansion(normalised, base, blocklist, region);
     out.push({ kind: "url", value: u, result });
   }
 
   // Phone card only when the whole input is a number (extractIdentifiers is
   // deliberately conservative about in-text numbers).
   if (ids.scamPhone && type !== "phone") {
-    out.push({ kind: "phone", value: ids.scamPhone, result: checkPhone(ids.scamPhone) });
+    out.push({ kind: "phone", value: ids.scamPhone, result: checkPhone(ids.scamPhone, region) });
   }
 
   // De-dup by kind+value, keep highest score first, always return ≥1 card.
@@ -804,7 +821,7 @@ export async function analyzeContent(content: string, blocklist?: Set<string>): 
     return true;
   });
   if (deduped.length === 0) {
-    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist) });
+    deduped.push({ kind: "message", value: text.slice(0, 80), result: checkCustom(text, blocklist, region) });
   }
   return deduped.sort((a, b) => b.result.score - a.result.score).slice(0, MAX_CARDS);
 }

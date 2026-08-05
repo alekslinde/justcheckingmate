@@ -7,6 +7,14 @@ import type { RegionCode, RegionDefinition, RegionPack } from "./types";
 
 export type { RegionCode, RegionCoverage, RegionPack } from "./types";
 
+/**
+ * What callers may pass as a region. Deliberately wider than RegionCode: the
+ * value usually originates from a request header or user setting, so it can be
+ * absent or arbitrary. resolveRegionPack narrows it, falling back to the
+ * default rather than throwing.
+ */
+export type RegionInput = RegionCode | string | null | undefined;
+
 /** The region used when none is specified. */
 export const DEFAULT_REGION: RegionCode = "AU";
 
