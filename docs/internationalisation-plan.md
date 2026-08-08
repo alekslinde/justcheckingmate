@@ -17,6 +17,11 @@
 
 ## Current state (audited 2026-08-03)
 
+> **Superseded by Phases 1–5.** The table below is the original audit, kept for
+> provenance. As of Phase 5 the AU signal data lives entirely in
+> `lib/regions/au.ts` and `lib/scamDetector.ts` holds no AU constants — the
+> brand lists that survived Phase 1 were extracted in Phase 5.
+
 AU-specific code is concentrated, not smeared:
 
 | File | AU refs | Nature |
@@ -224,21 +229,113 @@ legit domains — not number-plan work. A `phonePlan` is optional per region.
 
 ---
 
-## Phase 5 — Second English region (UK)
+## Phase 5 — Second English region (UK) ✅ done
 
 **Outcome:** proof the pack interface generalises. UK chosen because scam
 playbooks are near-identical and the language is shared.
 
-Pack contents: HMRC / DVLA / DWP / NHS / Royal Mail / TV Licensing, Dart Charge
-and toll equivalents, `gov.uk` + agency legit-domain list, UK bank brands,
-National Insurance / "NI number suspended" phrasing, Action Fraud as the
-reporting body.
+1. ✅ `lib/regions/gb.ts` — HMRC / DVLA / DWP / NHS / Royal Mail / TV Licensing /
+   Home Office / FCA, Dart Charge + congestion-charge + ULEZ toll equivalents,
+   Royal Mail and Evri parcel lures, pension-release lures (pension cold-calling
+   has been illegal in the UK since 2019, so the approach is itself the tell),
+   `gov.uk` + agency legit-domain list, UK high-street and challenger bank
+   brands, National Insurance / "NI number suspended" phrasing, Government
+   Gateway and GOV.UK One Login re-registration lures, and Action Fraud as the
+   reporting body.
+2. ✅ Registered in `regions/index.ts`; `RegionCode` widened to `"AU" | "GB" |
+   "ZZ"`. A UK visitor now resolves to the GB pack from the geo header with no
+   UI change — `REGION_OPTIONS` is derived from the registry, so the picker
+   picked it up for free.
 
-**Gate:** UK fixtures detect correctly; AU suite still untouched and green.
-If Phase 5 requires changing the Phase 1 interface, that's expected — better
-found here than at region #5.
+**The interface did have to change** — as the plan anticipated. The Phase 1
+extraction moved the *keyword* lists into packs but left four **brand** lists
+hardcoded inside `scamDetector`, so a UK pack would have scored `commbank` and
+`linkt` typosquats and missed `hsbc` and `dvla` entirely. Now pack data:
 
-Then repeat cheaply for **US, NZ, CA, IE** as separate follow-ups.
+- `typosquatBrands` — URL-checker brand list, `{ substring, word }`
+- `trustedHostSuffixes` — replaces the hardcoded `.gov.au` / `.com.au` guard
+- `brandMentions` — SMS-body consumer brands, same split
+- `officialSenderNames` — email sender-domain mismatch names
+- `cryptoExchanges` — the crypto subset of the callback brands
+- `bankIdentifiers` — national routing identifier (`bsb` / `sort code`)
+
+The `substring` / `word` split is load-bearing, not cosmetic. Both lists are
+matched against unanchored text, so short entries collide: the pre-existing AU
+code excluded bare `agl` from the URL list entirely to avoid scoring `eagle.org`
+and `bagelshop.io`. The UK needs `bt`, `ee`, `o2`, `sky` and `eon`, which have
+the same problem and are too important to drop. Word-boundary matching lets both
+regions keep them — `bt-billing.top` hits, `subtleshop.com` doesn't. This is a
+small *gain* in AU coverage: `agl-billing.top` now scores where it previously
+didn't.
+
+**Bugs found by exercising a second region**
+
+Two were invisible while AU was the only pack, the same class of seam Phase 4
+hit:
+
+- **`checkEmail` dropped the region.** It delegates body scoring to `checkSms`
+  but called it without forwarding `region`, so *every* email check ran the AU
+  signal set no matter which pack the caller asked for — while the URL and SMS
+  checkers correctly used the requested pack. A UK email was scored against
+  Australian agencies.
+- **Area codes assumed a fixed two-digit width.** `plan.areaCodes?.[national.
+  slice(0, 2)]` fits Australia's uniform STD codes (02/03/07/08) but matches
+  nothing in a mixed-width plan: the UK has `020` alongside `0161` and `0113`.
+  Replaced with `areaFor()`, a longest-prefix match, so a more specific code
+  wins over a shorter one sharing its prefix.
+- **The bond-redirect composite was half-AU.** It pairs a rental context with a
+  bank-detail ask, but the ask half hardcoded `bsb` — meaningless in the UK,
+  where the equivalent request is for a sort code. Half the composite silently
+  never matched outside Australia, leaving only the generic "bank details"
+  phrasings. Now `pack.bankIdentifiers`.
+
+**Deviations**
+
+- **The pack code is `GB`, not `UK`.** ISO 3166-1 has no `UK`, and Phase 4
+  already established that libphonenumber resolves the invalid `"UK"` to
+  *Switzerland*. `UK` therefore routes to the base-only fallback rather than
+  being silently treated as GB; user-facing copy still reads "United Kingdom".
+- **No `senderIdFlag` for GB.** The UK has no ACMA-style register: the
+  Ofcom/MEF SenderID Protection Registry *blocks* unregistered senders rather
+  than labelling them "Unverified", so there is no label for a scammer to
+  explain away. The field is omitted and the rule skips itself, per the
+  interface contract — asserting foreign regulation would simply be false.
+- **The crypto-TOAD flag now names the brand that matched.** It previously
+  hardcoded "CoinSpot, Swyftx and Binance" into the copy shown to every region,
+  and its phone-number regex was AU-only (`+61`/`1800`), so the composite could
+  never fire outside Australia at all.
+- **`areaCodes` for GB covers major population centres, not the whole plan.**
+  The UK has several hundred geographic codes. A miss degrades to "no area
+  attributed", which is honest; enumerating the full Ofcom plan is not worth the
+  maintenance burden.
+
+**Known imprecision, not fixed here.** `authorityMentions` drives a flag reading
+"Claims to be from a government agency", but both packs include private bodies
+in that list — Royal Mail and TV Licensing for GB, Australia Post and Linkt for
+AU. The wording is therefore slightly wrong for those senders in *both* regions.
+It's pre-existing and consistent, the `noLinkSendersFlag` copy is accurate, and
+splitting the list would touch shared scoring logic — so it's left as a
+follow-up rather than widened into this phase.
+
+**Gate:** ✅ `npm test` green — 681 passing, with the 638 pre-existing tests
+**untouched**, including zero changes to `scamDetector.test.ts` (the load-bearing
+Phase 1 check). New `__tests__/regionGb.test.ts` (40 tests) covers UK SMS / URL /
+email / phone fixtures, pack-shape invariants, and region isolation asserted in
+*both* directions — AU signals must not reach a UK check and vice versa. Every
+new test was mutation-checked: aliasing `GB` to `AU` fails 27 of 40, and each of
+the two bug fixes above was reverted to confirm its test actually bites. One
+isolation test was rewritten after the first version passed with the region-
+forwarding bug reinstated — `checkEmail`'s own region-aware rules masked the
+delegated call, so the fixture now avoids every other divergence path.
+
+Scope: new `lib/regions/gb.ts`, `lib/regions/types.ts`, `lib/regions/au.ts`,
+`lib/regions/base.ts`, `lib/regions/index.ts`, `lib/regions/rest-of-world.ts`,
+`lib/scamDetector.ts`, `lib/phoneIntel.ts`, new `__tests__/regionGb.test.ts`,
+`__tests__/regionResolver.test.ts`.
+
+Then repeat cheaply for **US, NZ, CA, IE** as separate follow-ups. The interface
+should now be stable — Phase 5 absorbed the brand-list extraction that region #2
+exposed, and US/NZ/CA/IE need no number-plan work (Phase 4 note).
 
 ---
 
@@ -263,7 +360,12 @@ this).
 ## Sequencing
 
 Phases 1 → 2 → 3 are prerequisites and should land in order. Phase 4 is
-independent of 3 and can be parallelised. Phase 5 validates 1–4. Phase 6 is a
-separate product decision.
+independent of 3 and can be parallelised. Phase 5 validates 1–4 — and did:
+it found two region-seam bugs and one missing extraction that AU-only testing
+could not surface. Phase 6 is a separate product decision.
+
+Phases 1–5 are complete. Next up is either the US/NZ/CA/IE follow-ups (cheap,
+data-only) or the Phase 6 locale decision, which the plan recommends deferring
+until there's real per-region demand signal.
 
 Each phase = its own branch, own commit, tests green before merge.

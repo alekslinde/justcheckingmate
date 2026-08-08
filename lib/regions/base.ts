@@ -177,6 +177,11 @@ const CALLBACK_BRANDS = [
   "docusign", "coinbase", "bitcoin",
 ];
 
+// Globally-operating crypto exchanges used in the "your account is suspended,
+// call us" SMS script. Binance and Coinbase operate in essentially every market,
+// so they sit in base; regions append their domestic exchanges.
+const CRYPTO_EXCHANGES = ["binance", "coinbase", "kraken", "crypto exchange"];
+
 export const BASE_SIGNALS: BaseSignals = {
   urgency: {
     generic: URGENCY_GENERIC,
@@ -191,4 +196,5 @@ export const BASE_SIGNALS: BaseSignals = {
   hostingScores: HOSTING_SCORES,
   fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
   callbackBrands: CALLBACK_BRANDS,
+  cryptoExchanges: CRYPTO_EXCHANGES,
 };

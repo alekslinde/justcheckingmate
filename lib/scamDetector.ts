@@ -47,6 +47,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     suspiciousHosting: SUSPICIOUS_HOSTING,
     hostingScores: HOSTING_SCORES,
     legitDomains: LEGIT_AU_DOMAINS,
+    typosquatBrands: TYPOSQUAT_BRANDS,
   } = PACK;
   const flags: string[] = [];
   let score = 0;
@@ -142,33 +143,30 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     score += 15;
   }
 
-  // Typosquatting common AU brands
-  const auBrands = ["commbank", "westpac", "anz", "nab", "mybank", "mygov", "centrelink", "medicare", "paypal", "ebay", "amazon", "netflix", "telstra", "optus", "tpg",
-    // Toll operators (D1 / #53) and immigration portals (D14 / #50)
-    "linkt", "eastlink", "etoll", "homeaffairs", "dibp", "immi",
-    // Food delivery platforms (D6 / #66)
-    "doordash", "ubereats", "menulog", "deliveroo",
-    // Super funds (D3/D4 / #64)
-    "australiansuper", "unisuper", "sunsuper", "cbus", "hesta", "ampsuper",
-    // Loyalty programs (D2 / #81) — ACCC Feb 2026 Qantas impersonation alert;
-    // top-3 impersonated AU loyalty brands. Already in emailHeaders.ts
-    // IMPERSONATED_BRANDS; this closes the URL-checker gap. Real domains end in
-    // .com.au, which the guard below already excludes.
-    "qantas", "velocity",
-    // Energy retailers (D3 / #121). AGL and Origin Energy both have documented
-    // AU phishing campaigns; August is peak winter billing season. NOTE: bare
-    // "agl" is deliberately NOT listed here — this list is matched with
-    // hostname.includes(), so "agl" would score +45 on eagle.org, flagler.com,
-    // bagelshop.io and similar. The longer "agl-" prefixed forms below carry
-    // the same campaign signal without the collision.
-    "originenergy", "energyaustralia", "alintaenergy",
-    // Crypto exchanges (D6 / #123). Same substring caveat: "binance" is safe
-    // (long enough to be distinctive), but see brandMentions for the SMS side.
-    "coinspot", "swyftx", "binance"];
-  for (const brand of auBrands) {
-    if (hostname.includes(brand) && !hostname.endsWith(".gov.au") && !hostname.endsWith(".com.au")) {
-      flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
-      score += 45;
+  // Typosquatted brands for this region. The brand list and the trusted
+  // suffixes that exempt it both come from the pack — which brands get
+  // impersonated, and which national domains they legitimately mail from, are
+  // the most region-specific signals we have.
+  //
+  // A hostname under one of the region's own suffixes is exempt: "anz.com.au"
+  // and "hmrc.gov.uk" contain a brand name legitimately.
+  const onTrustedSuffix = PACK.trustedHostSuffixes.some((s) => hostname.endsWith(s));
+  if (!onTrustedSuffix) {
+    // Word-boundary brands are matched against the hostname with separators
+    // treated as boundaries, so "agl-billing.com" hits while "bagelshop.io"
+    // and "flagler.com" don't.
+    const hostWords = hostname.split(/[^a-z0-9]+/i).filter(Boolean);
+    for (const brand of TYPOSQUAT_BRANDS.substring) {
+      if (hostname.includes(brand)) {
+        flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
+        score += 45;
+      }
+    }
+    for (const brand of TYPOSQUAT_BRANDS.word) {
+      if (hostWords.includes(brand)) {
+        flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
+        score += 45;
+      }
     }
   }
 
@@ -220,7 +218,10 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     requestWords: REQUEST_WORDS,
     fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
     identityRereg: MYID_REREG_PHRASES,
+    brandMentions: BRAND_MENTIONS,
+    bankIdentifiers: BANK_IDENTIFIERS,
   } = PACK;
+  const CRYPTO_TOAD_BRANDS = PACK.cryptoExchanges;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
@@ -247,8 +248,14 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   // context plus a bank-detail ask. Neither half scores here on its own —
   // "rental bond" is ordinary tenancy language and "bsb" already sits in
   // REQUEST_WORDS — but together they're the signature of bond redirection.
+  //
+  // The bank-ask half draws its national identifier from the pack: "bsb" is
+  // Australian and means nothing in the UK, where the equivalent ask is a sort
+  // code. Hardcoding either would silently drop half the composite in the other
+  // region, leaving only the generic phrasings.
   const hasRentalContext = /rental bond|holding deposit|lease agreement|property manager/i.test(text);
-  const hasBankAsk = /bsb|bank details|account number|account no\b/i.test(text);
+  const hasBankAsk = /bank details|account number|account no\b/i.test(text) ||
+    BANK_IDENTIFIERS.some((w) => lower.includes(w));
   if (hasRentalContext && hasBankAsk) {
     flags.push("Property bond fraud pattern — scammers intercept rental communications to redirect bond payments. Always verify bank detail changes by calling the agency on a number from their official website, never one in the message.");
     score += 25;
@@ -406,32 +413,13 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   }
 
   // Consumer brands impersonated in SMS but not government agencies, so they get
-  // their own flag wording. Food delivery platforms (D6 / #66) and NBN Co
-  // disconnection-threat smishing (D7 / #67).
-  const brandMentions = ["doordash", "uber eats", "ubereats", "menulog", "deliveroo",
-    "nbn co", "nbnco", "nbn", "national broadband network",
-    // Fake-recruiter SMS impersonation (D3 / #82 / Scamwatch June 2026). Amazon
-    // does text customers legitimately (medium FP for "amazon" alone); YouTube
-    // never cold-recruits by SMS. The jobSignals composite above is the stronger
-    // signal when the recruiter pattern is present.
-    "amazon", "youtube",
-    // Energy retailers impersonated in billing/refund SMS scams (D3 / #121).
-    // MailGuard documented multi-step Origin Energy "$150 overpayment" and
-    // "billing error" campaigns; AGL warns customers about fake-site SMS.
-    "origin energy", "originenergy", "energy australia", "energyaustralia",
-    "alinta energy",
-    // AU crypto exchanges (D6 / #123) — "suspicious login" / "account
-    // suspended" credential and 2FA harvesting.
-    "coinspot", "swyftx", "binance", "crypto exchange"];
-
-  // Brands too short to match as bare substrings — "agl" would fire on "bagel",
-  // "eagle" and "flagship", so these are matched on word boundaries instead.
-  // Same flag and score as brandMentions; separated only by matching strategy.
-  const shortBrandMentions = ["agl"];
-  const shortBrandHit = shortBrandMentions.some((b) =>
+  // their own flag wording. Which brands these are is regional, so the lists
+  // come from the pack; the `word` list is matched on boundaries because short
+  // names like "agl" would otherwise fire on "bagel" and "flagship".
+  const shortBrandHit = BRAND_MENTIONS.word.some((b) =>
     new RegExp(`\\b${b}\\b`, "i").test(lower));
 
-  if (shortBrandHit || brandMentions.some((b) => lower.includes(b))) {
+  if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => lower.includes(b))) {
     flags.push("Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message");
     score += 20;
   }
@@ -448,14 +436,24 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   // 2FA codes or moving funds to a "safe wallet". Real exchanges never phone
   // customers about account security. Requires an explicit number so ordinary
   // "your CoinSpot deposit cleared" texts stay unflagged.
-  const CRYPTO_TOAD_BRANDS = ["coinspot", "swyftx", "binance"];
-  const hasCryptoBrand = CRYPTO_TOAD_BRANDS.some((b) => lower.includes(b));
-  const hasPhoneNumber = /(\+?61|0)[\s-]?[2-478](?:[\s-]?\d){8}|\b1[38]00[\s-]?\d{3}[\s-]?\d{3}\b/.test(text);
+  //
+  // Brands come from the pack's callback list (base crypto names plus the
+  // region's own exchanges) rather than a hardcoded AU trio, and the flag names
+  // whichever brand actually matched — the old copy asserted "CoinSpot, Swyftx
+  // and Binance" to every region.
+  const cryptoToadHit = CRYPTO_TOAD_BRANDS.find((b) => lower.includes(b));
+  // Region-agnostic: an international +NN number, a national trunk-prefixed
+  // number, or a run of digits long enough to dial. The previous AU-only
+  // pattern meant this composite could never fire outside Australia.
+  const hasPhoneNumber =
+    /\+\d{1,3}[\s-]?(?:\d[\s-]?){6,14}\d/.test(text) ||
+    /\b0\d(?:[\s-]?\d){7,10}\b/.test(text) ||
+    /\b(?:\d[\s-]?){9,14}\d\b/.test(text);
   const mentionsCalling = /\bcall\b|\bphone\b|\bcontact (support|us)\b|\bhelpline\b/i.test(text);
   const hasUrl = /https?:\/\/|www\.|\.[a-z]{2,}\//i.test(text);
 
-  if (hasCryptoBrand && hasPhoneNumber && mentionsCalling && !hasUrl) {
-    flags.push("Crypto exchange asking you to phone them — CoinSpot, Swyftx and Binance never ring customers or ask you to call about account security. The scam happens on the call: they'll talk you through handing over 2FA codes or moving funds to a \"safe wallet\". Hang up and log in through the official app instead.");
+  if (cryptoToadHit && hasPhoneNumber && mentionsCalling && !hasUrl) {
+    flags.push(`Crypto exchange asking you to phone them — ${cryptoToadHit} and other exchanges never ring customers or ask you to call about account security. The scam happens on the call: they'll talk you through handing over 2FA codes or moving funds to a "safe wallet". Hang up and log in through the official app instead.`);
     score += 30;
   }
 
@@ -497,13 +495,18 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   const {
     suspiciousTlds: SUSPICIOUS_TLDS,
     callbackBrands: CALLBACK_BRANDS,
+    officialSenderNames: OFFICIAL_SENDER_NAMES,
+    trustedHostSuffixes: TRUSTED_HOST_SUFFIXES,
   } = PACK;
   const flags: string[] = [];
   let score = 0;
   const lower = text.toLowerCase();
 
-  // Reuse SMS signals for body content
-  const smsCheck = checkSms(text, blocklist);
+  // Reuse SMS signals for body content. The region must be forwarded — without
+  // it every email check ran the default (AU) signal set regardless of the
+  // caller's region, so a UK email was scored against Australian agencies and
+  // brands while the URL and SMS checkers correctly used the UK pack.
+  const smsCheck = checkSms(text, blocklist, region);
   flags.push(...smsCheck.flags);
   score += Math.floor(smsCheck.score * 0.7); // Email gets a bit more lenience
 
@@ -517,9 +520,14 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
       flags.push(`Sender email uses a dodgy domain extension (${suspTlds})`);
       score += 30;
     }
-    // Impersonation pattern: official name in the body but a mismatched domain
-    const officialNames = ["ato", "mygov", "centrelink", "medicare", "commbank", "westpac", "anz", "nab"];
-    if (officialNames.some((n) => lower.includes(n)) && senderDomain && !senderDomain.endsWith(".gov.au") && !senderDomain.endsWith(".com.au")) {
+    // Impersonation pattern: official name in the body but a mismatched domain.
+    // Both the names and the domains that count as matching are regional; a
+    // region with no national suffixes skips the rule rather than calling every
+    // sender an impersonator.
+    const onTrustedSuffix = TRUSTED_HOST_SUFFIXES.some((s) => senderDomain.endsWith(s));
+    if (TRUSTED_HOST_SUFFIXES.length > 0 &&
+        OFFICIAL_SENDER_NAMES.some((n) => lower.includes(n)) &&
+        senderDomain && !onTrustedSuffix) {
       flags.push(`Sender claims to be official but domain doesn't match — textbook impersonation`);
       score += 40;
     }

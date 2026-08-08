@@ -38,6 +38,10 @@ export const REST_OF_WORLD: RegionDefinition = {
   foreignAuthorityMentions: [],
   foreignAuthorityFlag: "",
 
+  // No national routing identifier; the composite falls back to the generic
+  // "bank details" / "account number" phrasings alone.
+  bankIdentifiers: [],
+
   identityRereg: [],
   identityReregFlag: "",
 
@@ -45,6 +49,15 @@ export const REST_OF_WORLD: RegionDefinition = {
   // globally-promoted fake platforms still applies, so keep the wording generic.
   fakeInvestmentPlatformFlag: (platform: string) =>
     `Named fraudulent investment platform detected ("${platform}") — financial regulators have issued specific warnings that this is a scam. Do not invest.`,
+
+  // No national brand lists. Impersonated brands are the most region-specific
+  // signal we have, and a global "top brands" list would be mostly noise —
+  // typosquat detection here relies on the structural signals (hyphens, depth,
+  // suspicious TLDs, shorteners) that need no brand knowledge.
+  typosquatBrands: { substring: [], word: [] },
+  trustedHostSuffixes: [],
+  brandMentions: { substring: [], word: [] },
+  officialSenderNames: [],
 
   legitDomains: [],
   // No allowlist, so these are never reached — present to satisfy the shape.

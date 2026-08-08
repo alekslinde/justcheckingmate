@@ -3,6 +3,7 @@
 
 import { BASE_SIGNALS } from "./base";
 import { AU } from "./au";
+import { GB } from "./gb";
 import { REST_OF_WORLD } from "./rest-of-world";
 import type { RegionCode, RegionDefinition, RegionPack } from "./types";
 
@@ -28,6 +29,7 @@ export const FALLBACK_REGION: RegionCode = "ZZ";
 
 const REGIONS: Record<RegionCode, RegionDefinition> = {
   AU,
+  GB,
   ZZ: REST_OF_WORLD,
 };
 
@@ -74,12 +76,19 @@ function buildPack(region: RegionDefinition): RegionPack {
       ...(region.fakeInvestmentPlatforms ?? []),
     ],
     callbackBrands: [...BASE_SIGNALS.callbackBrands, ...(region.callbackBrands ?? [])],
+    cryptoExchanges: [...BASE_SIGNALS.cryptoExchanges, ...(region.cryptoExchanges ?? [])],
+
+    typosquatBrands: region.typosquatBrands,
+    trustedHostSuffixes: region.trustedHostSuffixes,
+    brandMentions: region.brandMentions,
+    officialSenderNames: region.officialSenderNames,
 
     authorityMentions: region.authorityMentions,
     noLinkSenders: region.noLinkSenders,
     noLinkSendersFlag: region.noLinkSendersFlag,
     foreignAuthorityMentions: region.foreignAuthorityMentions,
     foreignAuthorityFlag: region.foreignAuthorityFlag,
+    bankIdentifiers: region.bankIdentifiers,
     identityRereg: region.identityRereg,
     identityReregFlag: region.identityReregFlag,
     fakeInvestmentPlatformFlag: region.fakeInvestmentPlatformFlag,

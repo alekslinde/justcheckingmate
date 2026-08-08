@@ -32,6 +32,24 @@ describe("resolveRegion", () => {
     expect(resolveRegion(geo("US"))).toBe(FALLBACK_REGION);
   });
 
+  // GB is the first geo-resolvable region besides AU, so these assert that
+  // resolution actually routes a second country rather than defaulting.
+  it("routes a UK visitor to the GB pack from the geo header alone", () => {
+    expect(resolveRegion(geo("GB"))).toBe("GB");
+  });
+
+  it("prefers an explicit GB choice over a conflicting geo header", () => {
+    expect(resolveRegion(geo("AU"), "GB")).toBe("GB");
+    expect(resolveRegion(geo("GB"), "AU")).toBe("AU");
+  });
+
+  it("sends the non-ISO code 'UK' to the fallback, not to Great Britain", () => {
+    // ISO 3166-1 has no "UK", and libphonenumber resolves it to Switzerland
+    // (the Phase 4 regression). It must not be silently treated as GB.
+    expect(resolveRegion(geo("UK"))).toBe(FALLBACK_REGION);
+    expect(resolveRegion(headers(), "UK")).toBe(DEFAULT_REGION);
+  });
+
   it("ignores an unsupported explicit choice rather than pinning to it", () => {
     // Falls through to geo, so an unsupported request doesn't strand the user
     // on the default when we do know roughly where they are.
