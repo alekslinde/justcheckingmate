@@ -81,32 +81,18 @@ describe("pack invariants (every region)", () => {
   const packs = supportedRegions().map((code) => [code, resolveRegionPack(code)] as const);
 
   // requestWords is substring-matched, so a phrase containing another scores
-  // twice for one match: "updated bank details" also matches "bank details",
-  // taking the flag from +15 to +30.
+  // twice for one match. The overlap is invisible in the flag text (both
+  // phrases are listed, which reads as two findings) but doubles the score.
   //
-  // Two pre-existing overlaps in base/AU are grandfathered below. They are real
-  // double-counts, verified by hand, but removing them shifts long-established
-  // AU scores and belongs in its own change with its own threat-intel review —
-  // not smuggled into a UK region pack. They are listed explicitly rather than
-  // filtered by pattern so the debt stays visible and new ones still fail.
-  const KNOWN_OVERLAPS = new Set(["updated bank details", "mygovid"]);
-
-  it.each(packs)("%s: no new requestWord contains another requestWord", (_code, pack) => {
-    const offenders = pack.requestWords.filter(
-      (w) =>
-        !KNOWN_OVERLAPS.has(w) &&
-        pack.requestWords.some((other) => other !== w && w.includes(other)),
+  // No exemptions: the two pre-existing overlaps this originally grandfathered
+  // ("updated bank details" in base, "mygovid" in AU) are now fixed. The AU one
+  // was verdict-changing on its own — "Confirm your myGovID" reached
+  // likely_scam while the identical "Confirm your myGov" was only suspicious.
+  it.each(packs)("%s: no requestWord contains another requestWord", (_code, pack) => {
+    const offenders = pack.requestWords.filter((w) =>
+      pack.requestWords.some((other) => other !== w && w.includes(other)),
     );
     expect(offenders).toEqual([]);
-  });
-
-  it("keeps the grandfathered overlap list honest", () => {
-    // If someone fixes a known overlap, this fails and the entry must be
-    // dropped — otherwise the exemption silently outlives the defect.
-    const all = new Set(packs.flatMap(([, pack]) => pack.requestWords));
-    for (const known of KNOWN_OVERLAPS) {
-      expect(all).toContain(known);
-    }
   });
 
   it.each(packs)("%s: only lists eligibility-restricted trusted suffixes", (_code, pack) => {

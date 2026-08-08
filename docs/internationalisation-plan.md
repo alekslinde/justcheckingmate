@@ -354,14 +354,39 @@ why region #2 was worth doing.
 Four new **pack invariants** in `regions.test.ts` now enforce these structurally
 for every present and future region: no requestWord containing another, no open
 registration in the trusted list, no generic phrase among the crypto brands, and
-no word-matched brand duplicated in a substring list. Two pre-existing overlaps
-(`updated bank details`, `mygovid`) are grandfathered on an explicit list rather
-than filtered by pattern — they are genuine double-counts (+30 vs +15), but
-removing them shifts long-standing AU scores and belongs in its own change. A
-further test fails if either is ever fixed, so the exemption can't outlive the
-defect.
+no word-matched brand duplicated in a substring list.
+
+**The two pre-existing overlaps are now fixed too, with no exemptions left.**
+Both were genuine double-counts found by the new invariant:
+
+- `"mygovid"` (AU) contained `"mygov"`, already listed. This was
+  *verdict-changing on its own*: "Confirm your myGovID" scored 55
+  (`likely_scam`) while the identical "Confirm your myGov" scored 40
+  (`suspicious`) — a tier difference decided by spelling, not by evidence.
+  Removed; the real myID/myGovID rebrand lures are carried by `identityRereg`
+  and `authorityMentions`, and all still verdict `likely_scam`.
+- `"updated bank details"` (base) contained `"bank details"`. The comment
+  claimed the "updated/new/changed" qualifier was the distinguishing signal, but
+  since the unqualified phrase already matched, the qualifier did no filtering —
+  it only doubled the score.
+
+Removing that second overlap was not free, and the honest accounting matters:
+two genuine bond-redirect messages dropped from `likely_scam` (55) to
+`suspicious` (40), because they had been clearing the threshold *only* on the
+double-count. The fix is not to restore the inflation but to make the qualifier
+earn its score — a **changed-payment-details signal** (+20) now scores
+"updated/new/changed bank/payment/account details" as its own finding, gated on
+an account-detail noun being present so "we updated your address" doesn't fire.
+
+Net effect is better detection than before the fix: the two messages are back to
+`likely_scam` (60, legitimately), and **invoice/BEC redirect fraud with no
+rental context — which previously scored nothing at all — is now caught at 50**
+("our bank details have been updated, please remit to the new account number").
+It is region-agnostic, so the UK gets it for free.
 
 Every fix was mutation-checked by reverting it and confirming its test fails.
+`scamDetector.test.ts` remains **additive-only** across the whole phase: 59
+lines added, zero deleted, no existing assertion altered.
 
 **Known imprecision, not fixed here.** `authorityMentions` drives a flag reading
 "Claims to be from a government agency", but both packs include private bodies
@@ -371,7 +396,7 @@ It's pre-existing and consistent, the `noLinkSendersFlag` copy is accurate, and
 splitting the list would touch shared scoring logic — so it's left as a
 follow-up rather than widened into this phase.
 
-**Gate:** ✅ `npm test` green — 714 passing after the review fixes, with the 638 pre-existing tests
+**Gate:** ✅ `npm test` green — 725 passing after the review fixes, with the 638 pre-existing tests
 **untouched**, including zero changes to `scamDetector.test.ts` (the load-bearing
 Phase 1 check). New `__tests__/regionGb.test.ts` (40 tests) covers UK SMS / URL /
 email / phone fixtures, pack-shape invariants, and region isolation asserted in

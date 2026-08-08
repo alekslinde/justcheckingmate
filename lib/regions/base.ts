@@ -81,7 +81,15 @@ const REQUEST_WORDS = [
   // before the bond is due. Legitimate agencies rarely change payment details
   // and never under time pressure via SMS, so the "updated/new/changed"
   // qualifier is the distinguishing signal — bare "rental bond" doesn't score.
-  "updated bank details", "new account details", "changed bank account",
+  //
+  // "updated bank details" is deliberately absent: this list is
+  // substring-matched and "bank details" above already matches it, so listing
+  // both scored one phrase twice (+30 instead of +15). The qualifier did no
+  // filtering — it only inflated the score. The two entries below carry no such
+  // overlap ("account details" and "bank account" are not listed alone), so the
+  // redirect-fraud signal is unaffected; the rental *context* is what escalates
+  // it, via the bond composite in checkSms.
+  "new account details", "changed bank account",
 ];
 
 const SCAM_DOMAINS = [

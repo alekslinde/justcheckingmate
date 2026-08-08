@@ -135,7 +135,14 @@ const FOREIGN_AUTHORITY_MENTIONS = [
 // terms (tax file number, Medicare, BSB, superannuation) with no meaning in
 // other markets, so they sit here rather than in the base request list.
 const REQUEST_WORDS = [
-  "medicare", "tax file number", "tfn", "mygovid", "mygov", "centrelink",
+  // "mygovid" is deliberately absent: this list is substring-matched and
+  // "mygov" already matches it, so listing both scored one phrase twice. That
+  // was enough to change the verdict on its own — "Confirm your myGovID"
+  // reached likely_scam (55) while the identical "Confirm your myGov" was only
+  // suspicious (40), for no detection reason. The myID/myGovID rebrand lures are
+  // covered by identityRereg and authorityMentions, which carry the specific
+  // wording.
+  "medicare", "tax file number", "tfn", "mygov", "centrelink",
   "ato", "bsb",
   // Superannuation early-access phishing (D3/D4/D11 / #64). "smsf" and "early
   // super release" are AU-specific regulatory terms rarely seen outside a scam.

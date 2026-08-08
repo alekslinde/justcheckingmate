@@ -1065,4 +1065,63 @@ describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
     const result = checkSms("Your account number ending 4821 has been updated in our system.");
     expect(result.flags.some((f) => f.includes("Property bond fraud pattern"))).toBe(false);
   });
+
+  // ── Changed-payment-details signal ──────────────────────────────────────────
+  // "updated bank details" used to sit in requestWords, where it overlapped the
+  // plain "bank details" entry and double-scored one phrase. Removing the
+  // overlap dropped two genuine bond-redirect messages from likely_scam to
+  // suspicious, so the qualifier is now scored as its own signal — which also
+  // catches invoice/BEC redirect fraud that had no rental context and
+  // previously scored nothing at all.
+  const redirectFlag = (r: { flags: string[] }) =>
+    r.flags.some((f) => f.includes("presented as recently changed"));
+
+  it.each([
+    "Property manager: lease agreement finalised, updated bank details attached, pay today.",
+    "Your agent has updated bank details — please transfer the holding deposit now.",
+    "Invoice #4021: our bank details have been updated, please remit to the new account number.",
+    "Accounts: we have changed bank account, please update the account number on file.",
+  ])("flags payment details presented as changed: %s", (msg) => {
+    const result = checkSms(msg);
+    expect(redirectFlag(result)).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it.each([
+    "We updated your address in our records.",
+    "Your new account has been created, welcome aboard.",
+    "Updated delivery details: your parcel arrives Tuesday.",
+    "We have updated our privacy policy.",
+    "Your account number ending 4821 has been updated in our system.",
+  ])("does not fire the changed-details signal on %s", (msg) => {
+    expect(redirectFlag(checkSms(msg))).toBe(false);
+  });
+
+  it("scores identical phrasings identically (no substring double-count)", () => {
+    // The overlap was invisible in the flag text — both phrases were listed,
+    // reading as two findings — but doubled the score.
+    const withQualifier = checkSms("Please send your bank details today.");
+    expect(withQualifier.flags.some((f) => f.includes('"bank details", "updated bank details"'))).toBe(false);
+  });
+
+  it("does not change verdict on the myGovID/myGov spelling alone", () => {
+    // "mygovid" contained "mygov" in requestWords, so the same message scored
+    // 55 (likely_scam) or 40 (suspicious) purely on which spelling was used.
+    const withId = checkSms("Confirm your myGovID now.");
+    const without = checkSms("Confirm your myGov now.");
+    expect(withId.score).toBe(without.score);
+    expect(withId.verdict).toBe(without.verdict);
+  });
+
+  it("still detects the real myGovID re-registration lures", () => {
+    // The rebrand lures are carried by identityRereg and authorityMentions, not
+    // by the double-count that was removed.
+    for (const msg of [
+      "myGovID verification required. Confirm your identity at http://mygovid-verify.top",
+      "myGovID has been suspended. Re-verify your digital identity immediately.",
+      "ATO: confirm your myGovID and tax file number to release your refund.",
+    ]) {
+      expect(checkSms(msg).verdict).toBe("likely_scam");
+    }
+  });
 });

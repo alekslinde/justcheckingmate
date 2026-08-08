@@ -286,6 +286,23 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     score += 25;
   }
 
+  // Payment details presented as *changed* — the core of redirect fraud (D5 /
+  // #105 and invoice/BEC fraud generally). Legitimate businesses rarely change
+  // payment details mid-relationship and essentially never announce it by SMS.
+  //
+  // This is scored as its own signal rather than by listing "updated bank
+  // details" in requestWords, where it overlapped the plain "bank details"
+  // entry and silently double-scored one phrase. The qualifier is a real signal;
+  // it just has to be matched as one instead of inflating another. Requires an
+  // account-detail noun nearby so "updated your address" doesn't score.
+  const changedPaymentDetails =
+    /\b(updated?|new|changed|amended|revised)\s+(bank|payment|account|remittance)\s*(details|account|number|info)?/i.test(text) ||
+    /\b(bank|payment|account)\s+details\s+have\s+(been\s+)?(updated|changed|amended)/i.test(text);
+  if (changedPaymentDetails && hasBankAsk) {
+    flags.push("Payment details presented as recently changed — this is the signature of redirect fraud, where a scammer intercepts a real invoice or tenancy thread and substitutes their own account. Confirm any change by phoning the organisation on a number you already had, never one from the message.");
+    score += 20;
+  }
+
   // Contains a URL
   const urlMatch = text.match(/https?:\/\/[^\s]+/gi);
   if (urlMatch) {
