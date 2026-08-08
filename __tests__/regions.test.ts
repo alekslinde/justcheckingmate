@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { checkSms } from "@/lib/scamDetector";
 import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@/lib/regions";
 import { BASE_SIGNALS } from "@/lib/regions/base";
 import { AU } from "@/lib/regions/au";
@@ -109,6 +110,31 @@ describe("pack invariants (every region)", () => {
     // "crypto exchange and other exchanges never ring customers".
     for (const brand of pack.cryptoExchanges) {
       expect(brand).not.toMatch(/\b(exchange|platform|wallet|crypto)\b/i);
+    }
+  });
+
+  // Found when the US/NZ/CA/IE packs were added. Agency lists are plain string
+  // arrays with no substring/word split, and national agency acronyms are
+  // overwhelmingly three letters — so a bare `includes()` fired inside ordinary
+  // English. It was flagging "your account is fine" as government impersonation
+  // (NZ "acc" ⊂ "account"), and would have read "message" as the SSA, "security"
+  // as the SEC and "weird"/"third" as the IRD.
+  //
+  // The fix is mechanical rather than curated (mentionsAny in scamDetector
+  // boundary-matches anything ≤3 chars), so this test asserts the *behaviour*
+  // holds for every pack rather than policing list contents — a new region
+  // inherits the protection without its author opting in.
+  it.each(packs)("%s: short agency names don't fire inside ordinary words", (code, _pack) => {
+    const innocuous = [
+      "Please check your account balance today.",
+      "Your message was received and the service notice is attached.",
+      "That's weird, the third payment went through immediately.",
+      "For your security, review the craft order their team sent.",
+    ];
+    for (const text of innocuous) {
+      const flags = checkSms(text, undefined, code).flags.join(" | ").toLowerCase();
+      expect({ text, flags: flags.includes("government agency") }).toEqual({ text, flags: false });
+      expect({ text, flags: flags.includes("police authority") }).toEqual({ text, flags: false });
     }
   });
 

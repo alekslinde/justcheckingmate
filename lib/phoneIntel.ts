@@ -368,10 +368,35 @@ const SHARED_NUMBER_PLANS: Record<string, string[]> = {
   US: ["PR", "VI", "MP", "GU", "AS"],
 };
 
+/**
+ * Countries that are *peers* within one numbering plan, as opposed to
+ * territories subordinate to a parent.
+ *
+ * The distinction matters because SHARED_NUMBER_PLANS does double duty: it
+ * decides domesticity, and countryName() reverse-maps it to display a territory
+ * as its parent. That is right for Guernsey (a +44 mobile should read "United
+ * Kingdom") and wrong for Canada — a Canadian number must still display as
+ * "Canada", not "United States".
+ *
+ * So NANP peers are held separately. Found when the CA pack was added: the
+ * premium number `1-900-555-1212` scored 95 for a US user and 35 for a Canadian
+ * one, because libphonenumber resolves any bare `+1 900` to `US`. For the
+ * Canadian it therefore read as *foreign*, and the domestic-premium guard —
+ * added in Phase 4 to stop an unparseable foreign number being called domestic
+ * premium — suppressed the "this call will cost you money" warning entirely.
+ * Risk collapsed from very_high to low on the one case that costs the user
+ * directly, which is precisely the Phase 4 failure mode repeating at a new seam.
+ */
+const PLAN_PEERS: Record<string, string[]> = {
+  US: ["CA"],
+  CA: ["US", "PR", "VI", "MP", "GU", "AS"],
+};
+
 function sameCountry(parsed: PhoneNumber, home: string): boolean {
   if (!parsed.country) return false;
   if (parsed.country === home) return true;
-  return SHARED_NUMBER_PLANS[home]?.includes(parsed.country) ?? false;
+  if (SHARED_NUMBER_PLANS[home]?.includes(parsed.country)) return true;
+  return PLAN_PEERS[home]?.includes(parsed.country) ?? false;
 }
 
 /**
@@ -467,6 +492,20 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
   // own name rather than mislabelling its numbers with the fallback pack's.
   const homeName = homeCountry === pack.code ? pack.name : countryName(homeCountry);
 
+  /**
+   * Display name for a number we've judged domestic.
+   *
+   * Prefers the number's *own* resolved country over the home country's name.
+   * The two only diverge for NANP peers (see PLAN_PEERS): a Toronto number is
+   * domestic for a US user, but calling it "United States" would state
+   * something false about a number a user may well be checking precisely
+   * because it looks out-of-area. Subordinate territories are unaffected —
+   * countryName() maps Guernsey onto "United Kingdom" by design, so a +44
+   * mobile still reads as British.
+   */
+  const domesticName = (parsed?: PhoneNumber) =>
+    parsed?.country ? countryName(parsed.country) : homeName;
+
   const cleaned = raw.replace(/[\s\-().+]/g, "");
   const spoofingNotes: string[] = [];
   let spoofingRisk: PhoneIntel["spoofingRisk"] = "low";
@@ -535,7 +574,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     bump("very_high");
     return {
       lineType: "premium",
-      country: homeName,
+      country: domesticName(parsed),
       isDomestic: true,
       wangiriRisk: false,
       highScamCountry: false,
@@ -577,7 +616,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "freecall",
         region: "National — free call",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -593,7 +632,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "shared_cost",
         region: "National — shared cost",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -611,9 +650,9 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       }
       return {
         lineType: isVoip ? "voip_likely" : "mobile",
-        region: `${pack.name} mobile`,
+        region: `${domesticName(parsed)} mobile`,
         carrierHint: isVoip ? "VoIP / virtual number provider (likely)" : undefined,
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -630,7 +669,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "fixed",
         region: area,
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -646,7 +685,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "voip_likely",
         carrierHint: "VoIP / virtual number provider (likely)",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -661,7 +700,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       bump("very_high");
       return {
         lineType: "premium",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -674,7 +713,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     // Valid domestic number of a type we don't specialise on.
     return {
       lineType: "unknown",
-      country: homeName,
+      country: domesticName(parsed),
       isDomestic,
       wangiriRisk: false,
       highScamCountry: false,

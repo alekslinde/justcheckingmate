@@ -34,6 +34,42 @@ export interface CheckResult {
 // Resolution is memoised and falls back to DEFAULT_REGION for anything
 // unrecognised, so omitting the argument preserves the original AU behaviour.
 
+/**
+ * Substring match, but with word boundaries for short entries.
+ *
+ * Agency lists (`authorityMentions`, `noLinkSenders`, `foreignAuthorityMentions`)
+ * are plain string arrays rather than a BrandSet, so they have no explicit
+ * substring/word split — and national agency acronyms are overwhelmingly three
+ * letters. Plain `includes()` therefore fires inside ordinary English, which is
+ * not a theoretical risk: it was found flagging "your account is fine" as
+ * government impersonation (NZ "acc" ⊂ "account") and would have read "message"
+ * as the SSA, "security" as the SEC, and "weird"/"third" as the IRD.
+ *
+ * Entries of 3 characters or fewer are matched on \b boundaries — the same rule
+ * BrandSet's `word` list uses, applied automatically so a pack author can't
+ * forget it. Longer entries keep substring matching, which is what lets
+ * "hmrc"/"medicare" match inside punctuation and compounds as before.
+ *
+ * The threshold is length-based rather than a curated list because the failure
+ * mode is mechanical: any short token collides eventually, and a new pack should
+ * inherit the protection without anyone remembering to opt in.
+ */
+const WORD_MATCH_MAX_LEN = 3;
+function mentions(text: string, entry: string): boolean {
+  const needle = entry.toLowerCase();
+  if (needle.length > WORD_MATCH_MAX_LEN) return text.includes(needle);
+  return new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+}
+
+function mentionsAny(text: string, entries: string[]): boolean {
+  return entries.some((entry) => mentions(text, entry));
+}
+
+/** Entries matched, for the compounds that score on how many distinct hits. */
+function mentionsCount(text: string, entries: string[]): number {
+  return entries.filter((entry) => mentions(text, entry)).length;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // URL checker
 // ────────────────────────────────────────────────────────────────────────────
@@ -430,7 +466,7 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   }
 
   // Sender mentions a gov agency but is a random number
-  if (PACK.authorityMentions.some((g) => lower.includes(g.toLowerCase()))) {
+  if (mentionsAny(lower, PACK.authorityMentions)) {
     flags.push("Claims to be from a government agency — verify directly via official channels");
     score += 25;
 
@@ -438,7 +474,7 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     // link alongside one of these is a scam. Scoped to the confirmed no-link
     // senders so the flag wording stays accurate (toll operators, by contrast,
     // do use links).
-    if (urlMatch && PACK.noLinkSenders.some((s) => lower.includes(s))) {
+    if (urlMatch && mentionsAny(lower, PACK.noLinkSenders)) {
       flags.push(PACK.noLinkSendersFlag);
       score += 15;
     }
@@ -449,7 +485,7 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   // authority with no enforcement jurisdiction here demanding payment is a scam
   // signal on its own, rather than a "verify via official channels" prompt.
   // Scored +35 (vs +25).
-  if (PACK.foreignAuthorityMentions.some((a) => lower.includes(a))) {
+  if (mentionsAny(lower, PACK.foreignAuthorityMentions)) {
     flags.push(PACK.foreignAuthorityFlag);
     score += 35;
   }
@@ -576,8 +612,12 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     // region with no national suffixes skips the rule rather than calling every
     // sender an impersonator.
     const onTrustedSuffix = TRUSTED_HOST_SUFFIXES.some((s) => senderDomain.endsWith(s));
+    // Boundary-matched for short entries: every pack's sender list carries
+    // three-letter institution names ("ato", "anz", "dwp", "irs", "cra"), and as
+    // bare substrings those hit ordinary words — "cra" inside "scratch", "ird"
+    // inside "third" — which would call an unrelated sender an impersonator.
     if (TRUSTED_HOST_SUFFIXES.length > 0 &&
-        OFFICIAL_SENDER_NAMES.some((n) => lower.includes(n)) &&
+        mentionsAny(lower, OFFICIAL_SENDER_NAMES) &&
         senderDomain && !onTrustedSuffix) {
       flags.push(`Sender claims to be official but domain doesn't match — textbook impersonation`);
       score += 40;
@@ -624,7 +664,10 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   // specific — a genuine renewal email always links back to the vendor's site,
   // so hasNoUrl alone rules most legitimate mail out. Scamwatch "Fake purchase
   // callback scam" alert (June 2026).
-  const callbackBrandHits = CALLBACK_BRANDS.filter((b) => lower.includes(b)).length;
+  // Boundary-matched for short entries: the Irish pack carries "eir", which as a
+  // bare substring hits "their" and "receiving" — enough to satisfy the brand
+  // half of this compound on ordinary prose.
+  const callbackBrandHits = mentionsCount(lower, CALLBACK_BRANDS);
   const hasCallToDispute =
     /call\s.{0,30}(dispute|cancel|reverse|refund|unauthori[sz]ed)/i.test(text) ||
     /to\s+(dispute|cancel|reverse)\s+(this|the)\s+(charge|payment|order|invoice|subscription)/i.test(text);
