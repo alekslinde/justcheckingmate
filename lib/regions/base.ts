@@ -81,7 +81,15 @@ const REQUEST_WORDS = [
   // before the bond is due. Legitimate agencies rarely change payment details
   // and never under time pressure via SMS, so the "updated/new/changed"
   // qualifier is the distinguishing signal — bare "rental bond" doesn't score.
-  "updated bank details", "new account details", "changed bank account",
+  //
+  // "updated bank details" is deliberately absent: this list is
+  // substring-matched and "bank details" above already matches it, so listing
+  // both scored one phrase twice (+30 instead of +15). The qualifier did no
+  // filtering — it only inflated the score. The two entries below carry no such
+  // overlap ("account details" and "bank account" are not listed alone), so the
+  // redirect-fraud signal is unaffected; the rental *context* is what escalates
+  // it, via the bond composite in checkSms.
+  "new account details", "changed bank account",
 ];
 
 const SCAM_DOMAINS = [
@@ -177,6 +185,16 @@ const CALLBACK_BRANDS = [
   "docusign", "coinbase", "bitcoin",
 ];
 
+// Globally-operating crypto exchanges used in the "your account is suspended,
+// call us" SMS script. Binance and Coinbase operate in essentially every market,
+// so they sit in base; regions append their domestic exchanges.
+//
+// Named brands only. The TOAD flag quotes whichever entry matched, so a generic
+// phrase like "crypto exchange" would render "crypto exchange and other
+// exchanges never ring customers" — defeating the point of naming the brand.
+// The generic phrasing is still caught as a brand mention via brandMentions.
+const CRYPTO_EXCHANGES = ["binance", "coinbase", "kraken"];
+
 export const BASE_SIGNALS: BaseSignals = {
   urgency: {
     generic: URGENCY_GENERIC,
@@ -191,4 +209,5 @@ export const BASE_SIGNALS: BaseSignals = {
   hostingScores: HOSTING_SCORES,
   fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
   callbackBrands: CALLBACK_BRANDS,
+  cryptoExchanges: CRYPTO_EXCHANGES,
 };

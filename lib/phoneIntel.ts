@@ -426,6 +426,25 @@ function countryName(code: string): string {
 }
 
 /**
+ * Look up the area a national-form number falls in.
+ *
+ * Longest-prefix match, not a fixed-width slice. Australia's plan has uniform
+ * two-digit STD codes (02/03/07/08), so the original code sliced two characters
+ * — but that is an AU assumption, and most plans are mixed-width: the UK has
+ * `020` (London) alongside `0161` (Manchester) and `0113` (Leeds), and a
+ * two-character slice matches none of them. Sorting by length descending means
+ * a more specific code always wins over a shorter one that shares its prefix.
+ */
+function areaFor(plan: PhonePlan, national: string): string | undefined {
+  const codes = plan.areaCodes;
+  if (!codes) return undefined;
+  const match = Object.keys(codes)
+    .filter((code) => national.startsWith(code))
+    .sort((a, b) => b.length - a.length)[0];
+  return match ? codes[match] : undefined;
+}
+
+/**
  * Analyse a phone number.
  *
  * `region` is the region the check is running for. It decides two things: which
@@ -605,7 +624,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     }
 
     if (type === "FIXED_LINE") {
-      const area = plan.areaCodes?.[national.slice(0, 2)];
+      const area = areaFor(plan, national);
       spoofingNotes.push("Landline numbers are easy to fake — a local area code doesn't mean the caller is actually nearby or who they claim to be");
       bump("medium");
       return {

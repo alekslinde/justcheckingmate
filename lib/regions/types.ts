@@ -15,7 +15,7 @@
 // in base so a new region inherits it for free.
 
 /** ISO 3166-1 alpha-2, uppercase. */
-export type RegionCode = "AU" | "ZZ";
+export type RegionCode = "AU" | "GB" | "ZZ";
 
 /**
  * How much detection coverage a region actually has.
@@ -114,6 +114,28 @@ export interface PhonePlan {
   sharedCostFlag?: string;
 }
 
+/**
+ * Impersonated consumer brands, split by how they're matched.
+ *
+ * Extracted from scamDetector in Phase 5 — these lists were still hardcoded AU
+ * arrays inside the checkers, which meant a UK pack would have scored `commbank`
+ * and `linkt` and missed `hsbc` and `dvla` entirely. The interface holds them
+ * now because *which* brands get impersonated is the most region-specific signal
+ * there is.
+ *
+ * The `substring` / `word` split is not cosmetic. Both lists are matched against
+ * unanchored text, so a short entry collides: bare "agl" fires on "bagel",
+ * "eagle" and "flagship", and UK "eon" fires on "peon" and "neon". Anything
+ * under ~5 characters, or that reads as a common English fragment, belongs in
+ * `word` and is matched on \b boundaries instead.
+ */
+export interface BrandSet {
+  /** Distinctive enough to match as a bare substring. */
+  substring: string[];
+  /** Short or dictionary-colliding names, matched on word boundaries. */
+  word: string[];
+}
+
 /** Signals with no national tie — shared by every region. */
 export interface BaseSignals {
   urgency: Pick<UrgencyGroups, "generic" | "voiceClone">;
@@ -135,6 +157,13 @@ export interface BaseSignals {
   fakeInvestmentPlatforms: string[];
   /** Brands used as cover in callback/TOAD phishing. */
   callbackBrands: string[];
+  /**
+   * Crypto exchanges named in the "exchange rings you about your account" SMS
+   * composite. A narrower list than callbackBrands, which also carries
+   * tech-support and e-signature covers — those belong to the email invoice
+   * script, not this one. Regions append their local exchanges.
+   */
+  cryptoExchanges: string[];
 }
 
 /** The national layer, authored per country. */
@@ -166,6 +195,24 @@ export interface RegionDefinition {
   /** Copy for the foreign-authority flag. */
   foreignAuthorityFlag: string;
 
+  /**
+   * National bank-routing identifiers ("bsb" in AU, "sort code" in GB). Used by
+   * the bond-redirect composite, which pairs a rental context with a bank-detail
+   * ask — hardcoding one country's term would silently drop half the composite
+   * elsewhere.
+   *
+   * These may also appear in `requestWords`, and usually should: the two serve
+   * different rules. `requestWords` scores the bare ask ("send your sort code")
+   * additively with other solicited identifiers, while this list is one half of
+   * a composite that fires only alongside a rental context. Listing an
+   * identifier in both is intentional, not duplication.
+   *
+   * What must *not* happen is listing a phrase twice within `requestWords`
+   * itself — it is substring-matched, so "new sort code" alongside "sort code"
+   * scores one phrase twice.
+   */
+  bankIdentifiers: string[];
+
   /** Digital-identity re-registration phishing phrases. */
   identityRereg: string[];
   /** Copy for the identity re-registration flag. */
@@ -177,6 +224,49 @@ export interface RegionDefinition {
    * regulator — both vary per region.
    */
   fakeInvestmentPlatformFlag: (platform: string) => string;
+
+  /**
+   * Brands whose names appearing in a *hostname* indicate typosquatting —
+   * banks, telcos, government portals, retailers. Checked with
+   * `hostname.includes()`, excluding the region's own trusted suffixes below.
+   */
+  typosquatBrands: BrandSet;
+
+  /**
+   * Hostname suffixes that exempt a typosquat match, because a brand name under
+   * them is expected rather than suspicious.
+   *
+   * **Only eligibility-restricted suffixes belong here.** The exemption
+   * suppresses brand scoring entirely, so it is only safe where the registry
+   * verifies who may register: `.gov.au` and `.com.au` require government
+   * status or an ABN, and `.gov.uk` / `.nhs.uk` are restricted to public bodies.
+   * Open registrations must *not* be listed — `.co.uk` and `.org.uk` are sold to
+   * anyone, so exempting them would whitelist exactly the domains scammers buy
+   * (`barclays-secure-verify.co.uk` scoring no brand signal at all).
+   *
+   * This is why the field can't simply be "the region's own suffixes": that
+   * reasoning holds for Australia, where the national second-level domains are
+   * all gated, and breaks for the UK. Legitimate brands on an open suffix are
+   * handled by `legitDomains` instead, which is an explicit allowlist rather
+   * than a blanket pattern.
+   */
+  trustedHostSuffixes: string[];
+
+  /**
+   * Non-government brands impersonated in *message bodies* — delivery apps,
+   * telcos, energy retailers, exchanges. Scored lower than an authority mention
+   * and with separate copy, since "verify via official channels" reads wrong for
+   * a food-delivery text.
+   */
+  brandMentions: BrandSet;
+
+  /**
+   * Names that, appearing in an email body sent from a domain outside
+   * `trustedHostSuffixes`, indicate impersonation. Deliberately narrower than
+   * brandMentions — only bodies whose real mail always comes from a national
+   * domain, so a mismatch is meaningful rather than merely possible.
+   */
+  officialSenderNames: string[];
 
   /** Known-legitimate domains that should short-circuit URL scoring. */
   legitDomains: string[];
@@ -201,6 +291,8 @@ export interface RegionDefinition {
 
   /** Region-specific brands appended to the base callback-brand list. */
   callbackBrands?: string[];
+  /** Locally-popular crypto exchanges appended to the base exchange list. */
+  cryptoExchanges?: string[];
   /** Region-specific fraudulent platforms appended to the base list. */
   fakeInvestmentPlatforms?: string[];
   /** Region-specific reward/bait phrases appended to the base list. */
@@ -234,12 +326,19 @@ export interface RegionPack {
 
   fakeInvestmentPlatforms: string[];
   callbackBrands: string[];
+  cryptoExchanges: string[];
+
+  typosquatBrands: BrandSet;
+  trustedHostSuffixes: string[];
+  brandMentions: BrandSet;
+  officialSenderNames: string[];
 
   authorityMentions: string[];
   noLinkSenders: string[];
   noLinkSendersFlag: string;
   foreignAuthorityMentions: string[];
   foreignAuthorityFlag: string;
+  bankIdentifiers: string[];
   identityRereg: string[];
   identityReregFlag: string;
   fakeInvestmentPlatformFlag: (platform: string) => string;

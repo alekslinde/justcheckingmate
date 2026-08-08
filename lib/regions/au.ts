@@ -135,16 +135,23 @@ const FOREIGN_AUTHORITY_MENTIONS = [
 // terms (tax file number, Medicare, BSB, superannuation) with no meaning in
 // other markets, so they sit here rather than in the base request list.
 const REQUEST_WORDS = [
-  "medicare", "tax file number", "tfn", "mygovid", "mygov", "centrelink",
+  // "mygovid" is deliberately absent: this list is substring-matched and
+  // "mygov" already matches it, so listing both scored one phrase twice. That
+  // was enough to change the verdict on its own — "Confirm your myGovID"
+  // reached likely_scam (55) while the identical "Confirm your myGov" was only
+  // suspicious (40), for no detection reason. The myID/myGovID rebrand lures are
+  // covered by identityRereg and authorityMentions, which carry the specific
+  // wording.
+  "medicare", "tax file number", "tfn", "mygov", "centrelink",
   "ato", "bsb",
   // Superannuation early-access phishing (D3/D4/D11 / #64). "smsf" and "early
   // super release" are AU-specific regulatory terms rarely seen outside a scam.
   "access your super", "unlock your super", "smsf", "self managed super",
   "early super release", "super withdrawal", "superannuation transfer",
   "early access to super",
-  // Rental/property bond redirect fraud (D5 / #105) — the AU-specific banking
-  // identifier variant; the generic "updated bank details" phrasing is in base.
-  "new bsb",
+  // Rental/property bond redirect fraud (D5 / #105) is covered by "bsb" above
+  // plus the bond composite, which reads bankIdentifiers. A separate "new bsb"
+  // entry would double-score one phrase, since requestWords is substring-matched.
 ];
 
 // ASIC-regulated products are legally prohibited from being promoted as
@@ -164,6 +171,66 @@ const LEGIT_DOMAINS = [
 // coinbase/bitcoin entries, so it reuses that signal rather than adding a
 // parallel one.
 const CALLBACK_BRANDS = ["coinspot", "swyftx", "binance"];
+
+// Typosquatted brands (URL checker). Matched with hostname.includes(), so
+// entries must be long enough to be distinctive — see TYPOSQUAT_WORD below for
+// the ones that aren't.
+const TYPOSQUAT_BRANDS = [
+  "commbank", "westpac", "anz", "nab", "mybank", "mygov", "centrelink",
+  "medicare", "paypal", "ebay", "amazon", "netflix", "telstra", "optus", "tpg",
+  // Toll operators (D1 / #53) and immigration portals (D14 / #50)
+  "linkt", "eastlink", "etoll", "homeaffairs", "dibp", "immi",
+  // Food delivery platforms (D6 / #66)
+  "doordash", "ubereats", "menulog", "deliveroo",
+  // Super funds (D3/D4 / #64)
+  "australiansuper", "unisuper", "sunsuper", "cbus", "hesta", "ampsuper",
+  // Loyalty programs (D2 / #81) — ACCC Feb 2026 Qantas impersonation alert;
+  // top-3 impersonated AU loyalty brands. Already in emailHeaders.ts
+  // IMPERSONATED_BRANDS; this closes the URL-checker gap. Real domains end in
+  // .com.au, which the trusted-suffix guard already excludes.
+  "qantas", "velocity",
+  // Energy retailers (D3 / #121). AGL and Origin Energy both have documented
+  // AU phishing campaigns; August is peak winter billing season. Bare "agl" is
+  // deliberately absent — it lives in the word-boundary list below, because
+  // substring matching would score eagle.org, flagler.com and bagelshop.io.
+  "originenergy", "energyaustralia", "alintaenergy",
+  // Crypto exchanges (D6 / #123). "binance" is long enough to be distinctive.
+  "coinspot", "swyftx", "binance",
+];
+
+// Brands too short for substring matching in a hostname. Previously excluded
+// from detection entirely to dodge the false positives; the word-boundary list
+// lets them be caught without the collisions ("agl-billing.com" hits,
+// "bagelshop.io" doesn't).
+const TYPOSQUAT_WORD_BRANDS = ["agl"];
+
+// Consumer (non-government) brands impersonated in SMS bodies.
+const BRAND_MENTIONS = [
+  "doordash", "uber eats", "ubereats", "menulog", "deliveroo",
+  "nbn co", "nbnco", "nbn", "national broadband network",
+  // Fake-recruiter SMS impersonation (D3 / #82 / Scamwatch June 2026). Amazon
+  // does text customers legitimately (medium FP for "amazon" alone); YouTube
+  // never cold-recruits by SMS. The jobSignals composite in scamDetector is the
+  // stronger signal when the recruiter pattern is present.
+  "amazon", "youtube",
+  // Energy retailers impersonated in billing/refund SMS scams (D3 / #121).
+  // MailGuard documented multi-step Origin Energy "$150 overpayment" and
+  // "billing error" campaigns; AGL warns customers about fake-site SMS.
+  "origin energy", "originenergy", "energy australia", "energyaustralia",
+  "alinta energy",
+  // AU crypto exchanges (D6 / #123) — "suspicious login" / "account
+  // suspended" credential and 2FA harvesting.
+  "coinspot", "swyftx", "binance", "crypto exchange",
+];
+
+// "agl" would fire on "bagel", "eagle" and "flagship" as a bare substring.
+const BRAND_MENTION_WORDS = ["agl"];
+
+// Names whose genuine mail always comes from a .gov.au / .com.au domain, so a
+// mismatched sender domain is textbook impersonation.
+const OFFICIAL_SENDER_NAMES = [
+  "ato", "mygov", "centrelink", "medicare", "commbank", "westpac", "anz", "nab",
+];
 
 // ── Number plan (ACMA) ────────────────────────────────────────────────────────
 // Moved here from phoneIntel in Phase 4. libphonenumber handles parsing,
@@ -212,12 +279,19 @@ export const AU: RegionDefinition = {
   foreignAuthorityFlag:
     "Claims to be a foreign police or government authority — Chinese police, customs and consulate officials have no law-enforcement powers in Australia and never demand payments, transfers or secrecy. This is a known scam targeting the Chinese-Australian community (AFP warning, May 2026).",
 
+  bankIdentifiers: ["bsb"],
+
   identityRereg: IDENTITY_REREG,
   identityReregFlag:
     "myID/digital-identity re-registration lure — Services Australia and myID never send unsolicited requests to 're-verify' or 'set up' your digital identity. Go to my.gov.au directly, never via a message link.",
 
   fakeInvestmentPlatformFlag: (platform: string) =>
     `Named fraudulent investment platform detected ("${platform}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`,
+
+  typosquatBrands: { substring: TYPOSQUAT_BRANDS, word: TYPOSQUAT_WORD_BRANDS },
+  trustedHostSuffixes: [".gov.au", ".com.au"],
+  brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
+  officialSenderNames: OFFICIAL_SENDER_NAMES,
 
   legitDomains: LEGIT_DOMAINS,
   legitDomainFlag: "Verified Australian government domain",
@@ -246,6 +320,8 @@ export const AU: RegionDefinition = {
   },
 
   callbackBrands: CALLBACK_BRANDS,
+  // Domestic exchanges; binance/coinbase come from base.
+  cryptoExchanges: ["coinspot", "swyftx"],
   rewardWords: REWARD_WORDS,
   requestWords: REQUEST_WORDS,
 };
