@@ -130,26 +130,97 @@ Scope: `lib/scamDetector.ts`, `lib/verdictSummary.ts`, `lib/regionResolver.ts`,
 
 ---
 
-## Phase 4 — Phone number generalisation
+## Phase 4 — Phone number generalisation ✅ done
 
 **Outcome:** phone checks work for any country, AU keeps its current depth.
 
-1. Adopt `libphonenumber-js` for parse / validity / line-type / region. It's a
-   static lookup table, not an API or model — consistent with the rule-based
-   constraint. Confirm bundle-size impact (use the `min` metadata build).
-2. Replace `isAustralian: boolean` with `isDomestic: boolean` (relative to the
-   resolved region) and keep `country` as-is.
-3. Keep our own heuristics layered on top: wangiri, high-scam country codes,
-   elevated-volume codes, spoofing risk. These stay ours — libphonenumber has no
-   opinion on scams.
-4. Move AU number-plan specifics (`AU_STD`, `AU_VOIP_MOBILE_PREFIXES`, 13/1300/1800
-   semantics) into `lib/regions/au.ts` as a `phonePlan` section.
-5. Reword AU-framed copy ("targeting Australia" → "targeting your region").
+1. ✅ Adopted `libphonenumber-js` for parse / validity / line-type / region.
+   ~~Use the `min` metadata build~~ **Revised: shipped `max`.** `min` returns
+   no line type for NZ mobile or IE fixed — two of the five Phase 5 targets —
+   so it would have shipped a known blind spot and needed swapping later.
+   Measured: `min` 19.3 KB gz, `max` 39.6 KB gz. The ~20 KB is moot in practice
+   because detection runs server-side via `/api/check`; libphonenumber never
+   reaches a client chunk, so users download nothing extra.
+2. ✅ `isAustralian` → `isDomestic`, relative to the resolved region. `country`
+   unchanged.
+3. ✅ Our heuristics layered on top: wangiri, high-scam country codes,
+   elevated-volume codes, spoofing risk.
+4. ✅ AU number-plan specifics moved to `lib/regions/au.ts` as `phonePlan`
+   (`PhonePlan` in `types.ts`): premium prefixes, VoIP mobile ranges, area
+   codes, emergency numbers, toll-free/shared-cost copy.
+5. ✅ AU-framed copy reworded ("targeting Australia" → "targeting your
+   region"). The two AU-specific i18n line-type strings were generalised too —
+   `phone.lineType.freecall` was "Free call (1800)", `.shared` was
+   "Shared cost (1300 / 13xx)".
 
-**Gate:** existing phone tests green; new tests for at least UK + US numbers.
+**Deviations**
+
+- **Premium rate stays ours.** Plan step 1 implied libphonenumber would own
+  line-type classification. It can't here: it reports AU `190x` as *invalid*,
+  so deferring to it would downgrade "you will be charged premium rates" into a
+  generic "invalid number" — worse advice for the one case that costs money.
+  `phonePlan.premiumPrefixes` is checked before validity. UK `+44 909` premium
+  still comes from the library, which classifies it correctly.
+
+- **Parsing country is decoupled from the resolved pack.** The significant
+  find. `resolveRegionPack` falls back to AU for any region without a pack,
+  which is right for keyword detection but silently wrong for number parsing:
+  a UK user's `07911 123456` was parsed against the Australian plan and
+  reported as a fabricated number, `+44` mobiles read as foreign, and an AU
+  number read as domestic for a UK user. `parsingCountry()` now follows the
+  requested region regardless of which pack resolved — libphonenumber knows
+  every country's plan whether or not we have scam rules for it. This is the
+  "silent quality collapse" the guiding constraints warn about, and it was
+  invisible until UK numbers were actually exercised.
+
+- **A pack's `phonePlan` only applies when it governs the parsing country.**
+  Same root cause, separate leak: a UK freephone check emitted the AU pack's
+  "1800 numbers… pretending to be the ATO" wording. Where the pack doesn't
+  match, the plan is withheld and classification degrades to libphonenumber
+  alone, which is honest rather than confidently wrong.
+
+- **Shared number plans.** libphonenumber resolves ordinary `+44` mobiles to
+  `GG` (Guernsey). `SHARED_NUMBER_PLANS` maps the Crown Dependencies onto GB,
+  AU's external territories onto AU, and the NANP territories onto US, for both
+  domesticity and display.
+
+**Post-review fixes.** Code review found three further bugs, all downstream of
+the same seam — `plan` and `homeCountry` derive from different sources that
+disagree for any region without a pack:
+
+- **Emergency numbers were scored `very_high` outside AU.** The pack's plan is
+  withheld for uncovered regions, so `plan.emergencyNumbers` was undefined and
+  `999`/`911`/`111` fell through to the "too short to be real" guard —
+  "caller ID has been manipulated" for a fire brigade. Now a universal
+  `EMERGENCY_NUMBERS` set in `phoneIntel`, outside the packs; `phonePlan` only
+  adds national extras.
+- **Region codes were validated by shape, not membership.** Any two ASCII
+  letters went straight to libphonenumber, and it resolves `"UK"` and `"EN"`
+  (neither is ISO 3166-1 — the UK is `GB`) to *Switzerland*, so a valid AU
+  number came back "may be fabricated" at high risk. Now checked with
+  `isSupportedCountry`.
+- **The unparseable branch disagreed with itself.** It compared raw country
+  codes while `country` applied the shared-plan parent mapping, so a Northern
+  Marianas number read as "United States" yet not domestic for a US user. Now
+  uses `sameCountry`. The domestic-premium guard was tightened at the same
+  time so an unparseable *foreign* number can't be labelled domestic premium.
+
+Two further findings did not reproduce: AU short shared-cost (`13 25 62`) and
+premium `190x` both classify correctly in every input format. Regression tests
+were added for them regardless, since both are load-bearing AU behaviour.
+
+**Gate:** ✅ `npm test` green — 638 passing, with the pre-existing 609
+untouched. New `__tests__/phoneIntel.test.ts` covers AU depth, UK and US
+classification, region-relative domesticity, that AU specifics don't leak into
+other regions' copy, and the four regressions above.
 
 Scope: `lib/phoneIntel.ts`, `lib/scamDetector.ts` (`checkPhone` copy),
-`lib/regions/*`.
+`lib/regions/types.ts`, `lib/regions/au.ts`, `lib/regions/index.ts`,
+`messages/`, `__tests__/phoneIntel.test.ts`.
+
+**Note for Phase 5:** UK, US, NZ, CA and IE numbers already classify correctly
+with no pack, so those packs only need the scam layer — agencies, brands,
+legit domains — not number-plan work. A `phonePlan` is optional per region.
 
 ---
 

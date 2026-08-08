@@ -7,16 +7,32 @@
 //
 // What we CAN determine from the number format alone:
 // - Line type (mobile, fixed, VoIP, premium, free-call, shared-cost)
-// - Country / geographic region (for AU fixed lines)
+// - Country / geographic region
 // - Spoofing risk level (based on number patterns and context)
 // - Wangiri / premium-rate country risk
+//
+// Parsing, validity, line type and country come from libphonenumber-js (the
+// `max` metadata build — a static lookup table, not a model or an API, so the
+// rule-based constraint holds). Everything scam-related stays ours: wangiri
+// prefixes, high-scam and elevated-volume country codes, spoofing risk, and the
+// per-region number-plan semantics carried on the region pack's phonePlan.
+
+import { parsePhoneNumberFromString, isSupportedCountry, type PhoneNumber } from "libphonenumber-js/max";
+import { resolveRegionPack, DEFAULT_REGION, FALLBACK_REGION, type RegionInput } from "@/lib/regions";
+import type { PhonePlan } from "@/lib/regions/types";
 
 export interface PhoneIntel {
   lineType: "mobile" | "fixed" | "voip_likely" | "premium" | "freecall" | "shared_cost" | "emergency" | "unknown";
   region?: string;
   carrierHint?: string;
   country: string;
-  isAustralian: boolean;
+  /**
+   * Whether the number belongs to the region the check is being run for.
+   * Replaces the AU-only `isAustralian` — "domestic" is relative to the
+   * resolved region, so a UK number is domestic for a UK user and foreign for
+   * an Australian one.
+   */
+  isDomestic: boolean;
   wangiriRisk: boolean;
   highScamCountry: boolean;
   spoofingRisk: "low" | "medium" | "high" | "very_high";
@@ -297,22 +313,8 @@ const COUNTRY_CODES: Record<string, string> = {
   "998": "Uzbekistan",
 };
 
-// AU geographic STD codes → region names (ACMA number plan)
-const AU_STD: Record<string, string> = {
-  "02": "New South Wales / ACT",
-  "03": "Victoria / Tasmania",
-  "07": "Queensland",
-  "08": "Western Australia / South Australia / Northern Territory",
-};
-
-// 04xx prefixes commonly allocated to VoIP/virtual number providers in AU.
-// Number portability makes carrier-level attribution unreliable, but these
-// ranges are often used by VoIP MVNOs, burner SIM providers, and virtual
-// number services — all of which make spoofing trivial.
-const AU_VOIP_MOBILE_PREFIXES = new Set([
-  "0480", "0481", "0482", "0483", "0484",
-  "0485", "0486", "0487", "0488", "0489",
-]);
+// AU number-plan specifics now live in lib/regions/au.ts as `phonePlan`, so
+// every region can carry its own equivalents.
 
 function lookupCountry(digits: string): string {
   if (digits.startsWith("1")) {
@@ -325,7 +327,127 @@ function lookupCountry(digits: string): string {
   return "Unknown";
 }
 
-export function analysePhone(raw: string): PhoneIntel {
+/** Line types libphonenumber reports that we surface as "mobile". */
+const MOBILE_TYPES = new Set(["MOBILE", "FIXED_LINE_OR_MOBILE"]);
+
+/**
+ * Emergency numbers that must never be scored as suspicious, anywhere.
+ *
+ * Kept outside the region packs deliberately. A pack's phonePlan is withheld
+ * for regions we have no pack for, and emergency numbers are the one rule that
+ * must survive that: they are short enough to trip the "too short to be real"
+ * guard, so without this a UK user checking 999 — or anyone checking the
+ * GSM-universal 112 — was told their caller ID had been manipulated.
+ *
+ * Union rather than per-region: dialling another country's emergency number is
+ * not a scam signal, and treating an unrecognised one as fabricated is the
+ * failure mode worth avoiding.
+ */
+const EMERGENCY_NUMBERS = new Set([
+  "000", "112", "106",  // AU (112 is GSM-universal, 106 is the AU TTY line)
+  "999",                // UK, IE, and much of the Commonwealth
+  "911",                // US, CA and the NANP
+  "111",                // NZ
+  "110", "119", "118",  // widely used across Asia and parts of Europe
+]);
+
+/**
+ * Territories that share a country's numbering plan closely enough that a
+ * number resolving to one should still count as domestic for the other.
+ *
+ * libphonenumber returns the most specific territory it can: a perfectly
+ * ordinary UK mobile such as +44 7911 123456 comes back as `GG` (Guernsey),
+ * which shares +44. Treating that as a foreign number would tell a UK user
+ * their own mobile format is international — so the Crown Dependencies map
+ * onto GB. Australia's external territories (Cocos, Christmas Island) share
+ * +61 the same way.
+ */
+const SHARED_NUMBER_PLANS: Record<string, string[]> = {
+  GB: ["GG", "JE", "IM"],
+  AU: ["CC", "CX"],
+  US: ["PR", "VI", "MP", "GU", "AS"],
+};
+
+function sameCountry(parsed: PhoneNumber, home: string): boolean {
+  if (!parsed.country) return false;
+  if (parsed.country === home) return true;
+  return SHARED_NUMBER_PLANS[home]?.includes(parsed.country) ?? false;
+}
+
+/**
+ * The country whose number plan input is parsed against, and against which
+ * "domestic" is judged.
+ *
+ * Deliberately NOT the resolved pack's code. Pack resolution falls back to AU
+ * for any region without a pack, which is a sound default for *keyword*
+ * detection — but applying it to number parsing would read a British national
+ * number like `07911 123456` against the Australian plan and declare a
+ * perfectly valid UK mobile fabricated. Detection quality collapsing silently
+ * for uncovered regions is the exact failure the coverage work exists to
+ * prevent, so parsing follows the requested region even where no pack exists.
+ *
+ * libphonenumber knows every country's plan regardless of whether we have
+ * scam rules for it, so this is safe well ahead of Phase 5.
+ */
+function parsingCountry(region: RegionInput, packCode: string): string {
+  const requested = (region ?? "").toString().toUpperCase();
+  // Validated against libphonenumber's own country list rather than by shape.
+  // The value can be an arbitrary header, and a plausible-looking non-code is
+  // worse than no code at all: libphonenumber resolves "UK" and "EN" (neither
+  // is an ISO 3166-1 code — the UK is "GB") to Switzerland, so a valid AU
+  // number came back "may be fabricated" at high risk.
+  if (requested !== FALLBACK_REGION && isSupportedCountry(requested)) return requested;
+  // ZZ is the base-only fallback pack, not a country, so it has no number plan
+  // of its own. International-format input still parses correctly on its
+  // country code; national-format input has to be read against *some* plan, and
+  // the default region is a better guess than refusing to parse. The national
+  // plan itself is still withheld (see the caller), so this only recovers line
+  // type and country — never Australian scam specifics.
+  return packCode === FALLBACK_REGION ? DEFAULT_REGION : packCode;
+}
+
+/**
+ * ISO alpha-2 → display name, falling back to the code itself.
+ *
+ * Shared-plan territories are displayed as their parent country. libphonenumber
+ * resolves an ordinary +44 mobile to `GG` (Guernsey) because the Crown
+ * Dependencies share the UK's ranges; showing "Guernsey" for a British mobile
+ * reads as a false signal to someone checking whether a caller is local.
+ */
+function countryName(code: string): string {
+  const parent = Object.entries(SHARED_NUMBER_PLANS)
+    .find(([, shared]) => shared.includes(code))?.[0];
+  const display = parent ?? code;
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(display) ?? display;
+  } catch {
+    return display;
+  }
+}
+
+/**
+ * Analyse a phone number.
+ *
+ * `region` is the region the check is running for. It decides two things: which
+ * number plan is applied for national-format input (a bare `0412…` is
+ * Australian for an AU user), and what counts as domestic. Defaults to the
+ * default region so existing callers keep AU behaviour.
+ */
+export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
+  const pack = resolveRegionPack(region);
+  const homeCountry = parsingCountry(region, pack.code);
+  // The number plan only applies when the resolved pack actually governs the
+  // country we're parsing against. Pack resolution falls back to AU for any
+  // region without a pack, so using its plan unconditionally would tell a UK
+  // user their 0800 number is "commonly faked by scammers pretending to be the
+  // ATO" — asserting Australian specifics about a British number. An empty
+  // plan degrades to libphonenumber's own classification, which is honest.
+  const plan: PhonePlan = homeCountry === pack.code ? pack.phonePlan : {};
+  // The pack's display name is only right when the pack matches the country we
+  // parse against; for a region with no pack yet, fall back to the country's
+  // own name rather than mislabelling its numbers with the fallback pack's.
+  const homeName = homeCountry === pack.code ? pack.name : countryName(homeCountry);
+
   const cleaned = raw.replace(/[\s\-().+]/g, "");
   const spoofingNotes: string[] = [];
   let spoofingRisk: PhoneIntel["spoofingRisk"] = "low";
@@ -335,12 +457,28 @@ export function analysePhone(raw: string): PhoneIntel {
     if (order.indexOf(risk) > order.indexOf(spoofingRisk)) spoofingRisk = risk;
   }
 
+  // Emergency numbers are checked before anything else — they are short enough
+  // to trip the "too short" guard, and must never be scored as suspicious.
+  // The universal set applies regardless of region; a pack may add its own.
+  if (EMERGENCY_NUMBERS.has(cleaned) || plan.emergencyNumbers?.includes(cleaned)) {
+    return {
+      lineType: "emergency",
+      country: homeName,
+      isDomestic: true,
+      wangiriRisk: false,
+      highScamCountry: false,
+      spoofingRisk: "low",
+      spoofingNotes: [],
+      normalised: cleaned,
+    };
+  }
+
   // Too short to be a real number
   if (cleaned.length < 6) {
     return {
       lineType: "unknown",
       country: "Unknown",
-      isAustralian: false,
+      isDomestic: false,
       wangiriRisk: false,
       highScamCountry: false,
       spoofingRisk: "very_high",
@@ -355,94 +493,180 @@ export function analysePhone(raw: string): PhoneIntel {
     bump("very_high");
   }
 
-  // ── Australian numbers ─────────────────────────────────────────────────────
-  let isAu = false;
-  let local = "";
+  // Parse with the home region as the default, so national-format input
+  // ("0412 345 678", "020 7946 0123") resolves against the right number plan.
+  const parsed: PhoneNumber | undefined =
+    parsePhoneNumberFromString(raw, homeCountry as never) ?? undefined;
 
-  if (cleaned.startsWith("61") && cleaned.length >= 11) {
-    isAu = true;
-    local = "0" + cleaned.slice(2);
-  } else if (cleaned.startsWith("0") && cleaned.length >= 6) {
-    isAu = true;
-    local = cleaned;
+  // National form, used for the plan-based prefix rules below. libphonenumber
+  // strips the trunk prefix, so re-add a leading 0 to match how the plans are
+  // authored (and how users read their own numbers).
+  const national = parsed ? "0" + parsed.nationalNumber : cleaned;
+
+  // ── Premium rate ───────────────────────────────────────────────────────────
+  // Checked before validity: libphonenumber rejects AU 190x as invalid, but
+  // "you will be charged premium rates" is far better advice than "invalid".
+  // An explicit foreign country code disqualifies the domestic premium rule —
+  // otherwise an unparseable foreign number could be reported as a domestic
+  // premium line. Unparseable input with no country resolved still qualifies,
+  // since that is how AU 190x arrives (libphonenumber rejects it as invalid).
+  const isDomesticFormat = parsed ? (!parsed.country || sameCountry(parsed, homeCountry)) : !raw.trim().startsWith("+");
+  if (isDomesticFormat && plan.premiumPrefixes?.some((p) => national.startsWith(p))) {
+    if (plan.premiumFlag) spoofingNotes.push(plan.premiumFlag);
+    bump("very_high");
+    return {
+      lineType: "premium",
+      country: homeName,
+      isDomestic: true,
+      wangiriRisk: false,
+      highScamCountry: false,
+      spoofingRisk,
+      spoofingNotes,
+      normalised: parsed?.formatInternational() ?? national,
+    };
   }
 
-  if (isAu) {
-    if (["000", "112", "106"].includes(cleaned)) {
-      return { lineType: "emergency", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk: "low", spoofingNotes: [], normalised: cleaned };
-    }
+  // ── Unparseable ────────────────────────────────────────────────────────────
+  if (!parsed || !parsed.isValid()) {
+    spoofingNotes.push("Number doesn't match any known phone number format — it may be fabricated or disguised");
+    bump("high");
+    return {
+      lineType: "unknown",
+      country: parsed?.country ? countryName(parsed.country) : lookupCountry(cleaned.replace(/^0+/, "")),
+      // sameCountry, not raw equality: `country` above already maps shared-plan
+      // territories to their parent, so comparing raw codes here would report a
+      // Northern Marianas number as "United States" yet not domestic for a US
+      // user — the same object disagreeing with itself.
+      isDomestic: parsed ? sameCountry(parsed, homeCountry) : false,
+      wangiriRisk: false,
+      highScamCountry: false,
+      spoofingRisk,
+      spoofingNotes,
+      normalised: parsed?.formatInternational() ?? cleaned,
+    };
+  }
 
-    const norm = local;
+  const type = parsed.getType();
+  const isDomestic = sameCountry(parsed, homeCountry);
+  const normalised = parsed.formatInternational();
 
-    // Premium rate 190x — major red flag
-    if (norm.startsWith("0190")) {
-      spoofingNotes.push("Premium rate number — calling or texting this costs significantly more than a standard call");
-      bump("very_high");
-      return { lineType: "premium", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: `+61 ${norm.slice(1)}` };
-    }
-
-    // Free call 1800
-    if (norm.startsWith("01800")) {
-      spoofingNotes.push("Free-call 1800 numbers are commonly faked by scammers pretending to be banks or government — always verify by calling the number from the organisation's official website");
+  // ── Domestic, plan-aware analysis ──────────────────────────────────────────
+  if (isDomestic) {
+    if (type === "TOLL_FREE") {
+      if (plan.tollFreeFlag) spoofingNotes.push(plan.tollFreeFlag);
       bump("medium");
-      return { lineType: "freecall", region: "National — free call", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: `1800 ${norm.slice(5, 8)} ${norm.slice(8)}` };
+      return {
+        lineType: "freecall",
+        region: "National — free call",
+        country: homeName,
+        isDomestic,
+        wangiriRisk: false,
+        highScamCountry: false,
+        spoofingRisk,
+        spoofingNotes,
+        normalised: parsed.formatNational(),
+      };
     }
 
-    // Shared cost 1300 / 13xx
-    if (norm.startsWith("01300") || /^0?13\d{2,4}$/.test(norm)) {
-      spoofingNotes.push("1300/13xx numbers are commonly faked by scammers pretending to be the ATO, myGov, or Centrelink — verify by calling the number from the government website");
+    if (type === "SHARED_COST") {
+      if (plan.sharedCostFlag) spoofingNotes.push(plan.sharedCostFlag);
       bump("medium");
-      return { lineType: "shared_cost", region: "National — shared cost", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: norm.startsWith("0") ? norm.slice(1) : norm };
+      return {
+        lineType: "shared_cost",
+        region: "National — shared cost",
+        country: homeName,
+        isDomestic,
+        wangiriRisk: false,
+        highScamCountry: false,
+        spoofingRisk,
+        spoofingNotes,
+        normalised: parsed.formatNational(),
+      };
     }
 
-    // Mobile 04xx
-    if (norm.startsWith("04") && norm.length === 10) {
-      const prefix4 = norm.slice(0, 4);
-      const isVoip = AU_VOIP_MOBILE_PREFIXES.has(prefix4);
+    if (type && MOBILE_TYPES.has(type)) {
+      const isVoip = plan.voipMobilePrefixes?.some((p) => national.startsWith(p)) ?? false;
       if (isVoip) {
         spoofingNotes.push("This number range is commonly used by internet phone and virtual number services — the caller's real identity is easily hidden");
         bump("medium");
       }
       return {
         lineType: isVoip ? "voip_likely" : "mobile",
-        region: "Australian mobile",
+        region: `${pack.name} mobile`,
         carrierHint: isVoip ? "VoIP / virtual number provider (likely)" : undefined,
-        country: "Australia",
-        isAustralian: true,
+        country: homeName,
+        isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
         spoofingRisk,
         spoofingNotes,
-        normalised: `+61 ${norm.slice(1, 3)} ${norm.slice(3, 7)} ${norm.slice(7)}`,
+        normalised,
       };
     }
 
-    // Geographic fixed line (STD)
-    const stdCode = norm.slice(0, 2);
-    if (AU_STD[stdCode] && norm.length === 10) {
+    if (type === "FIXED_LINE") {
+      const area = plan.areaCodes?.[national.slice(0, 2)];
       spoofingNotes.push("Landline numbers are easy to fake — a local area code doesn't mean the caller is actually nearby or who they claim to be");
       bump("medium");
       return {
         lineType: "fixed",
-        region: AU_STD[stdCode],
-        country: "Australia",
-        isAustralian: true,
+        region: area,
+        country: homeName,
+        isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
         spoofingRisk,
         spoofingNotes,
-        normalised: `+61 ${norm.slice(1, 2)} ${norm.slice(2, 6)} ${norm.slice(6)}`,
+        normalised,
       };
     }
 
-    // Unrecognised AU format
-    spoofingNotes.push("Number doesn't match any known Australian phone format — it may be fabricated or disguised");
-    bump("high");
-    return { lineType: "unknown", country: "Australia", isAustralian: true, wangiriRisk: false, highScamCountry: false, spoofingRisk, spoofingNotes, normalised: norm };
+    if (type === "VOIP") {
+      spoofingNotes.push("This number range is commonly used by internet phone and virtual number services — the caller's real identity is easily hidden");
+      bump("medium");
+      return {
+        lineType: "voip_likely",
+        carrierHint: "VoIP / virtual number provider (likely)",
+        country: homeName,
+        isDomestic,
+        wangiriRisk: false,
+        highScamCountry: false,
+        spoofingRisk,
+        spoofingNotes,
+        normalised,
+      };
+    }
+
+    if (type === "PREMIUM_RATE") {
+      if (plan.premiumFlag) spoofingNotes.push(plan.premiumFlag);
+      bump("very_high");
+      return {
+        lineType: "premium",
+        country: homeName,
+        isDomestic,
+        wangiriRisk: false,
+        highScamCountry: false,
+        spoofingRisk,
+        spoofingNotes,
+        normalised,
+      };
+    }
+
+    // Valid domestic number of a type we don't specialise on.
+    return {
+      lineType: "unknown",
+      country: homeName,
+      isDomestic,
+      wangiriRisk: false,
+      highScamCountry: false,
+      spoofingRisk,
+      spoofingNotes,
+      normalised,
+    };
   }
 
   // ── International numbers ──────────────────────────────────────────────────
-  const intl = cleaned.replace(/^0+/, "");
+  const intl = parsed.countryCallingCode + parsed.nationalNumber;
 
   const isWangiri = WANGIRI_PREFIXES.some((p) => intl.startsWith(p));
   if (isWangiri) {
@@ -452,7 +676,7 @@ export function analysePhone(raw: string): PhoneIntel {
 
   const highScamEntry = Object.entries(HIGH_SCAM_COUNTRY_CODES).find(([code]) => intl.startsWith(code));
   if (highScamEntry) {
-    spoofingNotes.push(`International call from ${highScamEntry[1]} — a country frequently associated with scam call operations targeting Australia`);
+    spoofingNotes.push(`International call from ${highScamEntry[1]} — a country frequently associated with scam call operations targeting your region`);
     bump("high");
   }
 
@@ -462,20 +686,27 @@ export function analysePhone(raw: string): PhoneIntel {
     ? Object.entries(ELEVATED_VOLUME_COUNTRY_CODES).find(([code]) => intl.startsWith(code))
     : undefined;
   if (elevatedEntry) {
-    spoofingNotes.push(`International call from ${elevatedEntry[1]} — a common origin for scam call centres targeting Australia, though most calls from here are perfectly legitimate. Be cautious only if the caller pressures you or asks for money or personal details.`);
+    spoofingNotes.push(`International call from ${elevatedEntry[1]} — a common origin for scam call centres, though most calls from here are perfectly legitimate. Be cautious only if the caller pressures you or asks for money or personal details.`);
     bump("medium");
   }
 
-  const country = lookupCountry(intl);
+  const lineType: PhoneIntel["lineType"] =
+    type === "TOLL_FREE" ? "freecall"
+    : type === "SHARED_COST" ? "shared_cost"
+    : type === "PREMIUM_RATE" ? "premium"
+    : type === "VOIP" ? "voip_likely"
+    : type === "FIXED_LINE" ? "fixed"
+    : type && MOBILE_TYPES.has(type) ? "mobile"
+    : "unknown";
 
   return {
-    lineType: "unknown",
-    country,
-    isAustralian: false,
+    lineType,
+    country: parsed.country ? countryName(parsed.country) : lookupCountry(intl),
+    isDomestic: false,
     wangiriRisk: isWangiri,
     highScamCountry: !!highScamEntry || isWangiri,
     spoofingRisk,
     spoofingNotes,
-    normalised: intl ? `+${intl}` : raw.trim(),
+    normalised,
   };
 }

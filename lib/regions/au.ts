@@ -165,6 +165,28 @@ const LEGIT_DOMAINS = [
 // parallel one.
 const CALLBACK_BRANDS = ["coinspot", "swyftx", "binance"];
 
+// ── Number plan (ACMA) ────────────────────────────────────────────────────────
+// Moved here from phoneIntel in Phase 4. libphonenumber handles parsing,
+// validity, line type and country for every region; what stays ours is the
+// scam-relevant reading of the plan.
+
+// Geographic STD codes → region names.
+const AU_STD: Record<string, string> = {
+  "02": "New South Wales / ACT",
+  "03": "Victoria / Tasmania",
+  "07": "Queensland",
+  "08": "Western Australia / South Australia / Northern Territory",
+};
+
+// 04xx prefixes commonly allocated to VoIP/virtual number providers. Number
+// portability makes carrier-level attribution unreliable, but these ranges are
+// often used by VoIP MVNOs, burner SIM providers and virtual number services —
+// all of which make spoofing trivial.
+const AU_VOIP_MOBILE_PREFIXES = [
+  "0480", "0481", "0482", "0483", "0484",
+  "0485", "0486", "0487", "0488", "0489",
+];
+
 export const AU: RegionDefinition = {
   code: "AU",
   name: "Australia",
@@ -209,6 +231,19 @@ export const AU: RegionDefinition = {
     "'Unverified' label override attempt — since 1 July 2026, legitimate Australian senders must register their SMS Sender ID with ACMA. A message asking you to ignore an 'Unverified' label is almost certainly a scam.",
 
   reportingBody: "Scamwatch",
+
+  phonePlan: {
+    premiumPrefixes: ["0190"],
+    premiumFlag:
+      "Premium rate number — calling or texting this costs significantly more than a standard call",
+    voipMobilePrefixes: AU_VOIP_MOBILE_PREFIXES,
+    areaCodes: AU_STD,
+    emergencyNumbers: ["000", "112", "106"],
+    tollFreeFlag:
+      "Free-call 1800 numbers are commonly faked by scammers pretending to be banks or government — always verify by calling the number from the organisation's official website",
+    sharedCostFlag:
+      "1300/13xx numbers are commonly faked by scammers pretending to be the ATO, myGov, or Centrelink — verify by calling the number from the government website",
+  },
 
   callbackBrands: CALLBACK_BRANDS,
   rewardWords: REWARD_WORDS,

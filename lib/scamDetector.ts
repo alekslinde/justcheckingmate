@@ -588,12 +588,9 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
 // Phone number checker
 // ────────────────────────────────────────────────────────────────────────────
 
-// The region currently drives only the coverage gate: phone *analysis* is still
-// hardcoded to the AU number plan inside phoneIntel. Phase 4 generalises that
-// and will use the region for parsing too.
 export function checkPhone(number: string, region?: RegionInput): CheckResult {
   const PACK = resolveRegionPack(region);
-  const intel = analysePhone(number);
+  const intel = analysePhone(number, region);
   const flags: string[] = [];
   let score = 0;
 
@@ -604,7 +601,7 @@ export function checkPhone(number: string, region?: RegionInput): CheckResult {
   score += riskScores[intel.spoofingRisk];
 
   if (intel.lineType === "premium") {
-    flags.push("Premium rate number (190x) — never call or text back, you'll be charged");
+    flags.push("Premium rate number — never call or text back, you'll be charged");
     score += 20;
   }
 
@@ -619,15 +616,18 @@ export function checkPhone(number: string, region?: RegionInput): CheckResult {
   }
 
   if (intel.highScamCountry && !intel.wangiriRisk) {
-    flags.push(`Call originates from ${intel.country} — frequently used as a base for scam operations targeting Australia`);
+    flags.push(`Call originates from ${intel.country} — frequently used as a base for scam operations targeting your region`);
   }
 
+  // Toll-free and shared-cost wording is authored per region on the pack's
+  // phonePlan, since the number ranges and impersonated bodies differ; it
+  // reaches the user via intel.spoofingNotes below.
   if (intel.lineType === "freecall") {
-    flags.push("1800 numbers are routinely spoofed by scammers impersonating banks and government agencies");
+    flags.push("Free-call numbers are routinely spoofed by scammers impersonating banks and government agencies");
   }
 
   if (intel.lineType === "shared_cost") {
-    flags.push("1300/13xx numbers are commonly spoofed by scammers impersonating the ATO, myGov, and Centrelink");
+    flags.push("Shared-cost numbers are commonly spoofed by scammers impersonating government agencies");
   }
 
   if (intel.lineType === "fixed") {
