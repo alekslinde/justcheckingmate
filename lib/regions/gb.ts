@@ -174,12 +174,13 @@ const REQUEST_WORDS = [
   "sort code", "government gateway", "gateway user id",
   "utr number", "unique taxpayer reference",
   "driving licence number", "nhs number",
+  // "new sort code" is deliberately absent: requestWords is matched by
+  // substring, so it would score twice for one phrase alongside "sort code"
+  // above. The bond-redirect composite reads the identifier from
+  // bankIdentifiers, so the "new/updated" framing is already covered there.
   // Pension access phishing — the UK counterparts to the AU super terms.
   "pension pot", "sipp", "self invested personal pension",
   "pension release", "release pension funds",
-  // Rental/deposit redirect fraud — the UK banking-identifier variant; the
-  // generic "updated bank details" phrasing is in base.
-  "new sort code",
   // Bank-transfer terminology specific to UK payments, used in APP fraud.
   "faster payment", "chaps transfer",
 ];
@@ -228,8 +229,12 @@ const TYPOSQUAT_BRANDS = [
   "universalcredit", "tvlicensing", "tvlicence",
   // Health and post.
   "nhsuk", "royalmail", "parcelforce",
-  // Telcos and ISPs.
-  "vodafone", "three", "giffgaff", "talktalk", "virginmedia",
+  // Telcos and ISPs. The network "Three" is deliberately absent: as a substring
+  // it fires on threefold.network and threema.ch, and unlike bt/ee/o2 a word
+  // boundary can't save it either — "three" is an ordinary English numeral, so
+  // there is no matching strategy that separates the brand from the word. Its
+  // real domains (three.co.uk, three.ie) are better served by legitDomains.
+  "vodafone", "giffgaff", "talktalk", "virginmedia",
   "plusnet", "skybroadband",
   // Retail, delivery and streaming — global brands still get UK-targeted
   // typosquats, and their real UK sites end in .co.uk, which the trusted-suffix
@@ -268,7 +273,12 @@ const BRAND_MENTIONS = [
 
 // Short names that need word-boundary matching in message text — "ee" and "o2"
 // as bare substrings would fire on almost any message.
-const BRAND_MENTION_WORDS = ["bt", "ee", "o2", "sky", "eon", "three"];
+//
+// "three" is excluded for a different reason: a \b boundary doesn't help when
+// the brand *is* a common word, so it flagged "three items in your basket" as
+// brand impersonation. A false positive on ordinary English is worse than
+// missing one telco, which the urgency and link signals still catch.
+const BRAND_MENTION_WORDS = ["bt", "ee", "o2", "sky", "eon"];
 
 // Names whose genuine mail always comes from a .gov.uk / .co.uk / .uk domain,
 // so a mismatched sender domain is textbook impersonation. Narrower than
@@ -344,8 +354,15 @@ export const GB: RegionDefinition = {
     `Named fraudulent investment platform detected ("${platform}") — the FCA has warned that platforms of this kind are scams, and it maintains a public warning list. Do not invest.`,
 
   typosquatBrands: { substring: TYPOSQUAT_BRANDS, word: TYPOSQUAT_WORD_BRANDS },
-  // Matched with endsWith, so ".uk" also covers ".co.uk" and ".org.uk".
-  trustedHostSuffixes: [".gov.uk", ".nhs.uk", ".co.uk", ".org.uk"],
+  // Restricted registries only. `.gov.uk` is limited to public bodies and
+  // `.nhs.uk` to NHS organisations, so a brand name under either is genuine.
+  //
+  // `.co.uk` and `.org.uk` are deliberately absent even though they are the
+  // UK's most common suffixes: both are open registrations, and exempting them
+  // would suppress brand scoring on exactly the domains scammers register —
+  // `barclays-secure-verify.co.uk` would score no brand signal at all. Genuine
+  // brands there are covered by legitDomains, an explicit allowlist.
+  trustedHostSuffixes: [".gov.uk", ".nhs.uk"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

@@ -199,7 +199,17 @@ export interface RegionDefinition {
    * National bank-routing identifiers ("bsb" in AU, "sort code" in GB). Used by
    * the bond-redirect composite, which pairs a rental context with a bank-detail
    * ask — hardcoding one country's term would silently drop half the composite
-   * elsewhere. Distinct from requestWords, which scores these on their own.
+   * elsewhere.
+   *
+   * These may also appear in `requestWords`, and usually should: the two serve
+   * different rules. `requestWords` scores the bare ask ("send your sort code")
+   * additively with other solicited identifiers, while this list is one half of
+   * a composite that fires only alongside a rental context. Listing an
+   * identifier in both is intentional, not duplication.
+   *
+   * What must *not* happen is listing a phrase twice within `requestWords`
+   * itself — it is substring-matched, so "new sort code" alongside "sort code"
+   * scores one phrase twice.
    */
   bankIdentifiers: string[];
 
@@ -223,10 +233,22 @@ export interface RegionDefinition {
   typosquatBrands: BrandSet;
 
   /**
-   * Hostname suffixes that exempt a typosquat match, because on these a brand
-   * name is expected rather than suspicious (AU: `.gov.au`, `.com.au`;
-   * GB: `.gov.uk`, `.co.uk`). A region with no distinctive national suffix
-   * leaves this empty and relies on the brand list alone.
+   * Hostname suffixes that exempt a typosquat match, because a brand name under
+   * them is expected rather than suspicious.
+   *
+   * **Only eligibility-restricted suffixes belong here.** The exemption
+   * suppresses brand scoring entirely, so it is only safe where the registry
+   * verifies who may register: `.gov.au` and `.com.au` require government
+   * status or an ABN, and `.gov.uk` / `.nhs.uk` are restricted to public bodies.
+   * Open registrations must *not* be listed — `.co.uk` and `.org.uk` are sold to
+   * anyone, so exempting them would whitelist exactly the domains scammers buy
+   * (`barclays-secure-verify.co.uk` scoring no brand signal at all).
+   *
+   * This is why the field can't simply be "the region's own suffixes": that
+   * reasoning holds for Australia, where the national second-level domains are
+   * all gated, and breaks for the UK. Legitimate brands on an open suffix are
+   * handled by `legitDomains` instead, which is an explicit allowlist rather
+   * than a blanket pattern.
    */
   trustedHostSuffixes: string[];
 

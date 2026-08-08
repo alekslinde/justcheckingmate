@@ -180,7 +180,12 @@ const CALLBACK_BRANDS = [
 // Globally-operating crypto exchanges used in the "your account is suspended,
 // call us" SMS script. Binance and Coinbase operate in essentially every market,
 // so they sit in base; regions append their domestic exchanges.
-const CRYPTO_EXCHANGES = ["binance", "coinbase", "kraken", "crypto exchange"];
+//
+// Named brands only. The TOAD flag quotes whichever entry matched, so a generic
+// phrase like "crypto exchange" would render "crypto exchange and other
+// exchanges never ring customers" — defeating the point of naming the brand.
+// The generic phrasing is still caught as a brand mention via brandMentions.
+const CRYPTO_EXCHANGES = ["binance", "coinbase", "kraken"];
 
 export const BASE_SIGNALS: BaseSignals = {
   urgency: {

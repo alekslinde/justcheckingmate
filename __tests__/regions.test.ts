@@ -74,6 +74,69 @@ describe("pack composition", () => {
   });
 });
 
+// Invariants that must hold for every pack, present and future. These come from
+// code-review findings on the GB pack — each was a real defect, and each is the
+// kind that reappears the next time someone authors a region.
+describe("pack invariants (every region)", () => {
+  const packs = supportedRegions().map((code) => [code, resolveRegionPack(code)] as const);
+
+  // requestWords is substring-matched, so a phrase containing another scores
+  // twice for one match: "updated bank details" also matches "bank details",
+  // taking the flag from +15 to +30.
+  //
+  // Two pre-existing overlaps in base/AU are grandfathered below. They are real
+  // double-counts, verified by hand, but removing them shifts long-established
+  // AU scores and belongs in its own change with its own threat-intel review —
+  // not smuggled into a UK region pack. They are listed explicitly rather than
+  // filtered by pattern so the debt stays visible and new ones still fail.
+  const KNOWN_OVERLAPS = new Set(["updated bank details", "mygovid"]);
+
+  it.each(packs)("%s: no new requestWord contains another requestWord", (_code, pack) => {
+    const offenders = pack.requestWords.filter(
+      (w) =>
+        !KNOWN_OVERLAPS.has(w) &&
+        pack.requestWords.some((other) => other !== w && w.includes(other)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps the grandfathered overlap list honest", () => {
+    // If someone fixes a known overlap, this fails and the entry must be
+    // dropped — otherwise the exemption silently outlives the defect.
+    const all = new Set(packs.flatMap(([, pack]) => pack.requestWords));
+    for (const known of KNOWN_OVERLAPS) {
+      expect(all).toContain(known);
+    }
+  });
+
+  it.each(packs)("%s: only lists eligibility-restricted trusted suffixes", (_code, pack) => {
+    // A trusted suffix suppresses brand scoring entirely, so an open
+    // registration would whitelist exactly the domains scammers buy.
+    const OPEN = [".co.uk", ".org.uk", ".com", ".net", ".org", ".io", ".co", ".me"];
+    for (const suffix of pack.trustedHostSuffixes) {
+      expect(OPEN).not.toContain(suffix);
+    }
+  });
+
+  it.each(packs)("%s: names only concrete brands as crypto exchanges", (_code, pack) => {
+    // The TOAD flag quotes whichever entry matched, so a generic phrase renders
+    // "crypto exchange and other exchanges never ring customers".
+    for (const brand of pack.cryptoExchanges) {
+      expect(brand).not.toMatch(/\b(exchange|platform|wallet|crypto)\b/i);
+    }
+  });
+
+  it.each(packs)("%s: keeps word-matched brands out of the substring lists", (_code, pack) => {
+    // A name needing \b boundaries must not also be substring-matched — the
+    // substring path would defeat the boundary that made it safe to include.
+    for (const set of [pack.typosquatBrands, pack.brandMentions]) {
+      for (const word of set.word) {
+        expect(set.substring).not.toContain(word);
+      }
+    }
+  });
+});
+
 describe("AU region definition", () => {
   it("only claims no-link senders that are also impersonated authorities", () => {
     // The flag copy names these bodies, so a sender missing from

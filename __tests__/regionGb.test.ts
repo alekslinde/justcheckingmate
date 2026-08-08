@@ -165,6 +165,32 @@ describe("GB SMS detection", () => {
     expect(flagText(r)).toContain("property bond fraud");
   });
 
+  // Code review, finding 4 — "three" as a brand word fired on ordinary English.
+  it("does not treat the numeral 'three' as brand impersonation", () => {
+    const r = checkSms("Your order is ready: three items in your basket are reserved.", undefined, "GB");
+    expect(flagText(r)).not.toContain("well-known company");
+  });
+
+  // Code review, finding 5 — the region-agnostic phone heuristic had an
+  // unanchored 9-14 digit alternative, so an order or reference number
+  // satisfied the "there is a number to ring" half of the TOAD composite.
+  it("does not accept a bare digit run as a phone number", () => {
+    const r = checkSms(
+      "Coinbase: suspicious login on order 1234567890123. Call support to resolve.",
+      undefined,
+      "GB",
+    );
+    expect(flagText(r)).not.toContain("asking you to phone them");
+  });
+
+  it.each(["02079460000", "+442079460000"])(
+    "still fires the TOAD composite for the dialable number %s",
+    (number) => {
+      const r = checkSms(`Coinbase: suspicious login. Call support on ${number} to resolve.`, undefined, "GB");
+      expect(flagText(r)).toContain("asking you to phone them");
+    },
+  );
+
   it("flags a UK consumer brand without calling it a government agency", () => {
     const r = checkSms("Evri: your delivery could not be completed, update your address.", undefined, "GB");
     expect(flagText(r)).toContain("well-known company");
@@ -212,6 +238,58 @@ describe("GB URL detection", () => {
     expect(flagText(checkUrl("http://bt-billing-refund.top", undefined, "GB"))).toContain("impersonating \"bt\"");
     expect(flagText(checkUrl("https://subtleshop.com/x", undefined, "GB"))).not.toContain("impersonating");
   });
+
+  // Code review, finding 1 — the blocker. Trusted suffixes suppress brand
+  // scoring entirely, so listing an *open* registration whitelists exactly what
+  // scammers buy. `.co.uk` and `.org.uk` are sold to anyone; the first version
+  // of this pack exempted them, and `dvla-vehicle-tax.org.uk` came back "safe".
+  it.each([
+    ["http://barclays-secure-verify.co.uk/login", "barclays"],
+    ["http://hmrc-tax-refund-claim.co.uk", "hmrc"],
+    ["http://dvla-vehicle-tax.org.uk", "dvla"],
+    ["http://natwest-login.co.uk", "natwest"],
+    ["http://secure-barclays.co.uk", "barclays"],
+  ])("flags a typosquat on the open registration %s", (url, brand) => {
+    const r = checkUrl(url, undefined, "GB");
+    expect(flagText(r)).toContain(`impersonating "${brand}"`);
+    expect(r.verdict).toBe("likely_scam");
+  });
+
+  it("still exempts eligibility-restricted suffixes", () => {
+    // .gov.uk and .nhs.uk are vetted registries, so a brand name is genuine.
+    for (const url of ["https://www.hmrc.gov.uk/", "https://www.nhs.uk/"]) {
+      expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonating");
+    }
+  });
+
+  // The other half of finding 1: dropping the .co.uk exemption without the
+  // registrable-label rule flagged 21 of 24 real UK brand sites as likely_scam.
+  it.each([
+    "https://www.barclays.co.uk/",
+    "https://www.tesco.com/",
+    "https://www.argos.co.uk/",
+    "https://www.nationwide.co.uk/",
+    "https://www.britishgas.co.uk/",
+    "https://personal.natwest.com/",
+  ])("does not flag the genuine site %s", (url) => {
+    expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonating");
+  });
+
+  it("flags a brand used as a subdomain of another registrable domain", () => {
+    // The brand owns the label only on its real site; here "evil" does.
+    const r = checkUrl("http://barclays.co.uk.evil.top/login", undefined, "GB");
+    expect(flagText(r)).toContain("impersonating \"barclays\"");
+  });
+
+  // Code review, finding 3 — "three" was in the substring list, contradicting
+  // its own comment, and fires on ordinary words. No matching strategy
+  // separates an English numeral from the brand, so it was removed outright.
+  it.each(["https://threefold.network/about", "https://threema.ch/en"])(
+    "does not flag %s as brand impersonation",
+    (url) => {
+      expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonating");
+    },
+  );
 });
 
 describe("GB email detection", () => {

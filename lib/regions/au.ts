@@ -142,9 +142,9 @@ const REQUEST_WORDS = [
   "access your super", "unlock your super", "smsf", "self managed super",
   "early super release", "super withdrawal", "superannuation transfer",
   "early access to super",
-  // Rental/property bond redirect fraud (D5 / #105) — the AU-specific banking
-  // identifier variant; the generic "updated bank details" phrasing is in base.
-  "new bsb",
+  // Rental/property bond redirect fraud (D5 / #105) is covered by "bsb" above
+  // plus the bond composite, which reads bankIdentifiers. A separate "new bsb"
+  // entry would double-score one phrase, since requestWords is substring-matched.
 ];
 
 // ASIC-regulated products are legally prohibited from being promoted as

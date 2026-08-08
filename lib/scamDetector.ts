@@ -143,27 +143,52 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     score += 15;
   }
 
-  // Typosquatted brands for this region. The brand list and the trusted
-  // suffixes that exempt it both come from the pack — which brands get
-  // impersonated, and which national domains they legitimately mail from, are
-  // the most region-specific signals we have.
+  // Typosquatted brands for this region. Which brands get impersonated is the
+  // most region-specific signal we have, so the lists come from the pack.
   //
-  // A hostname under one of the region's own suffixes is exempt: "anz.com.au"
-  // and "hmrc.gov.uk" contain a brand name legitimately.
+  // Two exemptions, and the distinction matters:
+  //
+  //  1. Eligibility-restricted suffixes (`.gov.au`, `.gov.uk`, `.nhs.uk`) —
+  //     the registry vets who may register, so a brand name is genuine.
+  //     Deliberately NOT `.co.uk` or `.org.uk`: those are open registrations,
+  //     and exempting them would whitelist the domains scammers actually buy.
+  //  2. The brand *owns the registrable label* — `barclays.co.uk` and
+  //     `tesco.com` are the real sites. Typosquats bolt the brand onto
+  //     something else (`barclays-secure-verify.co.uk`, `login-tesco.com`), so
+  //     the brand appears in the label without being it.
+  //
+  // Without (2), dropping `.co.uk` from the trusted list flagged 21 of 24 real
+  // UK brand sites as likely_scam. Without (1) being narrow, the UK's most
+  // common suffix silently disabled brand scoring altogether.
   const onTrustedSuffix = PACK.trustedHostSuffixes.some((s) => hostname.endsWith(s));
   if (!onTrustedSuffix) {
-    // Word-boundary brands are matched against the hostname with separators
-    // treated as boundaries, so "agl-billing.com" hits while "bagelshop.io"
-    // and "flagler.com" don't.
-    const hostWords = hostname.split(/[^a-z0-9]+/i).filter(Boolean);
+    // The registrable label: the name the brand would own, ignoring subdomains
+    // and the public suffix. "www.barclays.co.uk" → "barclays";
+    // "barclays-secure.co.uk" → "barclays-secure"; "login.barclays.com.evil.top"
+    // → "evil". Two-part suffixes (.co.uk, .com.au) are handled by dropping a
+    // second label when the penultimate one is a known second-level marker.
+    const labels = hostname.split(".");
+    const SECOND_LEVEL = new Set(["co", "com", "org", "net", "gov", "ac", "sch", "me", "ltd", "plc", "nhs", "police", "mod", "asn", "id", "edu"]);
+    let registrableIndex = labels.length - 2;
+    if (labels.length >= 3 && SECOND_LEVEL.has(labels[labels.length - 2])) {
+      registrableIndex = labels.length - 3;
+    }
+    const registrable = labels[registrableIndex] ?? "";
+
+    // Separator-delimited words within the registrable label, so "agl-billing"
+    // yields ["agl","billing"] — that's how a short brand is matched without
+    // colliding with "bagelshop".
+    const labelWords = registrable.split(/[^a-z0-9]+/i).filter(Boolean);
+
     for (const brand of TYPOSQUAT_BRANDS.substring) {
-      if (hostname.includes(brand)) {
+      // The brand owning the whole label is the real site, not a squat.
+      if (hostname.includes(brand) && registrable !== brand) {
         flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
         score += 45;
       }
     }
     for (const brand of TYPOSQUAT_BRANDS.word) {
-      if (hostWords.includes(brand)) {
+      if (labelWords.includes(brand) && registrable !== brand) {
         flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
         score += 45;
       }
@@ -442,13 +467,22 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   // whichever brand actually matched — the old copy asserted "CoinSpot, Swyftx
   // and Binance" to every region.
   const cryptoToadHit = CRYPTO_TOAD_BRANDS.find((b) => lower.includes(b));
-  // Region-agnostic: an international +NN number, a national trunk-prefixed
-  // number, or a run of digits long enough to dial. The previous AU-only
-  // pattern meant this composite could never fire outside Australia.
+  // Region-agnostic, but a *dialable* number only. Three shapes: international
+  // `+NN…`, a national trunk-prefixed `0…`, and non-geographic service ranges
+  // that carry no trunk prefix (AU 1800/1300/13xx, US/CA 1-8xx). The previous
+  // AU-only pattern meant this composite could never fire outside Australia.
+  //
+  // Deliberately no bare-digit-run alternative. A 10-14 digit sequence with no
+  // dialing prefix is far more often an order number, reference or invoice ID —
+  // "suspicious login on order 1234567890123, call support" satisfied the phone
+  // half with no phone number present at all. The service-number branch is
+  // prefix-anchored for the same reason: `1[38]00` and `1-8xx` are real dialing
+  // patterns, not any digit string that happens to be long enough.
   const hasPhoneNumber =
     /\+\d{1,3}[\s-]?(?:\d[\s-]?){6,14}\d/.test(text) ||
     /\b0\d(?:[\s-]?\d){7,10}\b/.test(text) ||
-    /\b(?:\d[\s-]?){9,14}\d\b/.test(text);
+    /\b1[\s-]?(?:800|300|3\d{2}|8\d{2})(?:[\s-]?\d){5,8}\b/.test(text) ||
+    /\b13[\s-]?\d{2}[\s-]?\d{2}\b/.test(text);
   const mentionsCalling = /\bcall\b|\bphone\b|\bcontact (support|us)\b|\bhelpline\b/i.test(text);
   const hasUrl = /https?:\/\/|www\.|\.[a-z]{2,}\//i.test(text);
 

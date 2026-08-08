@@ -309,6 +309,60 @@ hit:
   attributed", which is honest; enumerating the full Ofcom plan is not worth the
   maintenance burden.
 
+**Code-review findings, fixed in a follow-up commit**
+
+Six findings; the first is the one that mattered and is the clearest example of
+why region #2 was worth doing.
+
+- **Open registrations must not exempt brand scoring.** `trustedHostSuffixes`
+  suppresses the typosquat block entirely, and the first version of the GB pack
+  listed `.co.uk` and `.org.uk` alongside `.gov.uk` — reasoning by analogy with
+  AU's `.com.au`/`.gov.au`. But those AU suffixes are *eligibility-restricted*
+  (ABN or government status required), whereas `.co.uk` is sold to anyone. The
+  exemption therefore whitelisted exactly the domains scammers buy:
+  `dvla-vehicle-tax.org.uk` came back **safe**, and
+  `barclays-secure-verify.co.uk` merely "suspicious", while the same brand on
+  `.top` scored 100.
+
+  Removing the exemption alone was not the fix — that flagged **21 of 24** real
+  UK brand sites (`barclays.co.uk`, `tesco.com`, `argos.co.uk`…) as
+  `likely_scam`. A bare `hostname.includes(brand)` can't distinguish
+  `barclays.co.uk` from `barclays-secure-verify.co.uk`. Both halves were needed:
+  the trusted list is now restricted-registry-only, *and* brand matching skips
+  the case where the brand owns the registrable label. Typosquats bolt the brand
+  onto something else, so the brand appears in the label without being it. This
+  also catches `barclays.co.uk.evil.top`, which neither rule caught before.
+
+- **`"three"` was unfixable as a brand.** It sat in the *substring* list,
+  contradicting its own comment, firing on `threefold.network` and `threema.ch`
+  — and word boundaries couldn't rescue it either, since it's an ordinary
+  English numeral ("three items in your basket"). Removed from both lists: a
+  false positive on common English is worse than missing one telco.
+- **The TOAD phone heuristic accepted any long digit run.** An unanchored
+  `{9,14}` alternative meant "suspicious login on order 1234567890123, call
+  support" satisfied the "there's a number to ring" half with no phone number
+  present. Now prefix-anchored only. Fixing this initially regressed the AU
+  suite — AU service numbers (`1800`/`1300`/`13xx`) carry no trunk prefix, so a
+  dedicated service-number branch was required.
+- **A generic phrase among the crypto brands defeated its own flag.** `"crypto
+  exchange"` in `cryptoExchanges` rendered "crypto exchange and other exchanges
+  never ring customers" — the copy is built around naming the matched brand.
+- **`"new sort code"` double-scored.** `requestWords` is substring-matched, so
+  it matched alongside `"sort code"` for one phrase. The same defect existed in
+  AU as `"new bsb"`; both removed.
+
+Four new **pack invariants** in `regions.test.ts` now enforce these structurally
+for every present and future region: no requestWord containing another, no open
+registration in the trusted list, no generic phrase among the crypto brands, and
+no word-matched brand duplicated in a substring list. Two pre-existing overlaps
+(`updated bank details`, `mygovid`) are grandfathered on an explicit list rather
+than filtered by pattern — they are genuine double-counts (+30 vs +15), but
+removing them shifts long-standing AU scores and belongs in its own change. A
+further test fails if either is ever fixed, so the exemption can't outlive the
+defect.
+
+Every fix was mutation-checked by reverting it and confirming its test fails.
+
 **Known imprecision, not fixed here.** `authorityMentions` drives a flag reading
 "Claims to be from a government agency", but both packs include private bodies
 in that list — Royal Mail and TV Licensing for GB, Australia Post and Linkt for
@@ -317,7 +371,7 @@ It's pre-existing and consistent, the `noLinkSendersFlag` copy is accurate, and
 splitting the list would touch shared scoring logic — so it's left as a
 follow-up rather than widened into this phase.
 
-**Gate:** ✅ `npm test` green — 681 passing, with the 638 pre-existing tests
+**Gate:** ✅ `npm test` green — 714 passing after the review fixes, with the 638 pre-existing tests
 **untouched**, including zero changes to `scamDetector.test.ts` (the load-bearing
 Phase 1 check). New `__tests__/regionGb.test.ts` (40 tests) covers UK SMS / URL /
 email / phone fixtures, pack-shape invariants, and region isolation asserted in
