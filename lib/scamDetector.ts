@@ -70,6 +70,38 @@ function mentionsCount(text: string, entries: string[]): number {
   return entries.filter((entry) => mentions(text, entry)).length;
 }
 
+/**
+ * Genuine two-part public suffixes, for working out a hostname's registrable
+ * label (see checkUrl's typosquat block).
+ *
+ * Enumerated rather than derived from a marker label. The rule this replaced
+ * asked only "is the penultimate label one of co/com/gov/org/…?", which is true
+ * for `chase.gov.co` and `kiwibank.co.io` — but `.co` and `.io` are ordinary
+ * gTLDs, so there the last two labels are the registrable domain, not a suffix.
+ * Reading them as a suffix made the brand own the registrable label, which
+ * silently exempted it from typosquat scoring in every region at once.
+ *
+ * Scoped to the ccTLDs the packs actually cover. A miss degrades safely: the
+ * hostname is simply treated as `<label>.<tld>`, which at worst flags a genuine
+ * site under an unlisted two-part suffix — the conservative direction for a
+ * scam detector, and the same trade-off the legitDomains allowlist already makes.
+ */
+const TWO_PART_SUFFIXES = new Set([
+  // United Kingdom
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "nhs.uk", "police.uk", "mod.uk",
+  "sch.uk", "me.uk", "ltd.uk", "plc.uk", "net.uk",
+  // Australia
+  "com.au", "net.au", "org.au", "gov.au", "edu.au", "asn.au", "id.au",
+  // New Zealand
+  "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz", "mil.nz", "school.nz",
+  // Ireland
+  "gov.ie", "co.ie",
+  // Canada
+  "gc.ca",
+  // United States — state and municipal government convention
+  "gov.us", "state.us",
+]);
+
 // ────────────────────────────────────────────────────────────────────────────
 // URL checker
 // ────────────────────────────────────────────────────────────────────────────
@@ -203,10 +235,27 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     // "barclays-secure.co.uk" → "barclays-secure"; "login.barclays.com.evil.top"
     // → "evil". Two-part suffixes (.co.uk, .com.au) are handled by dropping a
     // second label when the penultimate one is a known second-level marker.
+    //
+    // The suffix must be a *real* two-part public suffix, matched as a whole —
+    // not "any known marker label followed by any TLD". That distinction is
+    // load-bearing rather than tidiness.
+    //
+    // The original rule treated the penultimate label alone as the signal, so
+    // `.gov.co`, `.com.co` and `.co.io` were read as two-part suffixes even
+    // though `.co` and `.io` are ordinary gTLDs where the last two labels *are*
+    // the registrable domain. `chase.gov.co` therefore computed its registrable
+    // label as "chase", which tripped the "the brand owns the label, so it's the
+    // real site" exemption and suppressed brand scoring entirely.
+    //
+    // One open-registration domain then defeated the typosquat rule in every
+    // pack at once: `commbank.gov.co` (AU), `barclays.gov.co` (GB),
+    // `chase.com.co` (US), `kiwibank.co.io` (NZ), `scotiabank.gov.io` (CA) and
+    // `anpost.gov.co` (IE) all came back with no brand flag. Listing the
+    // suffixes in full closes that while leaving genuine sites untouched.
     const labels = hostname.split(".");
-    const SECOND_LEVEL = new Set(["co", "com", "org", "net", "gov", "ac", "sch", "me", "ltd", "plc", "nhs", "police", "mod", "asn", "id", "edu"]);
+    const lastTwo = labels.slice(-2).join(".");
     let registrableIndex = labels.length - 2;
-    if (labels.length >= 3 && SECOND_LEVEL.has(labels[labels.length - 2])) {
+    if (labels.length >= 3 && TWO_PART_SUFFIXES.has(lastTwo)) {
       registrableIndex = labels.length - 3;
     }
     const registrable = labels[registrableIndex] ?? "";

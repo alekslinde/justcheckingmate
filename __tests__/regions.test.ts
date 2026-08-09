@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSms } from "@/lib/scamDetector";
+import { checkSms, checkUrl } from "@/lib/scamDetector";
 import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@/lib/regions";
 import { BASE_SIGNALS } from "@/lib/regions/base";
 import { AU } from "@/lib/regions/au";
@@ -102,6 +102,57 @@ describe("pack invariants (every region)", () => {
     const OPEN = [".co.uk", ".org.uk", ".com", ".net", ".org", ".io", ".co", ".me"];
     for (const suffix of pack.trustedHostSuffixes) {
       expect(OPEN).not.toContain(suffix);
+    }
+  });
+
+  // Code review of the US/NZ/CA/IE packs. The registrable-label rule decided a
+  // two-part public suffix from the penultimate label alone ("is it co/com/gov/
+  // …?"), which is true for `chase.gov.co` and `kiwibank.co.io` — but `.co` and
+  // `.io` are ordinary gTLDs, so there the last two labels ARE the registrable
+  // domain. Reading them as a suffix made the brand own the label, tripping the
+  // "brand owns the label, so it's the real site" exemption and suppressing
+  // brand scoring outright.
+  //
+  // One open-registration domain therefore defeated the typosquat rule in every
+  // pack at once, which is why this is asserted per-pack rather than once: the
+  // bug was cross-region, and so is the guarantee.
+  it.each(packs)("%s: a brand under a fake two-part suffix is still a typosquat", (code, pack) => {
+    const brand = pack.typosquatBrands.substring[0];
+    if (!brand) return; // ZZ has no national brand list.
+    // `.co` and `.io` are gTLDs — "<brand>.gov.co" is an ordinary domain someone
+    // bought, not the brand's real site under a government suffix.
+    for (const host of [`${brand}.gov.co`, `${brand}.com.co`, `${brand}.co.io`]) {
+      const flags = checkUrl(`http://${host}/login`, undefined, code).flags.join(" | ").toLowerCase();
+      expect({ host, impersonating: flags.includes("impersonating") })
+        .toEqual({ host, impersonating: true });
+    }
+  });
+
+  it.each(packs)("%s: a brand on its own real domain is not a typosquat", (code, pack) => {
+    // The other half — the registrable-label exemption must keep working, or the
+    // fix above would flag every genuine brand site. Phase 5 found that dropping
+    // it flagged 21 of 24 real UK brand sites as likely_scam.
+    //
+    // The `.co.uk` / `.com.au` cases are the ones that exercise the two-part
+    // suffix path specifically: a bare `<brand>.com` has only two labels, so the
+    // suffix branch never runs, and a brand under the pack's own trusted suffix
+    // is exempted earlier by the trusted-suffix rule. Without a genuine two-part
+    // host here, removing suffix handling altogether would pass unnoticed.
+    const brand = pack.typosquatBrands.substring[0];
+    if (!brand) return;
+    const hosts = [
+      `${brand}.com`,
+      `www.${brand}.com`,
+      // Real two-part suffixes, on the open registrations where brands actually
+      // live. These must resolve the registrable label to the brand itself.
+      `${brand}.co.uk`,
+      `www.${brand}.com.au`,
+      `${brand}.co.nz`,
+    ];
+    for (const host of hosts) {
+      const flags = checkUrl(`https://${host}/`, undefined, code).flags.join(" | ").toLowerCase();
+      expect({ host, impersonating: flags.includes("impersonating") })
+        .toEqual({ host, impersonating: false });
     }
   });
 

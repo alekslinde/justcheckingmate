@@ -623,6 +623,28 @@ describe("region isolation", () => {
     expect(flagText(us)).toContain("urgency language");
   });
 
+  // Code review finding. The registrable-label rule inferred a two-part public
+  // suffix from the penultimate label alone, so `.gov.co` and `.co.io` were read
+  // as suffixes even though `.co` and `.io` are ordinary gTLDs. That made the
+  // brand own the registrable label, tripping the "this is the real site"
+  // exemption — so a single open-registration domain suppressed brand scoring in
+  // every pack simultaneously.
+  //
+  // Kept alongside the generic invariant in regions.test.ts because the concrete
+  // hostnames are the point: these are domains an attacker can buy today.
+  it.each([
+    ["http://chase.gov.co/login", "US", "chase"],
+    ["http://paypal.gov.io/verify", "US", "paypal"],
+    ["http://commbank.gov.co/login", "AU", "commbank"],
+    ["http://barclays.com.co/login", "GB", "barclays"],
+    ["http://kiwibank.co.io/login", "NZ", "kiwibank"],
+    ["http://scotiabank.gov.io/login", "CA", "scotiabank"],
+    ["http://anpost.gov.co/track", "IE", "anpost"],
+  ])("flags %s as impersonating despite the fake two-part suffix", (url, region, brand) => {
+    const r = checkUrl(url, undefined, region);
+    expect(flagText(r)).toContain(`impersonating "${brand}"`);
+  });
+
   it("gives the packs disjoint national brand lists", () => {
     // Some global brands (amazon, netflix, paypal) legitimately appear in
     // several packs; the national ones must not cross.

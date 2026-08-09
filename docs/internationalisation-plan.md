@@ -516,20 +516,68 @@ which the US pack makes false. Swapped for `JP` — the fixture needs updating e
 time a pack lands, which is the intended maintenance signal rather than a
 regression.
 
-**Gate:** ✅ `npm test` green — **844 passing**, with the 725 pre-existing
+**Code-review finding, fixed in a follow-up commit**
+
+- **A fake two-part suffix defeated typosquat scoring in every pack at once.**
+  The registrable-label rule inferred a two-part public suffix from the
+  penultimate label alone — "is it `co`/`com`/`gov`/`org`/…?" — which is true for
+  `chase.gov.co` and `kiwibank.co.io`. But `.co` and `.io` are ordinary gTLDs, so
+  there the last two labels *are* the registrable domain. Reading them as a
+  suffix made the brand own the registrable label, which tripped the Phase 5
+  "the brand owns the label, so it's the real site" exemption and suppressed
+  brand scoring outright.
+
+  One open-registration domain therefore bypassed the rule in all six regions:
+  `commbank.gov.co` (AU), `barclays.com.co` (GB), `chase.gov.co` and
+  `paypal.gov.io` (US), `kiwibank.co.io` (NZ), `scotiabank.gov.io` (CA) and
+  `anpost.gov.co` (IE) all returned no brand flag. **Pre-existing on `main`** —
+  it predates this branch and affected the shipped AU and GB packs — but it
+  surfaced while reviewing the new packs, so it is fixed here.
+
+  Replaced with an enumerated `TWO_PART_SUFFIXES` set matched against the last
+  two labels as a whole. A miss degrades safely: the hostname is read as
+  `<label>.<tld>`, which at worst flags a genuine site under an unlisted suffix —
+  the conservative direction for a scam detector.
+
+  Two new pack invariants in `regions.test.ts` enforce both halves for every
+  present and future region: a brand under a fake two-part suffix must still be a
+  typosquat, *and* a brand on its own real domain must still not be. The second
+  matters as much as the first — Phase 5 found that dropping the exemption
+  flagged 21 of 24 genuine UK brand sites as `likely_scam` — and it deliberately
+  includes real `.co.uk` / `.com.au` / `.co.nz` hosts, because a bare
+  `<brand>.com` has only two labels and never exercises the suffix path at all.
+
+**Review notes that did *not* result in changes.** Two other candidates were
+investigated and dismissed on evidence: the `mentionsAny` boundary rule handles
+punctuation-adjacent mentions correctly (`IRD:`, `(IRD)`, `ACC-related` all
+match; `SECURE` and `IRDNZ` correctly don't), and the `PLAN_PEERS` table reads
+asymmetric but behaves symmetrically — Caribbean wangiri numbers (`1876`, `1268`)
+remain correctly foreign and flagged for US and CA users.
+
+**Known issue, out of scope and unfixed.** An AU user checking a Caribbean
+wangiri number (`1876…`) gets `country: "Australia"` and **no wangiri flag**:
+libphonenumber parses the NANP national form against the AU plan. Pre-existing,
+unrelated to region packs, and it defeats wangiri detection for the product's
+home region — worth its own fix.
+
+**Gate:** ✅ `npm test` green — **865 passing**, with the 725 pre-existing
 **untouched**, including zero changes to `scamDetector.test.ts` (the load-bearing
 Phase 1 check) and none to `regionGb.test.ts`. New
-`__tests__/regionPacksFollowup.test.ts` (96 tests) covers per-region SMS / URL /
-email / phone fixtures, pack-shape invariants, the coverage gate for CA, and
-isolation asserted pairwise — IE↔GB hardest, since shared language and brands
-with entirely different agencies make it the likeliest conflation. A fifth
-invariant in `regions.test.ts` now enforces the acronym rule behaviourally for
-every present and future pack.
+`__tests__/regionPacksFollowup.test.ts` (103 tests) covers per-region SMS / URL /
+email / phone fixtures, pack-shape invariants, the coverage gate for CA, the
+two-part-suffix regressions, and isolation asserted pairwise — IE↔GB hardest,
+since shared language and brands with entirely different agencies make it the
+likeliest conflation. Three further invariants in `regions.test.ts` enforce the
+acronym rule and both halves of the suffix rule behaviourally for every present
+and future pack.
 
 Every fix was mutation-checked: reverting `mentionsAny` fails the new invariant
 for exactly US/NZ/CA, reverting `PLAN_PEERS` fails the CA premium test, and
-aliasing each new pack to AU fails 12–15 tests — confirming all four are
-load-bearing rather than decorative.
+restoring the old marker-based suffix rule fails the suffix invariant in **all
+six** packs — as does removing two-part handling altogether, which is what
+confirms the genuine-site half is actually exercised rather than passing
+vacuously. Aliasing each new pack to AU fails 12–15 tests, confirming all four
+are load-bearing rather than decorative.
 
 Scope: new `lib/regions/{us,nz,ca,ie}.ts`, `lib/regions/types.ts`,
 `lib/regions/index.ts`, `lib/scamDetector.ts`, `lib/phoneIntel.ts`, new
