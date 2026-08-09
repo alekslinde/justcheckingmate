@@ -695,8 +695,34 @@ anything below.
 
 Concretely: `SELECT region, COUNT(*) FROM reports GROUP BY region` against the
 prod Turso DB — the local `local.db` seed has 14 rows with an empty region and
-tells you nothing. Worth splitting by `created_at` too, since the region column
-only started being populated in Phase 2.
+tells you nothing. Worth splitting by time too, since the region column only
+started being populated in Phase 2.
+
+**Now scripted — `npm run region-demand`** (`scripts/region-demand.ts`,
+read-only). It needs prod credentials in the environment; without them it reads
+the local fallback and says so rather than reporting a misleading zero:
+
+```bash
+TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... npm run region-demand
+```
+
+Two schema details the naive query gets wrong, both found while writing it:
+
+- **The timestamp column is `submitted_at` (epoch ms), not `created_at`** — the
+  suggestion above was wrong and would have errored. Bucketing needs
+  `datetime(submitted_at / 1000, 'unixepoch')`.
+- **`region` was added with `DEFAULT ''`, so pre-Phase-2 rows are the empty
+  string, not NULL.** A plain `GROUP BY region` silently lumps "before we
+  measured" together with a real region, understating the attributed split. The
+  script reports `(unset)` separately and re-computes shares excluding it.
+
+The script also flags any volume from regions outside the six covered packs,
+since per "Explicitly *not* next" that is the one finding that would justify
+adding an English region ahead of everything else.
+
+**Status: still unrun against prod.** The credentials are not on the dev machine
+(no `.env.local`, no `TURSO_*` vars, no `turso` CLI), so the question this gates
+remains open.
 
 **What the answer changes.** Meaningful non-AU volume argues for Phase 6 (or for
 more English regions); volume concentrated in AU/GB argues for spending the
