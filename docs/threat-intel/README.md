@@ -89,6 +89,49 @@ the time — rewriting it to match the outcome destroys that.
 
 ---
 
+## The source registry
+
+[`sources.yml`](sources.yml) is the curated list of sources this research draws
+on, tiered by how much weight a claim from each carries: **1** authoritative
+(government / regulator), **2** reputable vendor and press, **3** low-trust,
+cited once and unvetted.
+
+Research should read **from the registry** rather than from open web search. The
+citation census that built it turned up `scamwatchhq.com` — not the ACCC, an
+unaffiliated lookalike — cited beside `asic.gov.au` with nothing marking the
+difference. Open search will keep finding sites like that. Adding a source is a
+deliberate, reviewed act; tier 3 exists so a source that has already been looked
+at and found wanting is not silently rediscovered next cycle.
+
+Two conventions matter:
+
+- **`indicators:`** at the bottom of the file is *not* a source list. Those are
+  scam domains quoted as evidence in the roadmaps. They are never fetched, and
+  the checker fails the run if one is ever moved into a source tier.
+- **`retired: true`** marks a source that is known-gone and kept as a record.
+  Retired sources are skipped by the checker but stay in the file, because a
+  roadmap claim resting on a dead citation is a claim that needs re-sourcing.
+
+`scripts/check-sources.mjs` verifies every source URL still resolves:
+
+```bash
+node scripts/check-sources.mjs             # human-readable report
+node scripts/check-sources.mjs --validate  # structure only, no network
+node scripts/check-sources.mjs --markdown  # issue-body format
+```
+
+[`.github/workflows/source-check.yml`](../../.github/workflows/source-check.yml)
+runs it weekly (Tuesday ~07:00 AEST) and refreshes a single
+**🔗 Threat-intel source check** issue. It checks *reachability only* — whether a
+source has published anything new is research, not a cron job. It flags; it never
+edits the registry.
+
+Link rot is the quiet failure here. When a citation 404s, the evidence for a
+hardcoded score in `lib/` is gone and only the magic number is left — the exact
+decay the archive exists to prevent.
+
+---
+
 ## Workflow
 
 1. Branch `threat-intel/YYYY-MM-DD`, write the roadmap, open a docs PR.

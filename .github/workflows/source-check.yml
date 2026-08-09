@@ -1,0 +1,62 @@
+name: Threat-intel source check
+
+# Checks that every source in docs/threat-intel/sources.yml still resolves, and
+# refreshes a single "🔗 Threat-intel source check" issue with whatever rotted.
+#
+# Why this runs at all: the roadmaps in docs/threat-intel/ are the evidence layer
+# for hardcoded scores in lib/ — ".monster is +30 because CSC DBS measured >60%
+# abuse". When a citation 404s, the justification is gone and only the magic
+# number is left. This catches that while the claim is still traceable.
+#
+# It FLAGS, it does not edit the registry — same philosophy as spam-guard.yml and
+# dependabot-triage.yml. Reachability only: whether a source has published
+# anything NEW is research work, not a cron job.
+#
+# Indicator domains in the registry (scam infrastructure quoted as evidence) are
+# never fetched. The script fails the run if one is ever moved into a source
+# tier, rather than skipping it quietly.
+
+on:
+  schedule:
+    # Mondays 21:00 UTC ≈ 07:00 Tuesday Australia/Sydney. An hour after the
+    # Dependabot digest, so the week's flagged items land together.
+    - cron: "0 21 * * 1"
+  pull_request:
+    paths:
+      - "docs/threat-intel/sources.yml"
+      - "scripts/check-sources.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: source-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # On a PR touching the registry, validate structure only. Firing a hundred
+      # requests at government sites on every push is rude and slow, and the
+      # thing a PR can actually break is the file's shape.
+      - name: Validate registry
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-sources.mjs --validate
+
+      # Reachability failures are a maintenance signal, not a broken build — the
+      # digest issue is the deliverable, so the step reports and moves on.
+      - name: Check sources and refresh digest
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/check-sources.mjs --issue --markdown >> "$GITHUB_STEP_SUMMARY"

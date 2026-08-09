@@ -1,0 +1,626 @@
+# Threat-intelligence source registry
+#
+# The sources the weekly roadmap research draws on, tiered by how much weight a
+# claim from each one carries. Built from the citation census of the roadmaps in
+# this directory (2026-06-21 through 2026-08-02).
+#
+# WHY THIS FILE EXISTS
+#
+# Two reasons, both about trust.
+#
+# 1. Link rot. Roadmaps justify magic numbers in lib/ — ".monster is +30
+#    because CSC DBS measured >60% abuse". When that citation 404s, the evidence
+#    for the rule is gone and only the magic number is left. check-sources.mjs
+#    catches that while the claim is still traceable.
+#
+# 2. Source discipline. The census turned up scamwatchhq.com (NOT the real
+#    Scamwatch) and scamchecker.app cited beside asic.gov.au with no visible
+#    difference in standing. An unconstrained web search will keep finding those.
+#    A curated, tiered list is the fix: research reads FROM this file rather than
+#    from open search, so a new source is a deliberate reviewed addition.
+#
+# TIERS
+#
+#   1  Authoritative. Government, regulator, or national body — mostly AU.
+#      A named alert here is sufficient evidence for a high-confidence rule.
+#   2  Reputable vendor / press. Real reporting, but commercially interested:
+#      a vendor blog has an incentive to make a threat sound novel. Corroborate
+#      before it justifies a score on its own.
+#   3  Low trust. Cited once, unvetted. Kept — not deleted — so the record of
+#      what has already been looked at survives (see README, "Negative results").
+#      Never sufficient evidence on its own. Promote only with a reason.
+#
+# Sources marked `feed:` can be polled for new advisories. Sources marked
+# `check: manual` have no feed and no stable index — a human looks, or they
+# contribute nothing.
+#
+# Two flags the checker honours:
+#
+#   retired: true    Known-gone. Skipped by the checker but kept as a record —
+#                    any roadmap claim citing it has lost its evidence and needs
+#                    re-sourcing. Requires a note saying what happened.
+#   expect: blocked  Edge bot-protection refuses every automated request, so
+#                    reachability is unverifiable from CI. Reported as expected
+#                    rather than as rot. Use sparingly: each one is a source the
+#                    job has stopped genuinely checking.
+#
+# ⚠️  The `indicators:` block at the bottom is NOT a source list. Those are scam
+# domains quoted as evidence in the roadmaps. They must never be fetched. The
+# checker asserts they are absent from the source tiers rather than ignoring
+# them, so one pasted into the wrong block fails the build.
+
+version: 1
+updated: 2026-08-09
+
+tiers:
+  1:
+    - domain: scamwatch.gov.au
+      name: Scamwatch (ACCC / NASC)
+      url: https://www.scamwatch.gov.au/about-us/news-and-alerts
+      check: manual
+      region: AU
+      note: >-
+        Highest-value source by a wide margin — 27 citations across four
+        roadmaps. Named alerts here have driven several shipped rules.
+    - domain: nasc.gov.au
+      name: National Anti-Scam Centre
+      url: https://www.nasc.gov.au
+      region: AU
+      check: manual
+      note: Shares reporting pipeline with Scamwatch; quarterly loss statistics.
+    - domain: acma.gov.au
+      name: ACMA — telco scam action
+      url: https://www.acma.gov.au/phone-and-sms-scams
+      region: AU
+      check: manual
+      note: SMS sender-ID register and telco blocking rules; relevant to phoneIntel.
+    - domain: asic.gov.au
+      name: ASIC — investor alert list
+      url: https://www.asic.gov.au/newsroom/
+      region: AU
+      check: manual
+      note: >-
+        Named fake-platform warnings. Source for the deepfake investment
+        platform names (Quantum AI, Immediate Edge). Near-zero FP risk.
+    - domain: accc.gov.au
+      name: ACCC
+      url: https://www.accc.gov.au/about-us/news
+      region: AU
+      check: manual
+    - domain: cyber.gov.au
+      name: ACSC / ReportCyber (ASD)
+      url: https://www.cyber.gov.au/about-us/view-all-content/alerts-and-advisories
+      feed: https://www.cyber.gov.au/rss/alerts
+      region: AU
+    - domain: moneysmart.gov.au
+      name: MoneySmart (ASIC)
+      url: https://moneysmart.gov.au/check-and-report-scams
+      region: AU
+      check: manual
+    - domain: idcare.org
+      name: IDCARE
+      url: https://www.idcare.org/news
+      region: AU
+      check: manual
+      note: Identity-theft response body; already surfaced in verdict copy.
+    - domain: afp.gov.au
+      name: Australian Federal Police
+      url: https://www.afp.gov.au/news-centre
+      region: AU
+      check: manual
+    - domain: ato.gov.au
+      name: ATO — scam alerts
+      url: https://www.ato.gov.au/online-services/scams-cyber-safety-and-identity-protection
+      region: AU
+      check: manual
+      note: >-
+        Impersonated constantly. NB the roadmaps also quote `ato-gov-au.github.io`
+        as a typosquat SAMPLE — that string is an indicator, not this source.
+    - domain: myid.gov.au
+      name: myID (formerly myGovID)
+      url: https://www.myid.gov.au/security-and-privacy/how-to-verify-or-report-a-scam
+      region: AU
+      check: manual
+    - domain: scamnet.wa.gov.au
+      name: WA ScamNet (Consumer Protection WA)
+      url: https://www.scamnet.wa.gov.au/scamnet/Latest_Scams.htm
+      region: AU
+      check: manual
+      note: State-level; often lists local variants before the federal bodies.
+    - domain: police.vic.gov.au
+      name: Victoria Police
+      url: https://www.police.vic.gov.au/fraud-and-scams
+      region: AU
+      check: manual
+    - domain: nsw.gov.au
+      name: NSW Fair Trading
+      url: https://www.nsw.gov.au/departments-and-agencies/fair-trading
+      region: AU
+      check: manual
+    - domain: rta.qld.gov.au
+      name: Queensland RTA
+      url: https://www.rta.qld.gov.au
+      region: AU
+      check: manual
+      note: Cited for toll/fine impersonation variants.
+    - domain: wa.gov.au
+      name: Government of Western Australia
+      url: https://www.wa.gov.au
+      region: AU
+      check: manual
+    - domain: immi.homeaffairs.gov.au
+      name: Department of Home Affairs — Immigration
+      url: https://immi.homeaffairs.gov.au
+      region: AU
+      check: manual
+      note: Visa-scam impersonation target.
+    - domain: ic3.gov
+      name: FBI IC3
+      url: https://www.ic3.gov/PSA
+      region: US
+      check: manual
+      note: >-
+        Non-AU but authoritative. US-first tactics usually reach AU within a
+        cycle or two — useful as a leading indicator, not as AU evidence.
+
+  2:
+    - domain: krebsonsecurity.com
+      name: Krebs on Security
+      url: https://krebsonsecurity.com
+      feed: https://krebsonsecurity.com/feed/
+      note: Source of the .shop AU-retail-impersonation finding.
+    - domain: bleepingcomputer.com
+      name: BleepingComputer
+      url: https://www.bleepingcomputer.com
+      feed: https://www.bleepingcomputer.com/feed/
+    - domain: thehackernews.com
+      name: The Hacker News
+      url: https://thehackernews.com
+      feed: https://feeds.feedburner.com/TheHackersNews
+      note: High volume, 9 citations. Skews toward APT/CVE over consumer scams.
+    - domain: helpnetsecurity.com
+      name: Help Net Security
+      url: https://www.helpnetsecurity.com
+      feed: https://www.helpnetsecurity.com/feed/
+    - domain: securityboulevard.com
+      name: Security Boulevard
+      url: https://securityboulevard.com
+      feed: https://securityboulevard.com/feed/
+      note: Syndicated vendor content — treat as a pointer to the original.
+    - domain: isc.sans.edu
+      name: SANS Internet Storm Center
+      url: https://isc.sans.edu/diary.html
+      feed: https://isc.sans.edu/rssfeed.xml
+    - domain: netcraft.com
+      name: Netcraft
+      url: https://www.netcraft.com/resources/blog
+      check: manual
+      note: Strong on phishing-infrastructure measurement.
+    - domain: barracuda.com
+      name: Barracuda
+      url: https://blog.barracuda.com
+      check: manual
+      note: Corroborated the .shop/.store TLD promotion on 2026-07-26.
+    - domain: blog.cloudflare.com
+      name: Cloudflare blog
+      url: https://blog.cloudflare.com
+      feed: https://blog.cloudflare.com/rss/
+    - domain: news.trendmicro.com
+      name: Trend Micro news
+      url: https://www.trendmicro.com/en_au/research.html
+      check: manual
+    - domain: malwarebytes.com
+      name: Malwarebytes Labs
+      url: https://www.malwarebytes.com/blog
+      feed: https://www.malwarebytes.com/blog/feed/index.xml
+      note: Consumer-focused — unusually well matched to this project's scope.
+    - domain: huntress.com
+      name: Huntress
+      url: https://www.huntress.com/blog
+      check: manual
+    - domain: cofense.com
+      name: Cofense
+      url: https://cofense.com/blog/
+      check: manual
+      note: Phishing-email specific; useful for emailDistiller work.
+    - domain: ironscales.com
+      name: IRONSCALES
+      url: https://ironscales.com/blog
+      check: manual
+    - domain: fortra.com
+      name: Fortra
+      url: https://www.fortra.com/blog
+      check: manual
+      expect: blocked
+      note: >-
+        Edge bot-protection 403s every automated request, including browser-UA
+        ones, so this job can never verify it. Marked `expect: blocked` so it is
+        reported as expected rather than as rot — confirm by hand if a citation
+        from it ever matters.
+    - domain: acronis.com
+      name: Acronis
+      url: https://www.acronis.com/en-us/blog/
+      check: manual
+    - domain: cyble.com
+      name: Cyble
+      url: https://cyble.com/blog/
+      check: manual
+    - domain: ctm360.com
+      name: CTM360
+      url: https://www.ctm360.com/reports
+      check: manual
+      note: Publishes named AU-targeted campaign reports.
+    - domain: hunt.io
+      name: Hunt.io
+      url: https://hunt.io/blog
+      check: manual
+    - domain: pushsecurity.com
+      name: Push Security
+      url: https://pushsecurity.com/blog/
+      check: manual
+    - domain: levelblue.com
+      name: LevelBlue (ex-AT&T Cybersecurity)
+      url: https://levelblue.com/blogs
+      check: manual
+    - domain: cscdbs.com
+      name: CSC Digital Brand Services
+      url: https://www.cscdbs.com/blog/
+      check: manual
+      note: >-
+        Source of the >60% abuse-rate TLD measurement behind the .monster score.
+        Domain-registrar interest — corroborate before scoring on it alone.
+    - domain: brandsec.com.au
+      name: Brandsec
+      url: https://www.brandsec.com.au/blog/
+      region: AU
+      check: manual
+      note: AU-specific brand-abuse monitoring; corroborated the .shop promotion.
+    - domain: mailguard.com.au
+      name: MailGuard
+      url: https://www.mailguard.com.au/blog
+      region: AU
+      feed: https://www.mailguard.com.au/blog/rss.xml
+      note: AU email-security vendor; posts live AU phishing samples. 6 citations.
+    - domain: itnews.com.au
+      name: iTnews Australia
+      url: https://www.itnews.com.au/security
+      region: AU
+      feed: https://www.itnews.com.au/RSS/rss.ashx
+    - domain: securitybrief.com.au
+      name: SecurityBrief Australia
+      url: https://securitybrief.com.au
+      region: AU
+      feed: https://securitybrief.com.au/feed
+    - domain: techbusinessnews.com.au
+      name: Tech Business News AU
+      url: https://www.techbusinessnews.com.au
+      region: AU
+      check: manual
+    - domain: choice.com.au
+      name: CHOICE
+      url: https://www.choice.com.au/consumers-and-data/protecting-your-data
+      region: AU
+      check: manual
+      note: Consumer-advocacy; good on how scams are experienced, not on infra.
+    - domain: sbs.com.au
+      name: SBS News
+      url: https://www.sbs.com.au/news
+      region: AU
+      check: manual
+      note: >-
+        Multicultural coverage — the main outlet reporting scams targeting
+        non-English-speaking communities in AU. Relevant to i18n region packs.
+    - domain: thesenior.com.au
+      name: The Senior
+      url: https://www.thesenior.com.au
+      region: AU
+      check: manual
+      note: >-
+        Reported the Norton/PayPal callback variant targeting older Australians.
+        Narrow, but covers a demographic the security press largely ignores.
+    - domain: cybercrimeinfocenter.org
+      name: Cybercrime Information Center
+      url: https://www.cybercrimeinfocenter.org
+      check: manual
+      note: Academic-adjacent phishing measurement.
+    - domain: labs.cloudsecurityalliance.org
+      name: Cloud Security Alliance Labs
+      url: https://labs.cloudsecurityalliance.org
+      check: manual
+    - domain: biometricupdate.com
+      name: Biometric Update
+      url: https://www.biometricupdate.com
+      feed: https://www.biometricupdate.com/feed
+      note: Deepfake / liveness-bypass reporting. 6 citations.
+
+  # Cited once or twice, unvetted. Kept as a record of what has been looked at.
+  # Not evidence on its own — corroborate against tier 1/2 before scoring.
+  3:
+    - domain: scamwatchhq.com
+      name: ScamWatchHQ
+      url: https://scamwatchhq.com
+      check: manual
+      trust: low
+      note: >-
+        ⚠️  NOT Scamwatch. Unaffiliated site with a confusingly similar name,
+        cited once for a "quishing +146%" figure that has no primary source.
+        Kept specifically so the name-collision is documented and nobody
+        re-adds it thinking it is the ACCC. Do not cite.
+    - domain: scamchecker.app
+      name: ScamChecker
+      url: https://scamchecker.app
+      check: manual
+      trust: low
+      note: Competing tool's content marketing. Unsourced claims.
+    - domain: ringsafe.in
+      name: RingSafe
+      url: https://ringsafe.in
+      check: manual
+      trust: low
+    - domain: fraudbrokers.net
+      name: Fraud Brokers
+      url: https://fraudbrokers.net
+      check: manual
+      trust: low
+    - domain: forteclaim.com
+      name: ForteClaim
+      url: https://forteclaim.com
+      check: manual
+      trust: low
+      note: >-
+        "Fund recovery" adjacent. That sector is itself a common secondary-scam
+        vector preying on prior victims. Treat with suspicion, not just doubt.
+    - domain: financefraudmonitor.com
+      name: Finance Fraud Monitor
+      url: https://financefraudmonitor.com
+      check: manual
+      trust: low
+    - domain: flagmylisting.com
+      name: FlagMyListing
+      url: https://flagmylisting.com
+      check: manual
+      trust: low
+    - domain: ethicalassetsolutions.com
+      name: Ethical Asset Solutions
+      url: https://ethicalassetsolutions.com
+      check: manual
+      trust: low
+      note: Recovery-services adjacent — same caution as forteclaim.com.
+    - domain: stateofsurveillance.org
+      name: State of Surveillance
+      url: https://stateofsurveillance.org
+      check: manual
+      trust: low
+    - domain: noborders-group.com
+      name: No Borders Law Group
+      url: https://noborderslawgroup.com.au/migration-law/
+      region: AU
+      check: manual
+      trust: low
+      note: Rebranded from noborders-group.com. Migration law firm.
+    - domain: thekalculators.com.au
+      name: The Kalculators
+      url: https://thekalculators.com.au
+      region: AU
+      check: manual
+      trust: low
+      note: AU accounting firm blog. Cited for a tax-scam variant.
+    - domain: gotaxaustralia.com
+      name: GoTax Australia (DEFUNCT)
+      url: https://gotaxaustralia.com
+      region: AU
+      check: manual
+      trust: low
+      retired: true
+      note: >-
+        ⚠️  Domain no longer belongs to the cited publisher — it now redirects to
+        ozziefriends.com, an unrelated site. Classic expired-domain takeover, and
+        exactly the pattern this project flags elsewhere. Retired, kept as a
+        record: any roadmap claim citing it has lost its evidence. Do not cite.
+    - domain: itp.com.au
+      name: ITP Accounting
+      url: https://www.itp.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: accountantbusiness.com.au
+      name: Accountant Business
+      url: https://accountantbusiness.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: kalkine.com.au
+      name: Kalkine
+      url: https://kalkine.com.au
+      region: AU
+      check: manual
+      trust: low
+      note: Investment-tips publisher. Conflicted on investment-scam coverage.
+    - domain: bellpotter.com.au
+      name: Bell Potter
+      url: https://bellpotter.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: cybermate.com.au
+      name: Cybermate
+      url: https://cybermate.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: intrusionx.com.au
+      name: IntrusionX
+      url: https://intrusionx.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: jamcyber.com
+      name: JamCyber
+      url: https://jamcyber.com
+      region: AU
+      check: manual
+      trust: low
+    - domain: anptech.com.au
+      name: ANP Tech
+      url: https://www.anptech.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: channeltechsupport.com.au
+      name: Channel Tech Support
+      url: https://channeltechsupport.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: thehackacademy.com
+      name: The Hack Academy
+      url: https://www.thehackacademy.com
+      check: manual
+      trust: low
+    - domain: hoxhunt.com
+      name: Hoxhunt
+      url: https://hoxhunt.com/blog
+      check: manual
+      trust: low
+      note: Awareness-training vendor; blog is lead-gen.
+    - domain: keepnetlabs.com
+      name: Keepnet Labs
+      url: https://keepnetlabs.com/blog
+      check: manual
+      trust: low
+      note: Awareness-training vendor; statistics frequently uncited.
+    - domain: rewterz.com
+      name: Rewterz
+      url: https://rewterz.com/blogs
+      check: manual
+      trust: low
+    - domain: socinvestigation.com
+      name: SOC Investigation
+      url: https://www.socinvestigation.com
+      check: manual
+      trust: low
+    - domain: cybersecuritynews.com
+      name: Cyber Security News
+      url: https://cybersecuritynews.com
+      check: manual
+      trust: low
+      note: Aggregator, thin sourcing. Follow to the original.
+    - domain: techradar.com
+      name: TechRadar
+      url: https://www.techradar.com/news
+      check: manual
+      trust: low
+    - domain: techtimes.com
+      name: Tech Times
+      url: https://www.techtimes.com
+      check: manual
+      trust: low
+    - domain: unboxfuture.com
+      name: Unbox Future
+      url: https://www.unboxfuture.com
+      check: manual
+      trust: low
+    - domain: aviationa2z.com
+      name: Aviation A2Z
+      url: https://aviationa2z.com
+      check: manual
+      trust: low
+      note: Cited for an airline-refund scam variant. Off-domain for this project.
+    - domain: bluntmag.com.au
+      name: Blunt Magazine
+      url: https://bluntmag.com.au
+      region: AU
+      check: manual
+      trust: low
+      note: Music magazine — cited for a ticket-scam story. 4 citations, oddly.
+    - domain: pickr.com.au
+      name: Pickr
+      url: https://www.pickr.com.au
+      region: AU
+      check: manual
+      trust: low
+    - domain: investigatetv.com
+      name: InvestigateTV
+      url: https://www.investigatetv.com
+      check: manual
+      trust: low
+    - domain: wtop.com
+      name: WTOP News
+      url: https://wtop.com
+      check: manual
+      trust: low
+      note: US local radio. Cited once; no AU relevance.
+    - domain: cnn.com
+      name: CNN
+      url: https://edition.cnn.com
+      check: manual
+      trust: low
+      note: 5 citations, all deepfake-adjacent general coverage.
+    - domain: linkedin.com
+      name: LinkedIn (posts)
+      url: https://www.linkedin.com
+      check: manual
+      trust: low
+      note: Individual posts. Unstable, often gated. Prefer the primary source.
+    - domain: legendarylandscapes.co.uk
+      name: Legendary Landscapes (RETIRED)
+      url: https://www.legendarylandscapes.co.uk
+      check: manual
+      trust: low
+      retired: true
+      note: >-
+        UK landscaping firm with a blog post on parking-meter quishing. Almost
+        certainly SEO filler, and now 403s to every agent. Cited once; should not
+        have been. Retired rather than replaced — the claim it supported needs a
+        real source or it should be dropped from the roadmap. Do not cite.
+
+# Brand and institution pages that publish their own scam advisories. Useful
+# because impersonation targets often warn about live campaigns before the
+# regulators do — but each speaks only to its own brand.
+brands:
+  - domain: auspost.com.au
+    url: https://auspost.com.au/about-us/about-our-site/online-security-scams-fraud
+    region: AU
+  - domain: commbank.com.au
+    url: https://www.commbank.com.au/support/security.html
+    region: AU
+  - domain: anz.com.au
+    url: https://www.anz.com.au/security/types-of-scams/
+    region: AU
+  - domain: bankaust.com.au
+    url: https://www.bankaust.com.au/security
+    region: AU
+  - domain: horizonbank.com.au
+    url: https://horizonbank.com.au/security
+    region: AU
+  - domain: latitudefinancial.com.au
+    url: https://www.latitudefinancial.com.au/security/
+    region: AU
+  - domain: medibank.com.au
+    url: https://www.medibank.com.au/help/security-and-privacy/
+    region: AU
+  - domain: agl.com.au
+    url: https://www.agl.com.au/customer-security/scams-phishing-and-fraud/recent-scams
+    region: AU
+  - domain: swyftx.com
+    url: https://swyftx.com/au/security/latest-scams/
+    region: AU
+  - domain: coinspot.zendesk.com
+    url: https://coinspot.zendesk.com/hc/en-us
+    region: AU
+  - domain: help.uber.com
+    url: https://help.uber.com/en-AU
+    region: AU
+
+# ⚠️  NOT SOURCES. Scam domains quoted as evidence in the roadmaps, recorded
+# here so the checker can assert they never appear in a tier above and never
+# get fetched. Fetching attacker infrastructure on a weekly cron from a CI
+# runner would confirm the runner as a live target and leak a request pattern.
+# check-sources.mjs must skip every entry below unconditionally.
+indicators:
+  - swyftx-account.xyz
+  - coinspot-verify.top
+  - storage.click
+  - abc.ngrok-free.app
+  - mgt.azurestaticapps.net
+  - ato-gov-au.github.io
