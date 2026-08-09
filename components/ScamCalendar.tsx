@@ -1,23 +1,28 @@
+"use client";
+
 // Scam calendar — "what's in season right now", plus the year ahead.
 //
-// A server component on purpose: the whole thing is a pure function of the
-// region and today's date, so there is nothing to hydrate, and an unauthored
-// region ships no season data to the client at all.
+// A client component so it can read the user's tone preference, which lives in
+// localStorage and is therefore unavailable on the server (see lib/lang.tsx).
+// The *date* is not decided here: `today` is resolved server-side and passed in,
+// because the browser clock is the user's device setting rather than their
+// region, and a traveller or a device with a wrong clock would otherwise see the
+// wrong season. Server decides when, client decides how it reads.
 //
 // Educational only — nothing here influences a verdict. The copy is deliberately
 // careful not to imply the tool scores messages differently by date: a season
 // tells you what's *likely*, and likelihood is context for a person, not a
 // reason for the detector to move a number.
 
+import Link from "next/link";
+import { useLang, type MessageKey } from "@/lib/lang";
 import {
   activeSeasons,
   upcomingSeasons,
   calendarForRegion,
   daysUntilStart,
   formatWindow,
-  regionToday,
   type ScamSeason,
-  type SeasonConfidence,
 } from "@/lib/scamCalendar";
 import type { RegionCode } from "@/lib/regions";
 
@@ -25,30 +30,25 @@ import type { RegionCode } from "@/lib/regions";
 const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
-// Confidence is surfaced rather than hidden — a floating window shouldn't read
-// like a guaranteed date, and a broad seasonal lift shouldn't read like a spike.
-const CONFIDENCE_LABEL: Record<SeasonConfidence, string> = {
-  fixed: "Same dates every year",
-  floating: "Dates shift year to year",
-  elevated: "Raised risk, not a fixed date",
-};
-
-// Thresholds are expressed in days and the handover points are exact, so the
-// label never jumps backwards: the last week-label is "about 8 weeks" at 59
-// days and the first month-label is "about 2 months" at 60. Rounding each unit
-// independently is what produced that seam — 59 days rounds to 8 weeks while 60
-// rounds to 2 months, so the same gap read as both. Switching on the day count
-// rather than on the rounded value keeps the ladder monotonic.
-function startsInLabel(days: number): string {
-  if (days === 0) return "Starts today";
-  if (days === 1) return "Starts tomorrow";
-  if (days < 14) return `Starts in ${days} days`;
-  if (days < 60) return `Starts in about ${Math.round(days / 7)} weeks`;
+/**
+ * The "starts in N" label, chosen by day count.
+ *
+ * Thresholds switch on the raw days rather than on each unit's rounded value:
+ * rounding independently is what made 59 days read as "about 8 weeks" and 60 as
+ * "about 2 months", a seam where the same gap described itself two ways.
+ */
+function startsInLabel(days: number, t: (k: MessageKey, v?: Record<string, string | number>) => string): string {
+  if (days === 0) return t("calendar.starts.today");
+  if (days === 1) return t("calendar.starts.tomorrow");
+  if (days < 14) return t("calendar.starts.days", { count: days });
+  if (days < 60) return t("calendar.starts.weeks", { count: Math.round(days / 7) });
   const months = Math.round(days / 30);
-  return `Starts in about ${months} month${months === 1 ? "" : "s"}`;
+  return t(months === 1 ? "calendar.starts.month" : "calendar.starts.months", { count: months });
 }
 
 function SeasonCard({ season, active }: { season: ScamSeason; active: boolean }) {
+  const { t } = useLang();
+
   return (
     <article
       className={[
@@ -62,12 +62,12 @@ function SeasonCard({ season, active }: { season: ScamSeason; active: boolean })
         <div className="min-w-0">
           <h3 className="font-bold text-gray-100 text-base">{season.title}</h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            {formatWindow(season.window)} · {CONFIDENCE_LABEL[season.confidence]}
+            {formatWindow(season.window)} · {t(`calendar.confidence.${season.confidence}` as MessageKey)}
           </p>
         </div>
         {active && (
           <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-full px-2.5 py-1">
-            Active now
+            {t("calendar.badge.active")}
           </span>
         )}
       </div>
@@ -76,7 +76,7 @@ function SeasonCard({ season, active }: { season: ScamSeason; active: boolean })
 
       <div className="space-y-1.5">
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-          What you&rsquo;ll see
+          {t("calendar.lures.heading")}
         </p>
         <ul className="space-y-1 list-none">
           {season.lures.map((lure) => (
@@ -96,24 +96,53 @@ function SeasonCard({ season, active }: { season: ScamSeason; active: boolean })
   );
 }
 
+/**
+ * The honest empty state, shown only on the standalone page.
+ *
+ * As a *section* on another page, an unauthored region rendered nothing — right,
+ * because there was surrounding content to carry the page. As a whole page that
+ * would be a dead end, so this says plainly that we have no data rather than
+ * substituting another country's seasons, and points somewhere useful.
+ */
+function EmptyState() {
+  const { t } = useLang();
+  return (
+    <article className={CARD}>
+      <section className="space-y-2">
+        <h2 className={H2}>{t("calendar.empty.heading")}</h2>
+        <p className="text-sm text-gray-400">{t("calendar.empty.body")}</p>
+      </section>
+      <Link
+        href="/learn"
+        className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
+      >
+        {t("calendar.learnCta")}
+      </Link>
+    </article>
+  );
+}
+
 export default function ScamCalendar({
   region,
-  now,
+  today,
+  standalone = false,
 }: {
   region: RegionCode;
-  /** Injectable for tests; defaults to the region's civil date at render time. */
-  now?: Date;
+  /**
+   * The region's civil date, resolved server-side via regionToday(). Passed in
+   * rather than computed here so the calendar tracks the user's region, not
+   * their device clock.
+   */
+  today: Date;
+  /** Renders an explanatory empty state instead of nothing when true. */
+  standalone?: boolean;
 }) {
+  const { t } = useLang();
   const all = calendarForRegion(region);
 
-  // A region with no authored calendar renders nothing at all, rather than
-  // showing another country's seasons. Honest coverage over filled space.
-  if (all.length === 0) return null;
-
-  // The server clock is UTC in production, so the raw date would put an AU user
-  // ~10 hours behind their own — enough to show a season starting "tomorrow" on
-  // the morning it actually opens. Resolve to the region's civil date instead.
-  const today = regionToday(region, now);
+  // A region with no authored calendar never borrows another's seasons. Inline
+  // it renders nothing; as a page it explains itself.
+  if (all.length === 0) return standalone ? <EmptyState /> : null;
 
   const active = activeSeasons(region, today);
   const upcoming = upcomingSeasons(region, today, 2);
@@ -123,19 +152,15 @@ export default function ScamCalendar({
   return (
     <article className={CARD} id="scam-calendar">
       <section className="space-y-2">
-        <h2 className={H2}>Scam calendar</h2>
-        <p className="text-sm text-gray-400">
-          Scammers follow the calendar, because a message only works when
-          it&rsquo;s plausible. Knowing what&rsquo;s in season makes the odd one
-          out easier to spot. This is background knowledge only &mdash; we check
-          every message the same way, whatever the date.
-        </p>
+        <h2 className={H2}>{t("calendar.title")}</h2>
+        <p className="text-sm text-gray-400">{t("calendar.intro")}</p>
+        <p className="text-sm text-gray-500">{t("calendar.neutrality")}</p>
       </section>
 
       {active.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300">
-            In season right now
+            {t("calendar.active.heading")}
           </h3>
           <div className="space-y-3">
             {active.map((s) => (
@@ -148,12 +173,12 @@ export default function ScamCalendar({
       {upcoming.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            Coming up
+            {t("calendar.upcoming.heading")}
           </h3>
           <div className="space-y-3">
             {upcoming.map((s) => (
               <div key={s.id} className="space-y-1.5">
-                <p className="text-xs text-gray-500">{startsInLabel(daysUntilStart(s, today))}</p>
+                <p className="text-xs text-gray-500">{startsInLabel(daysUntilStart(s, today), t)}</p>
                 <SeasonCard season={s} active={false} />
               </div>
             ))}
@@ -164,7 +189,7 @@ export default function ScamCalendar({
       {rest.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            Rest of the year
+            {t("calendar.rest.heading")}
           </h3>
           <div className="space-y-3">
             {rest.map((s) => (
@@ -174,10 +199,19 @@ export default function ScamCalendar({
         </section>
       )}
 
-      <p className="text-xs text-gray-500 border-t border-gray-800 pt-4">
-        Out-of-season doesn&rsquo;t mean safe. These campaigns run all year &mdash;
-        they just work best when you&rsquo;re expecting them.
-      </p>
+      <div className="border-t border-gray-800 pt-4 space-y-3">
+        <p className="text-xs text-gray-500">{t("calendar.outro")}</p>
+        {/* Only on the standalone page — inline, the surrounding page already
+            carries its own navigation and this would be a link to itself. */}
+        {standalone && (
+          <Link
+            href="/learn"
+            className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
+          >
+            {t("calendar.learnCta")}
+          </Link>
+        )}
+      </div>
     </article>
   );
 }

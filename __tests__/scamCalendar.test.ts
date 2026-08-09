@@ -308,6 +308,62 @@ describe("calendar/timezone coupling", () => {
   });
 });
 
+describe("surfacing (home teaser / learn card / calendar page)", () => {
+  // The teaser, the Learn link card and the calendar page all derive their
+  // content from activeSeasons(), so they cannot disagree about what is in
+  // season. This pins that shared source rather than the three renderers.
+  it("gives the same active seasons to every surface", () => {
+    const date = on(8, 10);
+    const forCalendar = activeSeasons("AU", date).map((s) => s.id);
+    const forTeaser = activeSeasons("AU", date).map((s) => s.id);
+    expect(forTeaser).toEqual(forCalendar);
+    expect(forTeaser.length).toBeGreaterThan(0);
+  });
+
+  // Both the teaser and the Learn card hide themselves when nothing is active,
+  // so an empty result must be reachable rather than theoretical — otherwise the
+  // hidden branch is dead code that never gets exercised.
+  it("returns nothing for a region without a calendar, so teasers stay hidden", () => {
+    expect(activeSeasons("GB", on(8, 10))).toEqual([]);
+    expect(activeSeasons("ZZ", on(8, 10))).toEqual([]);
+  });
+
+  it("exposes a title for every active season, for the teaser's summary line", () => {
+    for (const s of activeSeasons("AU", on(8, 10))) {
+      expect(s.title.trim().length).toBeGreaterThan(0);
+      expect(s.why.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  // The AU calendar has real quiet stretches — roughly March–May and the first
+  // half of November. The teaser and Learn card correctly hide themselves then,
+  // which is the honest behaviour: inventing a season to keep a banner on screen
+  // would be filling space rather than warning anyone.
+  //
+  // This documents the quiet months rather than forbidding them, so that adding
+  // or removing a season shows up here as a deliberate change in coverage.
+  it("has quiet months, and hides the teaser rather than inventing a season", () => {
+    const quietMonths = new Set<number>();
+    for (let month = 1; month <= 12; month++) {
+      for (let day = 1; day <= 28; day++) {
+        if (activeSeasons("AU", on(month, day)).length === 0) quietMonths.add(month);
+      }
+    }
+    expect([...quietMonths].sort((a, b) => a - b)).toEqual([3, 4, 5, 11]);
+  });
+
+  it("covers the months that matter most for AU scams", () => {
+    // Tax time and the pre-Christmas retail window are the two periods the
+    // calendar exists for; a gap in either would be a coverage bug.
+    for (const month of [6, 7, 8, 9, 10, 12]) {
+      expect(
+        activeSeasons("AU", on(month, 15)).length,
+        `no active season mid-month ${month}`,
+      ).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe("formatWindow", () => {
   it("formats a normal window", () => {
     expect(formatWindow({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 }))
