@@ -93,6 +93,12 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     setMode({ ...getSnapshot(), tone });
   }, []);
 
+  // Every callback above is useCallback'd with an empty dep array, so this is
+  // effectively [mode] today. The full list is kept deliberately: if one of
+  // them ever gains a dependency it will start changing identity, and this
+  // memo must invalidate with it — otherwise every consumer of the context
+  // silently keeps a stale callback. Listing them costs nothing now and makes
+  // that failure impossible later.
   const value = useMemo(
     () => ({ mode, toggle, select, setLocale, setTone }),
     [mode, toggle, select, setLocale, setTone],

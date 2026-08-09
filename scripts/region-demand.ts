@@ -94,17 +94,38 @@ async function main() {
 
   // 3. Split by month: the region column only started being populated in
   //    Phase 2, so a flat lifetime count understates recent non-AU demand.
-  const byMonth = await db.execute(`
-    SELECT strftime('%Y-%m', datetime(submitted_at / 1000, 'unixepoch')) AS month,
-           CASE WHEN region = '' THEN '(unset)' ELSE region END AS region,
-           COUNT(*) AS n
-    FROM reports
-    GROUP BY 1, 2
-    ORDER BY month DESC, n DESC
-  `);
+  //
+  //    Bucketing timezone matters here. Plain 'unixepoch' is UTC, which pushes
+  //    AU submissions from the first ~10-11 hours of a month into the previous
+  //    one — precisely the trend this script exists to read. SQLite's
+  //    'localtime' is not the fix either: it resolves against whichever machine
+  //    runs the script, so the same data would bucket differently for different
+  //    people. Instead we declare the offset explicitly and print it, so the
+  //    numbers mean the same thing wherever they're produced.
+  //
+  //    Default is +10:00 (AEST, the primary market). Override for another
+  //    reference point, e.g. REGION_DEMAND_UTC_OFFSET=+00:00 for plain UTC.
+  const offset = process.env.REGION_DEMAND_UTC_OFFSET ?? "+10:00";
+  if (!/^[+-]\d{2}:\d{2}$/.test(offset)) {
+    throw new Error(
+      `REGION_DEMAND_UTC_OFFSET must look like "+10:00" or "-05:00", got "${offset}"`,
+    );
+  }
+
+  const byMonth = await db.execute({
+    sql: `
+      SELECT strftime('%Y-%m', datetime(submitted_at / 1000, 'unixepoch', ?)) AS month,
+             CASE WHEN region = '' THEN '(unset)' ELSE region END AS region,
+             COUNT(*) AS n
+      FROM reports
+      GROUP BY 1, 2
+      ORDER BY month DESC, n DESC
+    `,
+    args: [offset],
+  });
 
   if (byMonth.rows.length) {
-    console.log("\nBy month (most recent first)");
+    console.log(`\nBy month (most recent first; buckets cut at UTC${offset})`);
     console.log("─".repeat(60));
     let current = "";
     for (const r of byMonth.rows) {

@@ -93,8 +93,17 @@ export function parseMode(raw: string | null | undefined): LangMode {
   if (raw === "normal") return DEFAULT_MODE;
 
   const [locale, tone] = raw.split(":");
+
+  // An unrecognised locale discards the whole mode, tone included, rather than
+  // keeping the tone against the base locale. Tone is only meaningful relative
+  // to its locale: a user who stored "fr:regional" and comes back after French
+  // is withdrawn should get plain English, not English in a regional register
+  // they never chose for this language. Reads never rewrite storage, so the
+  // original value survives and starts working again if that locale returns.
+  if (!isLocale(locale)) return DEFAULT_MODE;
+
   return {
-    locale: isLocale(locale) ? locale : BASE_LOCALE,
+    locale,
     tone: isTone(tone) ? tone : BASE_TONE,
   };
 }

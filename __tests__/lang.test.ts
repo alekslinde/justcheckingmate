@@ -83,11 +83,29 @@ describe("parseMode", () => {
     expect(parseMode("")).toEqual(DEFAULT_MODE);
   });
 
-  it("degrades unknown locales and tones to the base rather than throwing", () => {
-    expect(parseMode("fr:regional")).toEqual({ locale: "en", tone: "regional" });
+  it("degrades an unknown tone to the base tone, keeping the locale", () => {
     expect(parseMode("en:shouty")).toEqual(NORMAL);
+  });
+
+  it("discards the tone too when the locale is unknown", () => {
+    // Tone is only meaningful relative to its locale: someone returning with a
+    // stored "fr:regional" after French is withdrawn should get plain English,
+    // not English in a regional register they never picked for this language.
+    expect(parseMode("fr:regional")).toEqual(DEFAULT_MODE);
+    expect(parseMode("de:normal")).toEqual(DEFAULT_MODE);
+  });
+
+  it("degrades malformed values rather than throwing", () => {
     expect(parseMode("garbage")).toEqual(DEFAULT_MODE);
     expect(parseMode("::::")).toEqual(DEFAULT_MODE);
+  });
+
+  it("never rewrites storage on read, so a withdrawn locale can come back", () => {
+    // parseMode is pure — the stored string is untouched, so if that locale
+    // ships again the user's original preference resumes working.
+    const stored = "fr:regional";
+    expect(parseMode(stored)).toEqual(DEFAULT_MODE);
+    expect(stored).toBe("fr:regional");
   });
 
   it("round-trips every mode through serialise → parse", () => {

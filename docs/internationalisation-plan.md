@@ -716,6 +716,13 @@ Two schema details the naive query gets wrong, both found while writing it:
   measured" together with a real region, understating the attributed split. The
   script reports `(unset)` separately and re-computes shares excluding it.
 
+Month buckets are cut at **UTC+10:00 (AEST)** by default, not UTC: plain
+`unixepoch` bucketing pushes AU submissions from the first ~10–11 hours of a
+month into the previous one, distorting the very trend being read. SQLite's
+`'localtime'` would make the answer depend on whose machine ran the script, so
+the offset is declared explicitly, validated, and printed in the output.
+Override with `REGION_DEMAND_UTC_OFFSET=+00:00` for plain UTC.
+
 The script also flags any volume from regions outside the six covered packs,
 since per "Explicitly *not* next" that is the one finding that would justify
 adding an English region ahead of everything else.
