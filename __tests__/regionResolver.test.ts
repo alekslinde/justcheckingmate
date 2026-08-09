@@ -28,8 +28,13 @@ describe("resolveRegion", () => {
   it("sends a known-but-uncovered country to the base-only pack", () => {
     // Applying AU agency and brand rules to a German user would be useless and
     // would wrongly claim full coverage.
+    //
+    // "US" used to be the second fixture here and now has its own pack, which is
+    // the point of the change rather than a regression — so these are countries
+    // we still have no national layer for. They must be swapped out again as
+    // packs are added, which is the intended maintenance signal.
     expect(resolveRegion(geo("DE"))).toBe(FALLBACK_REGION);
-    expect(resolveRegion(geo("US"))).toBe(FALLBACK_REGION);
+    expect(resolveRegion(geo("JP"))).toBe(FALLBACK_REGION);
   });
 
   // GB is the first geo-resolvable region besides AU, so these assert that

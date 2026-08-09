@@ -207,6 +207,92 @@ describe("analysePhone — scam heuristics stay ours", () => {
   });
 });
 
+// A foreign number typed without a leading "+" — exactly how a missed call or
+// caller ID displays it. Parsed against the home plan it comes back invalid with
+// `country = home`, so it fell through to the "unparseable" branch and was
+// reported as the *user's own country* with every international risk check
+// skipped: an Australian checking a Jamaican wangiri number saw "Australia" and
+// no wangiri flag.
+//
+// Found reviewing the region packs, but not a region-pack bug — it affected
+// every non-NANP region (AU, GB, NZ, IE) and non-NANP prefixes too, so Somalia
+// +252 also read as "Australia".
+describe("analysePhone — international numbers typed without a '+'", () => {
+  it.each(["AU", "GB", "NZ", "IE", "CA", "US"])(
+    "recognises a Jamaican wangiri number for a %s user",
+    (region) => {
+      const intel = analysePhone("18765551234", region);
+      expect(intel.country).toBe("Jamaica");
+      expect(intel.wangiriRisk).toBe(true);
+      expect(intel.spoofingRisk).toBe("very_high");
+    },
+  );
+
+  it.each([
+    ["12685551234", "Antigua & Barbuda"],
+    ["16645551234", "Montserrat"],
+    ["12465551234", "Barbados"],
+  ])("recognises the NANP wangiri number %s as %s", (number, country) => {
+    // libphonenumber rates these small-territory subscriber ranges invalid, so
+    // the reparse falls back to matching the known wangiri prefix. Without that
+    // fallback these three would still be missed.
+    const intel = analysePhone(number, "AU");
+    expect(intel.country).toBe(country);
+    expect(intel.wangiriRisk).toBe(true);
+  });
+
+  it("recognises a non-NANP wangiri origin", () => {
+    const intel = analysePhone("2525551234", "AU");
+    expect(intel.country).toBe("Somalia");
+    expect(intel.wangiriRisk).toBe(true);
+  });
+
+  it("still grades high-scam and elevated-volume origins correctly", () => {
+    const nigeria = analysePhone("2348001234567", "AU");
+    expect(nigeria.country).toBe("Nigeria");
+    expect(nigeria.highScamCountry).toBe(true);
+    expect(nigeria.spoofingRisk).toBe("high");
+
+    // Elevated-volume must stay "medium" — large diaspora communities receive
+    // genuine calls from here daily, and the reparse must not escalate that.
+    const india = analysePhone("919876543210", "AU");
+    expect(india.country).toBe("India");
+    expect(india.spoofingRisk).toBe("medium");
+  });
+
+  // The reparse is only safe because it is narrowly guarded. These assert the
+  // guards: a valid domestic number must never be reinterpreted as foreign.
+  it.each([
+    ["0412345678", "AU", "Australia"],
+    ["1300975707", "AU", "Australia"],
+    ["1800931678", "AU", "Australia"],
+    ["132221", "AU", "Australia"],
+    ["0190012345", "AU", "Australia"],
+    ["07911123456", "GB", "United Kingdom"],
+    ["08001111", "GB", "United Kingdom"],
+    ["0211234567", "NZ", "New Zealand"],
+    ["015551234", "IE", "Ireland"],
+    ["2125551234", "US", "United States"],
+    ["4165551234", "CA", "Canada"],
+  ])("does not reinterpret the domestic number %s (%s) as foreign", (number, region, country) => {
+    const intel = analysePhone(number, region);
+    expect({ country: intel.country, domestic: intel.isDomestic })
+      .toEqual({ country, domestic: true });
+  });
+
+  it("leaves a leading-zero national number alone", () => {
+    // "0412345678" stripped of its trunk prefix parses as Switzerland (+41).
+    // The guard against reparsing anything starting with "0" is what stops that.
+    const intel = analysePhone("0412345678", "AU");
+    expect(intel.country).not.toBe("Switzerland");
+  });
+
+  it("still rejects short and fabricated input rather than reparsing it", () => {
+    expect(analysePhone("12345", "AU").spoofingRisk).toBe("very_high");
+    expect(analysePhone("5551234", "AU").lineType).toBe("unknown");
+  });
+});
+
 describe("checkPhone — region-neutral copy", () => {
   it("no longer hardcodes Australian agencies or ranges in flags", () => {
     const flags = checkPhone("+448009177777", "GB").flags.join(" ");

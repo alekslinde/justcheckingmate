@@ -4,6 +4,10 @@
 import { BASE_SIGNALS } from "./base";
 import { AU } from "./au";
 import { GB } from "./gb";
+import { US } from "./us";
+import { NZ } from "./nz";
+import { CA } from "./ca";
+import { IE } from "./ie";
 import { REST_OF_WORLD } from "./rest-of-world";
 import type { RegionCode, RegionDefinition, RegionPack } from "./types";
 
@@ -30,6 +34,10 @@ export const FALLBACK_REGION: RegionCode = "ZZ";
 const REGIONS: Record<RegionCode, RegionDefinition> = {
   AU,
   GB,
+  US,
+  NZ,
+  CA,
+  IE,
   ZZ: REST_OF_WORLD,
 };
 

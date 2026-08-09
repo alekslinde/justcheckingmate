@@ -418,6 +418,218 @@ exposed, and US/NZ/CA/IE need no number-plan work (Phase 4 note).
 
 ---
 
+## Phase 5 follow-ups — US, NZ, CA, IE ✅ done
+
+**Outcome:** six covered regions. The interface prediction held — no field was
+added or changed, and all four packs are pure data. What did *not* hold was the
+assumption that "data-only" means "risk-free": three real defects surfaced, two
+of them affecting the regions that already shipped.
+
+1. ✅ `lib/regions/us.ts`, `nz.ts`, `ca.ts`, `ie.ts`, registered in
+   `regions/index.ts`; `RegionCode` widened. `REGION_OPTIONS` is derived from
+   the registry, so the picker gained all four with no UI change.
+2. ✅ Each pack carries its own agencies, no-link senders, toll/parcel/utility/
+   pension/tax campaigns, identity re-registration lures, typosquat and brand
+   sets, legit domains, regulator copy and reporting body.
+
+**Canada ships as `coverage: "partial"`, not `"full"`.** The one deliberate
+divergence. Every keyword is English, against an officially bilingual population
+where roughly a fifth speak French at home. A French-language smish would match
+almost nothing and, declared "full", would return a confident-looking clean
+verdict — the exact silent-collapse failure the guiding constraints name.
+Declared partial, the Phase 3 coverage gate downgrades clean verdicts to
+`unknown` while positive detections still report normally. Promoting it is
+Phase 6 work: it needs French keyword sets and a native-speaker review.
+
+**Bugs found by exercising four more regions**
+
+The pattern from Phases 4 and 5 repeated: each bug lived at a seam that only a
+new region could reach.
+
+- **Short agency acronyms fired inside ordinary English.** The worst of the
+  three, and it affected the shared scorer rather than one pack. Agency lists
+  are plain string arrays with no substring/word split (unlike `BrandSet`), and
+  national agency acronyms are overwhelmingly three letters — so plain
+  `includes()` matched inside common words. NZ's `"acc"` flagged **"your account
+  is fine"** as government impersonation; `"ssa"` read "me**ssa**ge" as the SSA,
+  `"sec"` read "**sec**urity" as the SEC, and `"ird"` read "we**ird**" and
+  "th**ird**" as Inland Revenue. Since "security" and "account" appear in a large
+  share of both legitimate and scam messages, this was a false positive on
+  ordinary traffic, not an edge case.
+
+  Fixed with `mentionsAny` in `scamDetector`: entries of ≤3 characters are
+  matched on `\b` boundaries — the same rule `BrandSet.word` already used —
+  applied *automatically* by length rather than via a curated list, so a future
+  pack author inherits the protection without opting in. Applied to
+  `authorityMentions`, `noLinkSenders`, `foreignAuthorityMentions`,
+  `callbackBrands` (IE's `"eir"` ⊂ "th**eir**") and `officialSenderNames`, which
+  had the same latent exposure in the **pre-existing AU and GB packs**
+  (`"ato"`, `"anz"`, `"nab"`, `"dwp"`).
+
+- **NANP premium numbers lost their warning for Canadian users.** The Phase 4
+  failure mode at a new seam. libphonenumber resolves any bare `+1 900` to `US`,
+  so for a Canadian user the number read as *foreign*, and the domestic-premium
+  guard — added in Phase 4 to stop an unparseable foreign number being called
+  domestic premium — suppressed the flag entirely. The identical
+  `1-900-555-1212` scored **95 for a US user and 35 for a Canadian one**, with
+  risk collapsing from `very_high` to `low` on the one case that directly costs
+  the user money.
+
+  Fixed with `PLAN_PEERS`, held separately from `SHARED_NUMBER_PLANS` because
+  the relationship differs: Guernsey is *subordinate* to GB (and should display
+  as "United Kingdom"), whereas Canada and the US are *peers* in the NANP and
+  must each keep their own name. Merging them would have fixed domesticity while
+  reporting Canadian numbers as American.
+
+- **Domestic numbers displayed the home country, not their own.** Surfaced by
+  the peer fix: the domestic branches returned `country: homeName`, so a Toronto
+  number read as "United States" for a US user. Harmless while every domestic
+  number *was* the home country; wrong as soon as peers existed — and misleading
+  precisely when someone checks a number because it looks out-of-area. Now
+  `domesticName()` prefers the parsed country, leaving subordinate territories
+  (a +44 Jersey number → "United Kingdom") unchanged.
+
+**Deviations**
+
+- **No `areaCodes` for US or CA.** The NANP has ~300 US area codes, but unlike
+  the UK and AU plans they carry almost no signal: portability and VoIP mean an
+  area code no longer indicates where a caller is. Attributing "212 → New York"
+  would state something we can't stand behind. NZ (5 codes) and IE (~45) are
+  enumerated, since the code still genuinely indicates a region there.
+- **No trusted suffix is an open registration, in any pack.** The GB `.co.uk`
+  lesson generalised: `.com`/`.us` (US), `.co.nz` (NZ), `.ca` (CA) and `.ie`
+  (IE) are all excluded. `.ca` is the subtle one — residency requirements are
+  not the same eligibility bar as government status — and `.ie` relaxed its
+  connection-to-Ireland rule in 2018, so a national suffix being "restricted" has
+  to be checked against the registry's *current* policy rather than assumed.
+- **No `senderIdFlag` for any of the four.** None has an ACMA-style scheme that
+  labels messages "Unverified"; the US (10DLC/CTIA), NZ, CA (CRTC) and IE
+  (ComReg) schemes all govern *origination* instead, so there is no label for a
+  scammer to explain away.
+- **Two pack-authoring double-counts, caught by the existing invariant** before
+  they ever ran: NZ's `"kiwisaver funds"`/`"release kiwisaver"` alongside
+  `"kiwisaver"`, and CA's `"interac e-transfer"` alongside both its halves. The
+  Phase 5 invariant paid for itself on the first new region.
+
+**A pre-existing test asserted `US` was uncovered** (`regionResolver.test.ts`),
+which the US pack makes false. Swapped for `JP` — the fixture needs updating each
+time a pack lands, which is the intended maintenance signal rather than a
+regression.
+
+**Code-review finding, fixed in a follow-up commit**
+
+- **A fake two-part suffix defeated typosquat scoring in every pack at once.**
+  The registrable-label rule inferred a two-part public suffix from the
+  penultimate label alone — "is it `co`/`com`/`gov`/`org`/…?" — which is true for
+  `chase.gov.co` and `kiwibank.co.io`. But `.co` and `.io` are ordinary gTLDs, so
+  there the last two labels *are* the registrable domain. Reading them as a
+  suffix made the brand own the registrable label, which tripped the Phase 5
+  "the brand owns the label, so it's the real site" exemption and suppressed
+  brand scoring outright.
+
+  One open-registration domain therefore bypassed the rule in all six regions:
+  `commbank.gov.co` (AU), `barclays.com.co` (GB), `chase.gov.co` and
+  `paypal.gov.io` (US), `kiwibank.co.io` (NZ), `scotiabank.gov.io` (CA) and
+  `anpost.gov.co` (IE) all returned no brand flag. **Pre-existing on `main`** —
+  it predates this branch and affected the shipped AU and GB packs — but it
+  surfaced while reviewing the new packs, so it is fixed here.
+
+  Replaced with an enumerated `TWO_PART_SUFFIXES` set matched against the last
+  two labels as a whole. A miss degrades safely: the hostname is read as
+  `<label>.<tld>`, which at worst flags a genuine site under an unlisted suffix —
+  the conservative direction for a scam detector.
+
+  Two new pack invariants in `regions.test.ts` enforce both halves for every
+  present and future region: a brand under a fake two-part suffix must still be a
+  typosquat, *and* a brand on its own real domain must still not be. The second
+  matters as much as the first — Phase 5 found that dropping the exemption
+  flagged 21 of 24 genuine UK brand sites as `likely_scam` — and it deliberately
+  includes real `.co.uk` / `.com.au` / `.co.nz` hosts, because a bare
+  `<brand>.com` has only two labels and never exercises the suffix path at all.
+
+**Review notes that did *not* result in changes.** Two other candidates were
+investigated and dismissed on evidence: the `mentionsAny` boundary rule handles
+punctuation-adjacent mentions correctly (`IRD:`, `(IRD)`, `ACC-related` all
+match; `SECURE` and `IRDNZ` correctly don't), and the `PLAN_PEERS` table reads
+asymmetric but behaves symmetrically — Caribbean wangiri numbers (`1876`, `1268`)
+remain correctly foreign and flagged for US and CA users.
+
+**Known issue found here, fixed separately.** An AU user checking a Caribbean
+wangiri number (`1876…`) got `country: "Australia"` and **no wangiri flag**:
+libphonenumber parses the NANP national form against the AU plan. Pre-existing
+and unrelated to region packs, so it was fixed on its own branch rather than
+widened into this one — see "Foreign numbers typed without a `+`" below.
+
+**Gate:** ✅ `npm test` green — **865 passing**, with the 725 pre-existing
+**untouched**, including zero changes to `scamDetector.test.ts` (the load-bearing
+Phase 1 check) and none to `regionGb.test.ts`. New
+`__tests__/regionPacksFollowup.test.ts` (103 tests) covers per-region SMS / URL /
+email / phone fixtures, pack-shape invariants, the coverage gate for CA, the
+two-part-suffix regressions, and isolation asserted pairwise — IE↔GB hardest,
+since shared language and brands with entirely different agencies make it the
+likeliest conflation. Three further invariants in `regions.test.ts` enforce the
+acronym rule and both halves of the suffix rule behaviourally for every present
+and future pack.
+
+Every fix was mutation-checked: reverting `mentionsAny` fails the new invariant
+for exactly US/NZ/CA, reverting `PLAN_PEERS` fails the CA premium test, and
+restoring the old marker-based suffix rule fails the suffix invariant in **all
+six** packs — as does removing two-part handling altogether, which is what
+confirms the genuine-site half is actually exercised rather than passing
+vacuously. Aliasing each new pack to AU fails 12–15 tests, confirming all four
+are load-bearing rather than decorative.
+
+Scope: new `lib/regions/{us,nz,ca,ie}.ts`, `lib/regions/types.ts`,
+`lib/regions/index.ts`, `lib/scamDetector.ts`, `lib/phoneIntel.ts`, new
+`__tests__/regionPacksFollowup.test.ts`, `__tests__/regions.test.ts`,
+`__tests__/regionResolver.test.ts`.
+
+---
+
+## Foreign numbers typed without a `+` ✅ done
+
+Not a phase — a defect found while reviewing the follow-up packs, fixed on its
+own branch because it is a `phoneIntel` bug rather than a region-pack one.
+
+**The gap.** A foreign number entered as bare digits — exactly how a missed call
+or caller ID displays it — was parsed against the home plan, came back invalid
+with `country = home`, and fell through to the "unparseable" branch. That branch
+reports the *user's own country* and skips every international risk check, so an
+Australian checking the Jamaican wangiri number `18765551234` saw "Australia"
+and no wangiri flag. It affected all four non-NANP regions (AU, GB, NZ, IE) and
+non-NANP prefixes too — Somalia `252…` also read as "Australia".
+
+**The fix.** Reparse as international, but only under four guards, because a
+naive reparse makes things worse rather than better:
+
+- only *after* the domestic parse has failed, so a valid home number can never
+  be reinterpreted;
+- not when the user typed `+`, which already worked;
+- not when the input starts with `0` — that is a national trunk prefix, and
+  stripping it invents a country code (`0412345678` → Switzerland);
+- not below 8 digits, which keeps short codes and local formats out.
+
+The reparse must then yield a *valid* number **or** match a known wangiri /
+high-scam prefix. That second clause is load-bearing: libphonenumber rates many
+small-territory subscriber ranges invalid, so without it the Caribbean wangiri
+numbers this fixes — Antigua, Montserrat, Barbados — are still missed.
+
+**A bug the extraction introduced, caught by the existing suite.** Pulling the
+shared logic into `analyseInternational` passed `spoofingRisk` by value, which
+froze it at entry and silently discarded every escalation `bump()` made. Five
+pre-existing tests failed immediately; it now takes a getter. Worth recording as
+the argument for extracting *under* a green suite rather than alongside new
+behaviour.
+
+**Gate:** ✅ **889 passing.** Mutation-checked: removing the reparse fails 9
+tests, and each of the three guards independently fails 3 — so none is
+decorative. Domestic coverage is asserted across all six regions, including the
+AU `190x` premium case Phase 4 specifically protected.
+
+Scope: `lib/phoneIntel.ts`, `__tests__/phoneIntel.test.ts`.
+
+---
+
 ## Phase 6 — Locale vs tone split (only if going non-English)
 
 **Decision point, not a commitment.** `lib/i18n.ts` currently has two *tone*
@@ -434,6 +646,12 @@ This is the expensive phase and the one that decides whether the product is
 Phases 1–5 are live and we have real signal on demand by region (Phase 2 stores
 this).
 
+**Status: not started.** Phases 1–5 and the US/NZ/CA/IE follow-ups are live, so
+the deferral condition is now testable rather than hypothetical — see "Next
+steps" below, where this is broken into the cheap structural half (step 1, worth
+doing either way) and the expensive language half (step 2, gated on the demand
+data). Canada is the identified first locale.
+
 ---
 
 ## Sequencing
@@ -443,8 +661,86 @@ independent of 3 and can be parallelised. Phase 5 validates 1–4 — and did:
 it found two region-seam bugs and one missing extraction that AU-only testing
 could not surface. Phase 6 is a separate product decision.
 
-Phases 1–5 are complete. Next up is either the US/NZ/CA/IE follow-ups (cheap,
-data-only) or the Phase 6 locale decision, which the plan recommends deferring
-until there's real per-region demand signal.
+Phases 1–5 and the US/NZ/CA/IE follow-ups are complete: **six covered regions**
+(AU, GB, US, NZ, CA, IE) plus the base-only fallback. The follow-ups confirmed
+the interface is stable — no field changed — while still surfacing three real
+defects, two of which affected the already-shipped AU and GB packs. The lesson
+worth carrying into any future region: "data-only" is not the same as
+"risk-free", because each new pack reaches seams the existing ones never did.
 
 Each phase = its own branch, own commit, tests green before merge.
+
+---
+
+## Next steps
+
+Ordered by what they cost against what they resolve. Step 0 is deliberately
+first: it is the cheapest, and it is the gate Phase 6 has been waiting on since
+it was written.
+
+### 0. Read the per-region report data — *hours, no code*
+
+Phase 2 has been persisting `region` on every report since it landed, and there
+are now six regions to compare rather than one. This is the demand signal the
+Phase 6 deferral is conditioned on, so it should be read *before* committing to
+anything below.
+
+Concretely: `SELECT region, COUNT(*) FROM reports GROUP BY region` against the
+prod Turso DB — the local `local.db` seed has 14 rows with an empty region and
+tells you nothing. Worth splitting by `created_at` too, since the region column
+only started being populated in Phase 2.
+
+**What the answer changes.** Meaningful non-AU volume argues for Phase 6 (or for
+more English regions); volume concentrated in AU/GB argues for spending the
+effort on detection depth in the regions already covered instead. Either way the
+decision stops being a guess.
+
+### 1. Phase 6 step 1 — the `locale` × `tone` split — *small, low-risk, no language content*
+
+Worth doing **regardless of the Phase 6 decision**, and cheap enough not to need
+the data first. `lib/i18n.ts` currently conflates two unrelated axes in one
+`LangMode = "normal" | "aussie"` union: `aussie` is a *tone*, not a locale, and
+`messages/` holds exactly two English bundles. Splitting them is a structural
+refactor with no new strings:
+
+- `locale` (`en`, later `fr`, …) × `tone` (`normal` | `regional`)
+- `en` as the only locale, so behaviour is unchanged and the diff is mechanical
+- the `aussie` tone becomes `en` + `regional` rather than a pseudo-locale
+
+Doing this on its own de-risks everything after it, and leaves the codebase
+honest about what those two bundles actually are even if Phase 6 never proceeds.
+
+**Gate:** all existing i18n tests green, no visible copy change.
+
+### 2. Phase 6 steps 2–3 — French for Canada — *the expensive one, gated on step 0*
+
+If the data supports going non-English, **Canada is the first target and the
+argument is already made**: CA is the only pack shipping `coverage: "partial"`,
+and the sole reason is English keywords in an officially bilingual market where
+roughly a fifth of the population speaks French at home. Today a French-language
+smish there returns `unknown` — honest, but not useful.
+
+That makes it the best-value first locale because it *promotes an existing
+region* rather than opening a new market: the agencies, brands, legit domains
+and number plan are already authored and tested. Only the keyword layer is
+missing.
+
+**Hard dependency:** the plan's own rule — every non-English pack needs a
+native-speaker review before shipping as more than `partial`. That review is a
+prerequisite to be lined up, not a step that can be worked around, and it is the
+reason this sits behind step 0 rather than being started opportunistically.
+
+**Gate:** CA promoted from `partial` to `full`, with French fixtures in
+`__tests__/` and the AU/GB/US/NZ/IE packs untouched.
+
+### Explicitly *not* next: more English regions
+
+ZA, SG and IN are the obvious candidates and should stay parked. Each needs its
+own agency, brand and regulator research, and the last four packs demonstrated
+that "data-only" work still surfaces cross-region defects — three of them, two
+affecting already-shipped packs. Adding breadth before the Phase 6 question is
+answered increases maintenance surface without resolving anything, which is the
+"maintainability over breadth" constraint at the top of this document.
+
+The one thing that *would* justify jumping the queue is step 0 showing
+significant traffic from a specific uncovered English-speaking market.

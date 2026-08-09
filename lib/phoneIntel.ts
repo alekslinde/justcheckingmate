@@ -368,10 +368,35 @@ const SHARED_NUMBER_PLANS: Record<string, string[]> = {
   US: ["PR", "VI", "MP", "GU", "AS"],
 };
 
+/**
+ * Countries that are *peers* within one numbering plan, as opposed to
+ * territories subordinate to a parent.
+ *
+ * The distinction matters because SHARED_NUMBER_PLANS does double duty: it
+ * decides domesticity, and countryName() reverse-maps it to display a territory
+ * as its parent. That is right for Guernsey (a +44 mobile should read "United
+ * Kingdom") and wrong for Canada — a Canadian number must still display as
+ * "Canada", not "United States".
+ *
+ * So NANP peers are held separately. Found when the CA pack was added: the
+ * premium number `1-900-555-1212` scored 95 for a US user and 35 for a Canadian
+ * one, because libphonenumber resolves any bare `+1 900` to `US`. For the
+ * Canadian it therefore read as *foreign*, and the domestic-premium guard —
+ * added in Phase 4 to stop an unparseable foreign number being called domestic
+ * premium — suppressed the "this call will cost you money" warning entirely.
+ * Risk collapsed from very_high to low on the one case that costs the user
+ * directly, which is precisely the Phase 4 failure mode repeating at a new seam.
+ */
+const PLAN_PEERS: Record<string, string[]> = {
+  US: ["CA"],
+  CA: ["US", "PR", "VI", "MP", "GU", "AS"],
+};
+
 function sameCountry(parsed: PhoneNumber, home: string): boolean {
   if (!parsed.country) return false;
   if (parsed.country === home) return true;
-  return SHARED_NUMBER_PLANS[home]?.includes(parsed.country) ?? false;
+  if (SHARED_NUMBER_PLANS[home]?.includes(parsed.country)) return true;
+  return PLAN_PEERS[home]?.includes(parsed.country) ?? false;
 }
 
 /**
@@ -467,6 +492,20 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
   // own name rather than mislabelling its numbers with the fallback pack's.
   const homeName = homeCountry === pack.code ? pack.name : countryName(homeCountry);
 
+  /**
+   * Display name for a number we've judged domestic.
+   *
+   * Prefers the number's *own* resolved country over the home country's name.
+   * The two only diverge for NANP peers (see PLAN_PEERS): a Toronto number is
+   * domestic for a US user, but calling it "United States" would state
+   * something false about a number a user may well be checking precisely
+   * because it looks out-of-area. Subordinate territories are unaffected —
+   * countryName() maps Guernsey onto "United Kingdom" by design, so a +44
+   * mobile still reads as British.
+   */
+  const domesticName = (parsed?: PhoneNumber) =>
+    parsed?.country ? countryName(parsed.country) : homeName;
+
   const cleaned = raw.replace(/[\s\-().+]/g, "");
   const spoofingNotes: string[] = [];
   let spoofingRisk: PhoneIntel["spoofingRisk"] = "low";
@@ -535,7 +574,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     bump("very_high");
     return {
       lineType: "premium",
-      country: homeName,
+      country: domesticName(parsed),
       isDomestic: true,
       wangiriRisk: false,
       highScamCountry: false,
@@ -543,6 +582,49 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       spoofingNotes,
       normalised: parsed?.formatInternational() ?? national,
     };
+  }
+
+  // ── International number typed without a leading "+" ───────────────────────
+  // A number that isn't valid at home may simply be a foreign one the user typed
+  // as they saw it — caller ID and missed-call logs routinely show "18765551234"
+  // with no plus. Parsing that against the home plan yields `country = home` and
+  // invalid, so it fell through to the unparseable branch below and was reported
+  // as the *user's own country* with the international risk checks skipped
+  // entirely: an Australian checking a Jamaican wangiri number was told
+  // "Australia", no wangiri flag. The same held for GB, NZ and IE, and for
+  // non-NANP prefixes (Somalia +252 read as "Australia").
+  //
+  // Reparsing is deliberately narrow, because it is easy to make worse. The
+  // guards, in order:
+  //   · only after the domestic parse has already failed — a valid home number
+  //     never reaches here, so this cannot reinterpret one;
+  //   · not when the user typed "+", which was already handled correctly;
+  //   · not when the input starts with "0", which is a national trunk prefix —
+  //     stripping it invents a country code ("0412 345 678" → Switzerland);
+  //   · the reparse must produce a *valid* number, or match a known wangiri /
+  //     high-scam prefix at a plausible international length. The second clause
+  //     exists because libphonenumber rates many small-territory subscriber
+  //     ranges invalid, which would otherwise drop exactly the Caribbean wangiri
+  //     numbers this fixes.
+  const reparsedIntl = ((): PhoneNumber | undefined => {
+    if (parsed?.isValid()) return undefined;
+    if (raw.trim().startsWith("+")) return undefined;
+    if (cleaned.startsWith("0")) return undefined;
+    // 8 digits is below any plausible country-code-plus-subscriber number, and
+    // keeps short codes and local-format numbers out.
+    if (cleaned.length < 8) return undefined;
+
+    const candidate = parsePhoneNumberFromString("+" + cleaned);
+    if (candidate?.isValid()) return candidate;
+
+    const knownRisk =
+      WANGIRI_PREFIXES.some((p) => cleaned.startsWith(p)) ||
+      Object.keys(HIGH_SCAM_COUNTRY_CODES).some((p) => cleaned.startsWith(p));
+    return knownRisk ? candidate : undefined;
+  })();
+
+  if (reparsedIntl) {
+    return analyseInternational(reparsedIntl, cleaned, spoofingNotes, () => spoofingRisk, bump);
   }
 
   // ── Unparseable ────────────────────────────────────────────────────────────
@@ -577,7 +659,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "freecall",
         region: "National — free call",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -593,7 +675,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "shared_cost",
         region: "National — shared cost",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -611,9 +693,9 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       }
       return {
         lineType: isVoip ? "voip_likely" : "mobile",
-        region: `${pack.name} mobile`,
+        region: `${domesticName(parsed)} mobile`,
         carrierHint: isVoip ? "VoIP / virtual number provider (likely)" : undefined,
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -630,7 +712,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "fixed",
         region: area,
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -646,7 +728,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       return {
         lineType: "voip_likely",
         carrierHint: "VoIP / virtual number provider (likely)",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -661,7 +743,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
       bump("very_high");
       return {
         lineType: "premium",
-        country: homeName,
+        country: domesticName(parsed),
         isDomestic,
         wangiriRisk: false,
         highScamCountry: false,
@@ -674,7 +756,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     // Valid domestic number of a type we don't specialise on.
     return {
       lineType: "unknown",
-      country: homeName,
+      country: domesticName(parsed),
       isDomestic,
       wangiriRisk: false,
       highScamCountry: false,
@@ -685,7 +767,32 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
   }
 
   // ── International numbers ──────────────────────────────────────────────────
-  const intl = parsed.countryCallingCode + parsed.nationalNumber;
+  return analyseInternational(parsed, cleaned, spoofingNotes, () => spoofingRisk, bump);
+}
+
+/**
+ * Risk analysis for a number that belongs to some country other than the
+ * user's — wangiri, high-scam and elevated-volume origins.
+ *
+ * Extracted so the two paths that reach it share one implementation: a number
+ * carrying an explicit country code, and one the user typed without a leading
+ * "+" that we recovered by reparsing (see analysePhone). Before that second
+ * path existed, a foreign number typed in bare digits skipped every check here
+ * and was reported as the user's own country.
+ */
+function analyseInternational(
+  parsed: PhoneNumber,
+  cleaned: string,
+  spoofingNotes: string[],
+  // A getter, not the value. `bump` mutates the caller's risk variable, so
+  // capturing it as a plain parameter here would freeze it at its value on
+  // entry and discard every escalation this function makes.
+  currentRisk: () => PhoneIntel["spoofingRisk"],
+  bump: (risk: PhoneIntel["spoofingRisk"]) => void,
+): PhoneIntel {
+  const intl = parsed.countryCallingCode
+    ? parsed.countryCallingCode + parsed.nationalNumber
+    : cleaned;
 
   const isWangiri = WANGIRI_PREFIXES.some((p) => intl.startsWith(p));
   if (isWangiri) {
@@ -709,6 +816,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     bump("medium");
   }
 
+  const type = parsed.getType();
   const lineType: PhoneIntel["lineType"] =
     type === "TOLL_FREE" ? "freecall"
     : type === "SHARED_COST" ? "shared_cost"
@@ -724,8 +832,8 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     isDomestic: false,
     wangiriRisk: isWangiri,
     highScamCountry: !!highScamEntry || isWangiri,
-    spoofingRisk,
+    spoofingRisk: currentRisk(),
     spoofingNotes,
-    normalised,
+    normalised: parsed.isValid() ? parsed.formatInternational() : "+" + intl,
   };
 }

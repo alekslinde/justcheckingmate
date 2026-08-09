@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { checkSms, checkUrl } from "@/lib/scamDetector";
 import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@/lib/regions";
 import { BASE_SIGNALS } from "@/lib/regions/base";
 import { AU } from "@/lib/regions/au";
@@ -104,11 +105,87 @@ describe("pack invariants (every region)", () => {
     }
   });
 
+  // Code review of the US/NZ/CA/IE packs. The registrable-label rule decided a
+  // two-part public suffix from the penultimate label alone ("is it co/com/gov/
+  // …?"), which is true for `chase.gov.co` and `kiwibank.co.io` — but `.co` and
+  // `.io` are ordinary gTLDs, so there the last two labels ARE the registrable
+  // domain. Reading them as a suffix made the brand own the label, tripping the
+  // "brand owns the label, so it's the real site" exemption and suppressing
+  // brand scoring outright.
+  //
+  // One open-registration domain therefore defeated the typosquat rule in every
+  // pack at once, which is why this is asserted per-pack rather than once: the
+  // bug was cross-region, and so is the guarantee.
+  it.each(packs)("%s: a brand under a fake two-part suffix is still a typosquat", (code, pack) => {
+    const brand = pack.typosquatBrands.substring[0];
+    if (!brand) return; // ZZ has no national brand list.
+    // `.co` and `.io` are gTLDs — "<brand>.gov.co" is an ordinary domain someone
+    // bought, not the brand's real site under a government suffix.
+    for (const host of [`${brand}.gov.co`, `${brand}.com.co`, `${brand}.co.io`]) {
+      const flags = checkUrl(`http://${host}/login`, undefined, code).flags.join(" | ").toLowerCase();
+      expect({ host, impersonating: flags.includes("impersonating") })
+        .toEqual({ host, impersonating: true });
+    }
+  });
+
+  it.each(packs)("%s: a brand on its own real domain is not a typosquat", (code, pack) => {
+    // The other half — the registrable-label exemption must keep working, or the
+    // fix above would flag every genuine brand site. Phase 5 found that dropping
+    // it flagged 21 of 24 real UK brand sites as likely_scam.
+    //
+    // The `.co.uk` / `.com.au` cases are the ones that exercise the two-part
+    // suffix path specifically: a bare `<brand>.com` has only two labels, so the
+    // suffix branch never runs, and a brand under the pack's own trusted suffix
+    // is exempted earlier by the trusted-suffix rule. Without a genuine two-part
+    // host here, removing suffix handling altogether would pass unnoticed.
+    const brand = pack.typosquatBrands.substring[0];
+    if (!brand) return;
+    const hosts = [
+      `${brand}.com`,
+      `www.${brand}.com`,
+      // Real two-part suffixes, on the open registrations where brands actually
+      // live. These must resolve the registrable label to the brand itself.
+      `${brand}.co.uk`,
+      `www.${brand}.com.au`,
+      `${brand}.co.nz`,
+    ];
+    for (const host of hosts) {
+      const flags = checkUrl(`https://${host}/`, undefined, code).flags.join(" | ").toLowerCase();
+      expect({ host, impersonating: flags.includes("impersonating") })
+        .toEqual({ host, impersonating: false });
+    }
+  });
+
   it.each(packs)("%s: names only concrete brands as crypto exchanges", (_code, pack) => {
     // The TOAD flag quotes whichever entry matched, so a generic phrase renders
     // "crypto exchange and other exchanges never ring customers".
     for (const brand of pack.cryptoExchanges) {
       expect(brand).not.toMatch(/\b(exchange|platform|wallet|crypto)\b/i);
+    }
+  });
+
+  // Found when the US/NZ/CA/IE packs were added. Agency lists are plain string
+  // arrays with no substring/word split, and national agency acronyms are
+  // overwhelmingly three letters — so a bare `includes()` fired inside ordinary
+  // English. It was flagging "your account is fine" as government impersonation
+  // (NZ "acc" ⊂ "account"), and would have read "message" as the SSA, "security"
+  // as the SEC and "weird"/"third" as the IRD.
+  //
+  // The fix is mechanical rather than curated (mentionsAny in scamDetector
+  // boundary-matches anything ≤3 chars), so this test asserts the *behaviour*
+  // holds for every pack rather than policing list contents — a new region
+  // inherits the protection without its author opting in.
+  it.each(packs)("%s: short agency names don't fire inside ordinary words", (code, _pack) => {
+    const innocuous = [
+      "Please check your account balance today.",
+      "Your message was received and the service notice is attached.",
+      "That's weird, the third payment went through immediately.",
+      "For your security, review the craft order their team sent.",
+    ];
+    for (const text of innocuous) {
+      const flags = checkSms(text, undefined, code).flags.join(" | ").toLowerCase();
+      expect({ text, flags: flags.includes("government agency") }).toEqual({ text, flags: false });
+      expect({ text, flags: flags.includes("police authority") }).toEqual({ text, flags: false });
     }
   });
 
