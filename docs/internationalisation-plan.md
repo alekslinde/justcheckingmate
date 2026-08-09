@@ -632,6 +632,14 @@ Scope: `lib/phoneIntel.ts`, `__tests__/phoneIntel.test.ts`.
 
 ## Phase 6 — Locale vs tone split (only if going non-English)
 
+> **Step 1 is ✅ done** (the structural split, see "Next steps → 1"). Steps 2–3
+> (per-language keyword sets) are **blocked, not merely deferred**: as of
+> 2026-08-09 there is no French reviewer available, and the plan's own rule makes
+> that review a prerequisite. Step 0's demand data is also still unread. With the
+> language half unavailable, the remaining i18n effort belongs in detection depth
+> across the six covered English regions.
+
+
 **Decision point, not a commitment.** `lib/i18n.ts` currently has two *tone*
 modes (`normal` / `aussie`), not real locales. Detection keywords are
 English-only.
@@ -646,7 +654,7 @@ This is the expensive phase and the one that decides whether the product is
 Phases 1–5 are live and we have real signal on demand by region (Phase 2 stores
 this).
 
-**Status: not started.** Phases 1–5 and the US/NZ/CA/IE follow-ups are live, so
+**Status: step 1 done, steps 2–3 not started.** Phases 1–5 and the US/NZ/CA/IE follow-ups are live, so
 the deferral condition is now testable rather than hypothetical — see "Next
 steps" below, where this is broken into the cheap structural half (step 1, worth
 doing either way) and the expensive language half (step 2, gated on the demand
@@ -687,15 +695,48 @@ anything below.
 
 Concretely: `SELECT region, COUNT(*) FROM reports GROUP BY region` against the
 prod Turso DB — the local `local.db` seed has 14 rows with an empty region and
-tells you nothing. Worth splitting by `created_at` too, since the region column
-only started being populated in Phase 2.
+tells you nothing. Worth splitting by time too, since the region column only
+started being populated in Phase 2.
+
+**Now scripted — `npm run region-demand`** (`scripts/region-demand.ts`,
+read-only). It needs prod credentials in the environment; without them it reads
+the local fallback and says so rather than reporting a misleading zero:
+
+```bash
+TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... npm run region-demand
+```
+
+Two schema details the naive query gets wrong, both found while writing it:
+
+- **The timestamp column is `submitted_at` (epoch ms), not `created_at`** — the
+  suggestion above was wrong and would have errored. Bucketing needs
+  `datetime(submitted_at / 1000, 'unixepoch')`.
+- **`region` was added with `DEFAULT ''`, so pre-Phase-2 rows are the empty
+  string, not NULL.** A plain `GROUP BY region` silently lumps "before we
+  measured" together with a real region, understating the attributed split. The
+  script reports `(unset)` separately and re-computes shares excluding it.
+
+Month buckets are cut at **UTC+10:00 (AEST)** by default, not UTC: plain
+`unixepoch` bucketing pushes AU submissions from the first ~10–11 hours of a
+month into the previous one, distorting the very trend being read. SQLite's
+`'localtime'` would make the answer depend on whose machine ran the script, so
+the offset is declared explicitly, validated, and printed in the output.
+Override with `REGION_DEMAND_UTC_OFFSET=+00:00` for plain UTC.
+
+The script also flags any volume from regions outside the six covered packs,
+since per "Explicitly *not* next" that is the one finding that would justify
+adding an English region ahead of everything else.
+
+**Status: still unrun against prod.** The credentials are not on the dev machine
+(no `.env.local`, no `TURSO_*` vars, no `turso` CLI), so the question this gates
+remains open.
 
 **What the answer changes.** Meaningful non-AU volume argues for Phase 6 (or for
 more English regions); volume concentrated in AU/GB argues for spending the
 effort on detection depth in the regions already covered instead. Either way the
 decision stops being a guess.
 
-### 1. Phase 6 step 1 — the `locale` × `tone` split — *small, low-risk, no language content*
+### 1. Phase 6 step 1 — the `locale` × `tone` split ✅ done
 
 Worth doing **regardless of the Phase 6 decision**, and cheap enough not to need
 the data first. `lib/i18n.ts` currently conflates two unrelated axes in one
@@ -710,7 +751,34 @@ refactor with no new strings:
 Doing this on its own de-risks everything after it, and leaves the codebase
 honest about what those two bundles actually are even if Phase 6 never proceeds.
 
-**Gate:** all existing i18n tests green, no visible copy change.
+**Gate:** all existing i18n tests green, no visible copy change. ✅ Met — 896
+tests green (29 files), `tsc --noEmit` and lint clean, and git records both
+message bundles as pure renames with a zero-byte content diff.
+
+**What shipped.** `LangMode` went from `"normal" | "aussie"` to
+`{ locale: Locale; tone: Tone }`, with `Locale = "en"` the only locale and
+`aussie` re-expressed as `en` + `regional`. `messages/normal.json` →
+`en.normal.json`, `aussie.json` → `en.regional.json`. Lookup now falls back in
+three steps — locale+tone → locale+base tone → base locale — so a future
+locale that ships no regional register, or a regional bundle that overrides only
+some keys, both resolve without a missing string.
+
+**The one non-mechanical part: stored preferences.** The refactor was otherwise
+as cheap as predicted, but `localStorage` under `jcm_lang` holds the literal
+string `"aussie"` for every returning user who ever picked it. Changing the type
+without migrating would have silently reset them to English — invisible in tests
+that only exercise fresh state. `parseMode()` therefore accepts the legacy
+single-axis values as well as the new `locale:tone` form, and degrades unknown
+locales/tones to the base instead of throwing; it is covered by round-trip and
+migration tests. The lesson matches Phases 4–5: the seam was in the persisted
+state, not the types.
+
+A second, quieter trap: `useSyncExternalStore` compares snapshots by identity,
+so returning a freshly-parsed object each call would re-render forever. The
+snapshot is now memoised against the raw stored string.
+
+Scope: `lib/i18n.ts`, `lib/lang.tsx`, `components/LangToggle.tsx`,
+`components/BugReportProvider.tsx`, `messages/`, `__tests__/lang.test.ts`.
 
 ### 2. Phase 6 steps 2–3 — French for Canada — *the expensive one, gated on step 0*
 
@@ -729,6 +797,20 @@ missing.
 native-speaker review before shipping as more than `partial`. That review is a
 prerequisite to be lined up, not a step that can be worked around, and it is the
 reason this sits behind step 0 rather than being started opportunistically.
+
+> **Blocked as of 2026-08-09: no French reviewer is available.** This is a
+> missing dependency, not a scheduling delay, so steps 2–3 are parked rather
+> than queued — and the work should not be started speculatively "ready for
+> review later". Unreviewed keyword lists fail asymmetrically here: a French
+> smish scoring `unknown` reads to the user as *"we checked, nothing found"*,
+> which turns today's disclosed gap into false reassurance. Register and
+> Québécois-vs-France differences are precisely what a non-speaker cannot
+> self-check.
+>
+> CA therefore stays `coverage: "partial"` (declared in `lib/regions/ca.ts`,
+> enforced by the coverage gate in `scoreToResult`). That is the correct
+> behaviour in the meantime, not a defect to route around: the gap is disclosed
+> rather than hidden. Revisit only when a reviewer exists.
 
 **Gate:** CA promoted from `partial` to `full`, with French fixtures in
 `__tests__/` and the AU/GB/US/NZ/IE packs untouched.
