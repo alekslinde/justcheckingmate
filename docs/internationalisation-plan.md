@@ -633,8 +633,11 @@ Scope: `lib/phoneIntel.ts`, `__tests__/phoneIntel.test.ts`.
 ## Phase 6 — Locale vs tone split (only if going non-English)
 
 > **Step 1 is ✅ done** (the structural split, see "Next steps → 1"). Steps 2–3
-> (per-language keyword sets) remain **not started** and still gated: step 0's
-> demand data has not been read, and the native-speaker review is unbooked.
+> (per-language keyword sets) are **blocked, not merely deferred**: as of
+> 2026-08-09 there is no French reviewer available, and the plan's own rule makes
+> that review a prerequisite. Step 0's demand data is also still unread. With the
+> language half unavailable, the remaining i18n effort belongs in detection depth
+> across the six covered English regions.
 
 
 **Decision point, not a commitment.** `lib/i18n.ts` currently has two *tone*
@@ -761,6 +764,20 @@ missing.
 native-speaker review before shipping as more than `partial`. That review is a
 prerequisite to be lined up, not a step that can be worked around, and it is the
 reason this sits behind step 0 rather than being started opportunistically.
+
+> **Blocked as of 2026-08-09: no French reviewer is available.** This is a
+> missing dependency, not a scheduling delay, so steps 2–3 are parked rather
+> than queued — and the work should not be started speculatively "ready for
+> review later". Unreviewed keyword lists fail asymmetrically here: a French
+> smish scoring `unknown` reads to the user as *"we checked, nothing found"*,
+> which turns today's disclosed gap into false reassurance. Register and
+> Québécois-vs-France differences are precisely what a non-speaker cannot
+> self-check.
+>
+> CA therefore stays `coverage: "partial"` (declared in `lib/regions/ca.ts`,
+> enforced by the coverage gate in `scoreToResult`). That is the correct
+> behaviour in the meantime, not a defect to route around: the gap is disclosed
+> rather than hidden. Revisit only when a reviewer exists.
 
 **Gate:** CA promoted from `partial` to `full`, with French fixtures in
 `__tests__/` and the AU/GB/US/NZ/IE packs untouched.
