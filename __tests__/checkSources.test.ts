@@ -31,6 +31,7 @@ type Entry = {
   expect?: string;
 };
 type Registry = {
+  errors: string[];
   version: string;
   updated: string;
   tiers: Record<string, Entry[]>;
@@ -88,6 +89,75 @@ describe("registry parsing", () => {
       expect(typeof i).toBe("string");
       expect(i).not.toContain(":");
     }
+  });
+
+  it("parses the live registry with no errors", () => {
+    expect(reg.errors).toEqual([]);
+  });
+
+  it("lets a comment terminate a folded note", () => {
+    // Comments used to be blanked to "" and treated as paragraph breaks, so an
+    // open `>-` swallowed everything after a comment, including the next entry.
+    const parsed = parseRegistry(
+      [
+        "tiers:",
+        "  1:",
+        "    - domain: a.test",
+        "      url: https://a.test",
+        "      note: >-",
+        "        first line",
+        "# a comment ends the note",
+        "    - domain: b.test",
+        "      url: https://b.test",
+      ].join("\n"),
+    ) as Registry;
+
+    expect(parsed.tiers["1"]).toHaveLength(2);
+    expect(parsed.tiers["1"][0].note).toBe("first line");
+    expect(parsed.tiers["1"][1].domain).toBe("b.test");
+  });
+
+  it("keeps paragraph breaks inside a folded note", () => {
+    const parsed = parseRegistry(
+      [
+        "tiers:",
+        "  1:",
+        "    - domain: a.test",
+        "      url: https://a.test",
+        "      note: >-",
+        "        one",
+        "",
+        "        two",
+      ].join("\n"),
+    ) as Registry;
+    expect(parsed.tiers["1"][0].note).toBe("one two");
+  });
+
+  it("records a malformed list item instead of dropping it", () => {
+    // `- domain:foo.test` (no space) is not a mapping. Silently skipping it is
+    // the "quietly drops half the registry" failure the parser must refuse.
+    const parsed = parseRegistry(
+      ["tiers:", "  1:", "    - domain:foo.test"].join("\n"),
+    ) as Registry;
+
+    expect(parsed.tiers["1"] ?? []).toHaveLength(0);
+    expect(parsed.errors.length).toBeGreaterThan(0);
+    expect(parsed.errors[0]).toMatch(/missing space|unparseable/i);
+  });
+
+  it("surfaces parse errors through the validator", () => {
+    const parsed = parseRegistry(
+      ["tiers:", "  1:", "    - domain:foo.test"].join("\n"),
+    ) as Registry;
+    expect(validate(parsed).some((e: string) => e.startsWith("PARSE:"))).toBe(true);
+  });
+
+  it("still collects bare items under indicators", () => {
+    const parsed = parseRegistry(
+      ["indicators:", "  - bad.test", "  - worse.test"].join("\n"),
+    ) as Registry;
+    expect(parsed.indicators).toEqual(["bad.test", "worse.test"]);
+    expect(parsed.errors).toEqual([]);
   });
 });
 
@@ -150,6 +220,17 @@ describe("indicator quarantine", () => {
           { domain: "coinspot-verify.top", url: "https://coinspot-verify.top", name: "oops" },
         ],
       },
+    };
+    const errors = validate(poisoned);
+    expect(errors.some((e: string) => e.startsWith("SAFETY:"))).toBe(true);
+  });
+
+  it("catches an indicator even when the entry is also malformed", () => {
+    // The SAFETY check must not sit behind early `continue`s for unrelated
+    // missing fields — a half-written entry is exactly when a mistake slips in.
+    const poisoned: Registry = {
+      ...reg,
+      brands: [...reg.brands, { url: "https://coinspot-verify.top" }], // no domain
     };
     const errors = validate(poisoned);
     expect(errors.some((e: string) => e.startsWith("SAFETY:"))).toBe(true);

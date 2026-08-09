@@ -71,9 +71,13 @@ tiers:
     - domain: acma.gov.au
       name: ACMA — telco scam action
       url: https://www.acma.gov.au/phone-and-sms-scams
+      expect: blocked
       region: AU
       check: manual
-      note: SMS sender-ID register and telco blocking rules; relevant to phoneIntel.
+      note: >-
+        SMS sender-ID register and telco blocking rules; relevant to phoneIntel.
+        Its WAF blackholes automated requests (the connection hangs rather than
+        returning 403), so CI can never verify this URL — hence `expect: blocked`.
     - domain: asic.gov.au
       name: ASIC — investor alert list
       url: https://www.asic.gov.au/newsroom/
@@ -90,8 +94,13 @@ tiers:
     - domain: cyber.gov.au
       name: ACSC / ReportCyber (ASD)
       url: https://www.cyber.gov.au/about-us/view-all-content/alerts-and-advisories
+      expect: blocked
       feed: https://www.cyber.gov.au/rss/alerts
       region: AU
+      note: >-
+        Same blackholing WAF as acma.gov.au — the page hangs for automated
+        agents, so `expect: blocked` keeps it out of the rot column. The RSS feed
+        does answer normally, which is the reliable way to poll this source.
     - domain: moneysmart.gov.au
       name: MoneySmart (ASIC)
       url: https://moneysmart.gov.au/check-and-report-scams

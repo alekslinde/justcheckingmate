@@ -66,10 +66,10 @@ const BROWSER_UA =
 // one that refuses to run.
 // ---------------------------------------------------------------------------
 
-function stripComment(line) {
-  // Only strips a full-line comment. Inline `#` is left alone: URLs contain
-  // fragments, and no value in the registry needs a trailing comment.
-  return line.trimStart().startsWith("#") ? "" : line;
+function isComment(line) {
+  // Only full-line comments. Inline `#` is left alone: URLs contain fragments,
+  // and no value in the registry needs a trailing comment.
+  return line.trimStart().startsWith("#");
 }
 
 function unquote(v) {
@@ -84,9 +84,9 @@ function unquote(v) {
 }
 
 function parseRegistry(text) {
-  const lines = text.split("\n").map(stripComment);
+  const lines = text.split("\n");
 
-  const out = { tiers: {}, brands: [], indicators: [], version: null, updated: null };
+  const out = { tiers: {}, brands: [], indicators: [], version: null, updated: null, errors: [] };
 
   let section = null;       // "tiers" | "brands" | "indicators"
   let tierKey = null;
@@ -100,7 +100,23 @@ function parseRegistry(text) {
     current = null;
   };
 
-  for (const raw of lines) {
+  const endFold = () => {
+    if (!folding) return;
+    current[folding.key] = folding.parts.join(" ").replace(/\s+/g, " ").trim();
+    folding = null;
+  };
+
+  for (const [n, raw] of lines.entries()) {
+    const lineNo = n + 1;
+
+    // A comment always ends an open folded scalar. Blanking comments to "" and
+    // treating them as paragraph breaks meant a comment could never terminate a
+    // note, so the following entry got swallowed into it.
+    if (isComment(raw)) {
+      endFold();
+      continue;
+    }
+
     if (!raw.trim()) {
       // A blank line inside a folded block is a paragraph break, not an end.
       if (folding) folding.parts.push("");
@@ -115,10 +131,7 @@ function parseRegistry(text) {
       folding.parts.push(line);
       continue;
     }
-    if (folding) {
-      current[folding.key] = folding.parts.join(" ").replace(/\s+/g, " ").trim();
-      folding = null;
-    }
+    endFold();
 
     // Top-level keys.
     if (indent === 0) {
@@ -147,7 +160,18 @@ function parseRegistry(text) {
 
     // Bare list item — only `indicators:` uses this form.
     if (line.startsWith("- ") && !line.slice(2).includes(": ") && !line.slice(2).endsWith(":")) {
-      if (section === "indicators") out.indicators.push(unquote(line.slice(2)));
+      const bare = unquote(line.slice(2));
+      if (section === "indicators") {
+        out.indicators.push(bare);
+      } else {
+        // A tier entry that looks bare is malformed — usually `- domain:foo.com`
+        // with the space missing. Dropping it silently is the "quietly skips half
+        // the registry" failure this parser is supposed to refuse.
+        out.errors.push(
+          `line ${lineNo}: list item in ${section === "tiers" ? `tier ${tierKey}` : section} ` +
+          `is not a "key: value" mapping — check for a missing space after the colon: "${line}"`,
+        );
+      }
       continue;
     }
 
@@ -164,6 +188,8 @@ function parseRegistry(text) {
         } else {
           current[key] = unquote(val);
         }
+      } else {
+        out.errors.push(`line ${lineNo}: unparseable list item: "${line}"`);
       }
       continue;
     }
@@ -177,12 +203,12 @@ function parseRegistry(text) {
       } else {
         current[key] = unquote(val);
       }
+    } else if (!m) {
+      out.errors.push(`line ${lineNo}: unparseable line: "${line}"`);
     }
   }
 
-  if (folding && current) {
-    current[folding.key] = folding.parts.join(" ").replace(/\s+/g, " ").trim();
-  }
+  endFold();
   flush();
 
   return out;
@@ -201,10 +227,31 @@ function validate(reg) {
     ...reg.brands.map((e) => ({ ...e, tier: "brands" })),
   ];
 
+  // Anything the parser could not read at all. A malformed entry is a source
+  // that silently vanishes from the run, so it blocks rather than warns.
+  for (const e of reg.errors || []) errors.push(`PARSE: ${e}`);
+
   if (all.length === 0) errors.push("registry parsed to zero sources — parser or file is broken");
 
   const seen = new Map();
   for (const e of all) {
+    // The quarantine assertion runs FIRST and unconditionally. It is the only
+    // merge-blocking safety check here, so it must never sit behind an early
+    // `continue` for some unrelated missing field.
+    const host = (() => {
+      try { return new URL(e.url ?? "").hostname.toLowerCase().replace(/^www\./, ""); }
+      catch { return null; }
+    })();
+    if (
+      (host && indicators.has(host)) ||
+      (e.domain && indicators.has(e.domain.toLowerCase()))
+    ) {
+      errors.push(
+        `SAFETY: ${e.domain || e.url} is listed under indicators: but appears in tier ${e.tier}. ` +
+        `Indicators are scam infrastructure and must never be fetched.`,
+      );
+    }
+
     if (!e.domain) {
       errors.push(`entry in tier ${e.tier} has no domain`);
       continue;
@@ -216,20 +263,8 @@ function validate(reg) {
     if (!/^https:\/\//.test(e.url)) {
       errors.push(`${e.domain} url must be https: ${e.url}`);
     }
-
-    // The quarantine assertion. A scam domain promoted into a source tier is a
-    // merge-blocking error, not a warning.
-    const host = (() => {
-      try { return new URL(e.url).hostname.toLowerCase().replace(/^www\./, ""); }
-      catch { return null; }
-    })();
     if (!host) {
       errors.push(`${e.domain} has an unparseable url: ${e.url}`);
-    } else if (indicators.has(host) || indicators.has(e.domain.toLowerCase())) {
-      errors.push(
-        `SAFETY: ${e.domain} is listed under indicators: but appears in tier ${e.tier}. ` +
-        `Indicators are scam infrastructure and must never be fetched.`,
-      );
     }
 
     const prev = seen.get(e.domain);
@@ -244,6 +279,17 @@ function validate(reg) {
 // Reachability
 // ---------------------------------------------------------------------------
 
+// Runs one request under its own fresh timeout budget.
+async function withTimeout(fn) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await fn(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function probe(url, method, signal, ua = USER_AGENT) {
   return fetch(url, {
     method,
@@ -253,18 +299,35 @@ async function probe(url, method, signal, ua = USER_AGENT) {
   });
 }
 
+// A redirect onto a bare homepage, or onto a different host, is the classic
+// sign of a reorganised site that threw the deep link away: reachable, but the
+// citation is gone.
+function landedElsewhere(requestedUrl, finalUrl) {
+  const from = new URL(requestedUrl);
+  const to = new URL(finalUrl);
+  const landedOnRoot = to.pathname === "/" && from.pathname !== "/";
+  const changedHost = to.hostname.replace(/^www\./, "") !== from.hostname.replace(/^www\./, "");
+  return landedOnRoot || changedHost;
+}
+
 // Distinguishes "WAF is refusing our bot" from "host is genuinely gone".
-// Returns true only if the site answers a browser-shaped request.
-async function respondsToBrowserUa(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+//
+// Returns a verdict rather than a boolean, because "the browser got a 200" is
+// not the same as "the citation survives" — a browser-UA request that lands on
+// a homepage means the deep link has rotted, and answering `true` there would
+// launder real rot as BLOCKED.
+//
+//   "alive"     the exact URL still serves a browser
+//   "moved"     a browser reaches the host, but not this page
+//   "dead"      nothing answers
+async function probeWithBrowserUa(url) {
   try {
-    const res = await probe(url, "GET", controller.signal, BROWSER_UA);
-    return res.ok;
+    const res = await withTimeout((signal) => probe(url, "GET", signal, BROWSER_UA));
+    if (!res.ok) return { verdict: "dead", status: res.status };
+    if (landedElsewhere(url, res.url)) return { verdict: "moved", finalUrl: res.url };
+    return { verdict: "alive" };
   } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
+    return { verdict: "dead" };
   }
 }
 
@@ -272,26 +335,21 @@ async function checkOne(entry) {
   const result = { domain: entry.domain, url: entry.url, tier: entry.tier, name: entry.name };
 
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       // HEAD first (cheap); many sites answer 403/405 to it, so fall back to a
       // GET before concluding anything is wrong.
-      let res = await probe(entry.url, "HEAD", controller.signal);
+      //
+      // Each probe gets its OWN timeout budget. Sharing one timer across both
+      // meant a site taking 22s on HEAD left ~8s for the GET and was reported
+      // TIMEOUT while alive — precisely the .gov.au slowness this budget exists
+      // to absorb.
+      let res = await withTimeout((signal) => probe(entry.url, "HEAD", signal));
       if (res.status === 405 || res.status === 403 || res.status === 501) {
-        res = await probe(entry.url, "GET", controller.signal);
+        res = await withTimeout((signal) => probe(entry.url, "GET", signal));
       }
-      clearTimeout(timer);
 
       result.status = res.status;
       result.finalUrl = res.url;
-
-      const from = new URL(entry.url);
-      const to = new URL(res.url);
-      // Redirect to a bare homepage is the classic sign of a reorganised site
-      // that has thrown away the deep link — reachable, but the citation is gone.
-      const landedOnRoot = to.pathname === "/" && from.pathname !== "/";
-      const changedHost = to.hostname.replace(/^www\./, "") !== from.hostname.replace(/^www\./, "");
 
       if (res.status === 404 || res.status === 410) result.state = "DEAD";
       else if (res.status === 403 || res.status === 429) {
@@ -304,23 +362,46 @@ async function checkOne(entry) {
           result.state = "BLOCKED";
           result.error = `HTTP ${res.status} (expected — bot protection)`;
         } else {
-          result.state = (await respondsToBrowserUa(entry.url)) ? "BLOCKED" : "DEAD";
-          if (result.state === "DEAD") result.error = `HTTP ${res.status} to any agent`;
+          const browser = await probeWithBrowserUa(entry.url);
+          if (browser.verdict === "alive") {
+            result.state = "BLOCKED";
+          } else if (browser.verdict === "moved") {
+            // Reachable to a browser, but not at this path — that is rot, not a WAF.
+            result.state = "REDIRECTED";
+            result.finalUrl = browser.finalUrl;
+          } else {
+            result.state = "DEAD";
+            result.error = `HTTP ${res.status} to any agent`;
+          }
         }
       }
       else if (res.status >= 500) result.state = "SERVER_ERROR";
       else if (!res.ok) result.state = "DEAD";
-      else if (landedOnRoot || changedHost) result.state = "REDIRECTED";
+      else if (landedElsewhere(entry.url, res.url)) result.state = "REDIRECTED";
       else result.state = "OK";
 
       return result;
     } catch (err) {
-      clearTimeout(timer);
       if (attempt === RETRIES) {
+        // A WAF that blackholes the connection hangs rather than returning 403,
+        // so `expect: blocked` has to be honoured here too — otherwise the flag
+        // the registry advertises does nothing on the very path (acma, cyber)
+        // that motivated it, and the run exits 1 every week.
+        if (entry.expect === "blocked") {
+          result.state = "BLOCKED";
+          result.error = "no response to automated agents (expected — bot protection)";
+          return result;
+        }
         // Before calling it dead, check whether it is only our UA being refused.
-        if (await respondsToBrowserUa(entry.url)) {
+        const browser = await probeWithBrowserUa(entry.url);
+        if (browser.verdict === "alive") {
           result.state = "BLOCKED";
           result.error = "blocks automated agents (responds to a browser)";
+          return result;
+        }
+        if (browser.verdict === "moved") {
+          result.state = "REDIRECTED";
+          result.finalUrl = browser.finalUrl;
           return result;
         }
         result.state = err.name === "AbortError" ? "TIMEOUT" : "UNREACHABLE";
@@ -455,9 +536,24 @@ async function ghFetch(path, token, init = {}) {
 
 // One long-lived issue refreshed in place, same convention as the deps digest —
 // a new issue every week would be 52 a year and read as noise.
+// Creating an issue with a label that does not exist fails the request outright,
+// so the digest could never be published on a fresh repo. Idempotent: a 422
+// means it already exists.
+async function ensureLabel(repo, token, name, color, description) {
+  try {
+    await ghFetch(`/repos/${repo}/labels`, token, {
+      method: "POST",
+      body: JSON.stringify({ name, color, description }),
+    });
+  } catch (err) {
+    if (!/422/.test(err.message)) throw err;
+  }
+}
+
 async function upsertDigestIssue(repo, token, body) {
   const label = "source-check";
   const title = "🔗 Threat-intel source check";
+  await ensureLabel(repo, token, label, "1d76db", "Weekly threat-intel source reachability digest");
   const existing = await ghFetch(`/repos/${repo}/issues?state=open&labels=${label}&per_page=1`, token);
   if (Array.isArray(existing) && existing.length > 0) {
     await ghFetch(`/repos/${repo}/issues/${existing[0].number}`, token, {
@@ -483,18 +579,21 @@ async function main() {
   const text = await readFile(REGISTRY, "utf8");
   const reg = parseRegistry(text);
 
+  // Sets exitCode rather than calling process.exit(): stdout is a pipe when the
+  // documented `| head` usage runs, and exiting can truncate a buffered write.
   const errors = validate(reg);
   if (errors.length) {
     console.error("Registry is invalid:\n");
     for (const e of errors) console.error(`  • ${e}`);
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
 
   if (validateOnly) {
     const count =
       Object.values(reg.tiers).reduce((n, es) => n + es.length, 0) + reg.brands.length;
     console.log(`Registry v${reg.version} valid — ${count} sources, ${reg.indicators.length} quarantined indicators.`);
-    process.exit(0);
+    return;
   }
 
   const entries = [
@@ -527,13 +626,23 @@ async function main() {
     const token = process.env.GITHUB_TOKEN;
     if (!repo || !token) {
       console.error("--issue needs GITHUB_REPOSITORY and GITHUB_TOKEN");
-      process.exit(2);
+      process.exitCode = 2;
+      return;
     }
-    const n = await upsertDigestIssue(repo, token, markdown(results, reg, retiredCount));
-    console.error(`Digest issue #${n} refreshed.`);
+    // Publishing the digest IS the deliverable, so a failure here must not be
+    // swallowed — it exits 2, which the workflow reports separately from the
+    // rot signal (exit 1).
+    try {
+      const n = await upsertDigestIssue(repo, token, markdown(results, reg, retiredCount));
+      console.error(`Digest issue #${n} refreshed.`);
+    } catch (err) {
+      console.error(`Failed to refresh digest issue: ${err.message}`);
+      process.exitCode = 2;
+      return;
+    }
   }
 
-  process.exit(results.some((r) => FAIL.has(r.state)) ? 1 : 0);
+  process.exitCode = results.some((r) => FAIL.has(r.state)) ? 1 : 0;
 }
 
 // Only run when invoked directly, so the parser and validator can be imported
@@ -542,7 +651,7 @@ const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLT
 if (invokedDirectly) {
   main().catch((err) => {
     console.error("check-sources failed:", err);
-    process.exit(2);
+    process.exitCode = 2;
   });
 }
 

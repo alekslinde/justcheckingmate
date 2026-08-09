@@ -51,12 +51,25 @@ jobs:
         if: github.event_name == 'pull_request'
         run: node scripts/check-sources.mjs --validate
 
-      # Reachability failures are a maintenance signal, not a broken build — the
-      # digest issue is the deliverable, so the step reports and moves on.
+      # Exit 1 (a source rotted) is a maintenance signal, not a broken build, so
+      # it passes. Exit 2 means the job itself failed — invalid registry, or the
+      # digest could not be published — and must go red, or a silently broken
+      # checker looks identical to a clean week forever.
       - name: Check sources and refresh digest
         if: github.event_name != 'pull_request'
-        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/check-sources.mjs --issue --markdown >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set +e
+          node scripts/check-sources.mjs --issue --markdown >> "$GITHUB_STEP_SUMMARY"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "All sources reachable."
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::Some threat-intel sources have rotted — see the digest issue."
+          else
+            echo "::error::check-sources failed (exit $code) — digest may not have been published."
+            exit "$code"
+          fi
