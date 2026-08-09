@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useLang, type LangMode } from "@/lib/lang";
+import { useLang, type Tone } from "@/lib/lang";
 
-const OPTIONS: { value: LangMode; label: string }[] = [
+// Only the tone axis is user-selectable today: `en` is the sole locale. When a
+// second locale ships this becomes a locale list alongside the tone list.
+const OPTIONS: { value: Tone; label: string }[] = [
   { value: "normal", label: "English" },
-  { value: "aussie", label: "Aussie" },
+  { value: "regional", label: "Aussie" },
 ];
 
 export default function LangToggle() {
-  const { mode, select } = useLang();
+  const { mode, setTone } = useLang();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -30,8 +32,8 @@ export default function LangToggle() {
     };
   }, [open]);
 
-  function choose(next: LangMode) {
-    select(next);
+  function choose(next: Tone) {
+    setTone(next);
     setOpen(false);
   }
 
@@ -69,7 +71,7 @@ export default function LangToggle() {
           className="absolute right-0 mt-1 min-w-[10rem] py-1 rounded-lg border border-gray-700 bg-gray-900 shadow-lg z-50"
         >
           {OPTIONS.map((opt) => {
-            const active = opt.value === mode;
+            const active = opt.value === mode.tone;
             return (
               <button
                 key={opt.value}

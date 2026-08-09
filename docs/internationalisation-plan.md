@@ -632,6 +632,11 @@ Scope: `lib/phoneIntel.ts`, `__tests__/phoneIntel.test.ts`.
 
 ## Phase 6 — Locale vs tone split (only if going non-English)
 
+> **Step 1 is ✅ done** (the structural split, see "Next steps → 1"). Steps 2–3
+> (per-language keyword sets) remain **not started** and still gated: step 0's
+> demand data has not been read, and the native-speaker review is unbooked.
+
+
 **Decision point, not a commitment.** `lib/i18n.ts` currently has two *tone*
 modes (`normal` / `aussie`), not real locales. Detection keywords are
 English-only.
@@ -646,7 +651,7 @@ This is the expensive phase and the one that decides whether the product is
 Phases 1–5 are live and we have real signal on demand by region (Phase 2 stores
 this).
 
-**Status: not started.** Phases 1–5 and the US/NZ/CA/IE follow-ups are live, so
+**Status: step 1 done, steps 2–3 not started.** Phases 1–5 and the US/NZ/CA/IE follow-ups are live, so
 the deferral condition is now testable rather than hypothetical — see "Next
 steps" below, where this is broken into the cheap structural half (step 1, worth
 doing either way) and the expensive language half (step 2, gated on the demand
@@ -695,7 +700,7 @@ more English regions); volume concentrated in AU/GB argues for spending the
 effort on detection depth in the regions already covered instead. Either way the
 decision stops being a guess.
 
-### 1. Phase 6 step 1 — the `locale` × `tone` split — *small, low-risk, no language content*
+### 1. Phase 6 step 1 — the `locale` × `tone` split ✅ done
 
 Worth doing **regardless of the Phase 6 decision**, and cheap enough not to need
 the data first. `lib/i18n.ts` currently conflates two unrelated axes in one
@@ -710,7 +715,34 @@ refactor with no new strings:
 Doing this on its own de-risks everything after it, and leaves the codebase
 honest about what those two bundles actually are even if Phase 6 never proceeds.
 
-**Gate:** all existing i18n tests green, no visible copy change.
+**Gate:** all existing i18n tests green, no visible copy change. ✅ Met — 896
+tests green (29 files), `tsc --noEmit` and lint clean, and git records both
+message bundles as pure renames with a zero-byte content diff.
+
+**What shipped.** `LangMode` went from `"normal" | "aussie"` to
+`{ locale: Locale; tone: Tone }`, with `Locale = "en"` the only locale and
+`aussie` re-expressed as `en` + `regional`. `messages/normal.json` →
+`en.normal.json`, `aussie.json` → `en.regional.json`. Lookup now falls back in
+three steps — locale+tone → locale+base tone → base locale — so a future
+locale that ships no regional register, or a regional bundle that overrides only
+some keys, both resolve without a missing string.
+
+**The one non-mechanical part: stored preferences.** The refactor was otherwise
+as cheap as predicted, but `localStorage` under `jcm_lang` holds the literal
+string `"aussie"` for every returning user who ever picked it. Changing the type
+without migrating would have silently reset them to English — invisible in tests
+that only exercise fresh state. `parseMode()` therefore accepts the legacy
+single-axis values as well as the new `locale:tone` form, and degrades unknown
+locales/tones to the base instead of throwing; it is covered by round-trip and
+migration tests. The lesson matches Phases 4–5: the seam was in the persisted
+state, not the types.
+
+A second, quieter trap: `useSyncExternalStore` compares snapshots by identity,
+so returning a freshly-parsed object each call would re-render forever. The
+snapshot is now memoised against the raw stored string.
+
+Scope: `lib/i18n.ts`, `lib/lang.tsx`, `components/LangToggle.tsx`,
+`components/BugReportProvider.tsx`, `messages/`, `__tests__/lang.test.ts`.
 
 ### 2. Phase 6 steps 2–3 — French for Canada — *the expensive one, gated on step 0*
 

@@ -157,7 +157,12 @@ function BugModal({
           path: env.path,
           userAgent: env.userAgent,
           viewport: env.viewport,
-          language: mode === "aussie" ? `${env.language} (aussie)` : env.language,
+          // Browser language, annotated with the in-app preference when it
+          // differs from the default (locale/tone are separate axes now).
+          language:
+            mode.tone === "normal"
+              ? `${env.language} (${mode.locale})`
+              : `${env.language} (${mode.locale}, ${mode.tone})`,
           hp,
         }),
       });
