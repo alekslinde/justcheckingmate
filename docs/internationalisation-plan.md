@@ -554,11 +554,11 @@ match; `SECURE` and `IRDNZ` correctly don't), and the `PLAN_PEERS` table reads
 asymmetric but behaves symmetrically — Caribbean wangiri numbers (`1876`, `1268`)
 remain correctly foreign and flagged for US and CA users.
 
-**Known issue, out of scope and unfixed.** An AU user checking a Caribbean
-wangiri number (`1876…`) gets `country: "Australia"` and **no wangiri flag**:
-libphonenumber parses the NANP national form against the AU plan. Pre-existing,
-unrelated to region packs, and it defeats wangiri detection for the product's
-home region — worth its own fix.
+**Known issue found here, fixed separately.** An AU user checking a Caribbean
+wangiri number (`1876…`) got `country: "Australia"` and **no wangiri flag**:
+libphonenumber parses the NANP national form against the AU plan. Pre-existing
+and unrelated to region packs, so it was fixed on its own branch rather than
+widened into this one — see "Foreign numbers typed without a `+`" below.
 
 **Gate:** ✅ `npm test` green — **865 passing**, with the 725 pre-existing
 **untouched**, including zero changes to `scamDetector.test.ts` (the load-bearing
@@ -586,6 +586,50 @@ Scope: new `lib/regions/{us,nz,ca,ie}.ts`, `lib/regions/types.ts`,
 
 ---
 
+## Foreign numbers typed without a `+` ✅ done
+
+Not a phase — a defect found while reviewing the follow-up packs, fixed on its
+own branch because it is a `phoneIntel` bug rather than a region-pack one.
+
+**The gap.** A foreign number entered as bare digits — exactly how a missed call
+or caller ID displays it — was parsed against the home plan, came back invalid
+with `country = home`, and fell through to the "unparseable" branch. That branch
+reports the *user's own country* and skips every international risk check, so an
+Australian checking the Jamaican wangiri number `18765551234` saw "Australia"
+and no wangiri flag. It affected all four non-NANP regions (AU, GB, NZ, IE) and
+non-NANP prefixes too — Somalia `252…` also read as "Australia".
+
+**The fix.** Reparse as international, but only under four guards, because a
+naive reparse makes things worse rather than better:
+
+- only *after* the domestic parse has failed, so a valid home number can never
+  be reinterpreted;
+- not when the user typed `+`, which already worked;
+- not when the input starts with `0` — that is a national trunk prefix, and
+  stripping it invents a country code (`0412345678` → Switzerland);
+- not below 8 digits, which keeps short codes and local formats out.
+
+The reparse must then yield a *valid* number **or** match a known wangiri /
+high-scam prefix. That second clause is load-bearing: libphonenumber rates many
+small-territory subscriber ranges invalid, so without it the Caribbean wangiri
+numbers this fixes — Antigua, Montserrat, Barbados — are still missed.
+
+**A bug the extraction introduced, caught by the existing suite.** Pulling the
+shared logic into `analyseInternational` passed `spoofingRisk` by value, which
+froze it at entry and silently discarded every escalation `bump()` made. Five
+pre-existing tests failed immediately; it now takes a getter. Worth recording as
+the argument for extracting *under* a green suite rather than alongside new
+behaviour.
+
+**Gate:** ✅ **889 passing.** Mutation-checked: removing the reparse fails 9
+tests, and each of the three guards independently fails 3 — so none is
+decorative. Domestic coverage is asserted across all six regions, including the
+AU `190x` premium case Phase 4 specifically protected.
+
+Scope: `lib/phoneIntel.ts`, `__tests__/phoneIntel.test.ts`.
+
+---
+
 ## Phase 6 — Locale vs tone split (only if going non-English)
 
 **Decision point, not a commitment.** `lib/i18n.ts` currently has two *tone*
@@ -601,6 +645,12 @@ This is the expensive phase and the one that decides whether the product is
 "English-speaking worldwide" or "actually worldwide". Recommend deferring until
 Phases 1–5 are live and we have real signal on demand by region (Phase 2 stores
 this).
+
+**Status: not started.** Phases 1–5 and the US/NZ/CA/IE follow-ups are live, so
+the deferral condition is now testable rather than hypothetical — see "Next
+steps" below, where this is broken into the cheap structural half (step 1, worth
+doing either way) and the expensive language half (step 2, gated on the demand
+data). Canada is the identified first locale.
 
 ---
 
@@ -618,12 +668,79 @@ defects, two of which affected the already-shipped AU and GB packs. The lesson
 worth carrying into any future region: "data-only" is not the same as
 "risk-free", because each new pack reaches seams the existing ones never did.
 
-**Next up is the Phase 6 locale decision**, which the plan recommends deferring
-until there's real per-region demand signal — Phase 2 stores the resolved region
-on every report, so that data is now accumulating across six regions rather than
-one. Canada gives it a concrete, bounded first target: the CA pack is the only
-one shipping as `coverage: "partial"`, purely because its keywords are English
-in a bilingual market, so French is where Phase 6 would buy the most per unit of
-effort. That still requires the native-speaker review the phase mandates.
-
 Each phase = its own branch, own commit, tests green before merge.
+
+---
+
+## Next steps
+
+Ordered by what they cost against what they resolve. Step 0 is deliberately
+first: it is the cheapest, and it is the gate Phase 6 has been waiting on since
+it was written.
+
+### 0. Read the per-region report data — *hours, no code*
+
+Phase 2 has been persisting `region` on every report since it landed, and there
+are now six regions to compare rather than one. This is the demand signal the
+Phase 6 deferral is conditioned on, so it should be read *before* committing to
+anything below.
+
+Concretely: `SELECT region, COUNT(*) FROM reports GROUP BY region` against the
+prod Turso DB — the local `local.db` seed has 14 rows with an empty region and
+tells you nothing. Worth splitting by `created_at` too, since the region column
+only started being populated in Phase 2.
+
+**What the answer changes.** Meaningful non-AU volume argues for Phase 6 (or for
+more English regions); volume concentrated in AU/GB argues for spending the
+effort on detection depth in the regions already covered instead. Either way the
+decision stops being a guess.
+
+### 1. Phase 6 step 1 — the `locale` × `tone` split — *small, low-risk, no language content*
+
+Worth doing **regardless of the Phase 6 decision**, and cheap enough not to need
+the data first. `lib/i18n.ts` currently conflates two unrelated axes in one
+`LangMode = "normal" | "aussie"` union: `aussie` is a *tone*, not a locale, and
+`messages/` holds exactly two English bundles. Splitting them is a structural
+refactor with no new strings:
+
+- `locale` (`en`, later `fr`, …) × `tone` (`normal` | `regional`)
+- `en` as the only locale, so behaviour is unchanged and the diff is mechanical
+- the `aussie` tone becomes `en` + `regional` rather than a pseudo-locale
+
+Doing this on its own de-risks everything after it, and leaves the codebase
+honest about what those two bundles actually are even if Phase 6 never proceeds.
+
+**Gate:** all existing i18n tests green, no visible copy change.
+
+### 2. Phase 6 steps 2–3 — French for Canada — *the expensive one, gated on step 0*
+
+If the data supports going non-English, **Canada is the first target and the
+argument is already made**: CA is the only pack shipping `coverage: "partial"`,
+and the sole reason is English keywords in an officially bilingual market where
+roughly a fifth of the population speaks French at home. Today a French-language
+smish there returns `unknown` — honest, but not useful.
+
+That makes it the best-value first locale because it *promotes an existing
+region* rather than opening a new market: the agencies, brands, legit domains
+and number plan are already authored and tested. Only the keyword layer is
+missing.
+
+**Hard dependency:** the plan's own rule — every non-English pack needs a
+native-speaker review before shipping as more than `partial`. That review is a
+prerequisite to be lined up, not a step that can be worked around, and it is the
+reason this sits behind step 0 rather than being started opportunistically.
+
+**Gate:** CA promoted from `partial` to `full`, with French fixtures in
+`__tests__/` and the AU/GB/US/NZ/IE packs untouched.
+
+### Explicitly *not* next: more English regions
+
+ZA, SG and IN are the obvious candidates and should stay parked. Each needs its
+own agency, brand and regulator research, and the last four packs demonstrated
+that "data-only" work still surfaces cross-region defects — three of them, two
+affecting already-shipped packs. Adding breadth before the Phase 6 question is
+answered increases maintenance surface without resolving anything, which is the
+"maintainability over breadth" constraint at the top of this document.
+
+The one thing that *would* justify jumping the queue is step 0 showing
+significant traffic from a specific uncovered English-speaking market.
