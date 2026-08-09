@@ -584,6 +584,49 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     };
   }
 
+  // ── International number typed without a leading "+" ───────────────────────
+  // A number that isn't valid at home may simply be a foreign one the user typed
+  // as they saw it — caller ID and missed-call logs routinely show "18765551234"
+  // with no plus. Parsing that against the home plan yields `country = home` and
+  // invalid, so it fell through to the unparseable branch below and was reported
+  // as the *user's own country* with the international risk checks skipped
+  // entirely: an Australian checking a Jamaican wangiri number was told
+  // "Australia", no wangiri flag. The same held for GB, NZ and IE, and for
+  // non-NANP prefixes (Somalia +252 read as "Australia").
+  //
+  // Reparsing is deliberately narrow, because it is easy to make worse. The
+  // guards, in order:
+  //   · only after the domestic parse has already failed — a valid home number
+  //     never reaches here, so this cannot reinterpret one;
+  //   · not when the user typed "+", which was already handled correctly;
+  //   · not when the input starts with "0", which is a national trunk prefix —
+  //     stripping it invents a country code ("0412 345 678" → Switzerland);
+  //   · the reparse must produce a *valid* number, or match a known wangiri /
+  //     high-scam prefix at a plausible international length. The second clause
+  //     exists because libphonenumber rates many small-territory subscriber
+  //     ranges invalid, which would otherwise drop exactly the Caribbean wangiri
+  //     numbers this fixes.
+  const reparsedIntl = ((): PhoneNumber | undefined => {
+    if (parsed?.isValid()) return undefined;
+    if (raw.trim().startsWith("+")) return undefined;
+    if (cleaned.startsWith("0")) return undefined;
+    // 8 digits is below any plausible country-code-plus-subscriber number, and
+    // keeps short codes and local-format numbers out.
+    if (cleaned.length < 8) return undefined;
+
+    const candidate = parsePhoneNumberFromString("+" + cleaned);
+    if (candidate?.isValid()) return candidate;
+
+    const knownRisk =
+      WANGIRI_PREFIXES.some((p) => cleaned.startsWith(p)) ||
+      Object.keys(HIGH_SCAM_COUNTRY_CODES).some((p) => cleaned.startsWith(p));
+    return knownRisk ? candidate : undefined;
+  })();
+
+  if (reparsedIntl) {
+    return analyseInternational(reparsedIntl, cleaned, spoofingNotes, () => spoofingRisk, bump);
+  }
+
   // ── Unparseable ────────────────────────────────────────────────────────────
   if (!parsed || !parsed.isValid()) {
     spoofingNotes.push("Number doesn't match any known phone number format — it may be fabricated or disguised");
@@ -724,7 +767,32 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
   }
 
   // ── International numbers ──────────────────────────────────────────────────
-  const intl = parsed.countryCallingCode + parsed.nationalNumber;
+  return analyseInternational(parsed, cleaned, spoofingNotes, () => spoofingRisk, bump);
+}
+
+/**
+ * Risk analysis for a number that belongs to some country other than the
+ * user's — wangiri, high-scam and elevated-volume origins.
+ *
+ * Extracted so the two paths that reach it share one implementation: a number
+ * carrying an explicit country code, and one the user typed without a leading
+ * "+" that we recovered by reparsing (see analysePhone). Before that second
+ * path existed, a foreign number typed in bare digits skipped every check here
+ * and was reported as the user's own country.
+ */
+function analyseInternational(
+  parsed: PhoneNumber,
+  cleaned: string,
+  spoofingNotes: string[],
+  // A getter, not the value. `bump` mutates the caller's risk variable, so
+  // capturing it as a plain parameter here would freeze it at its value on
+  // entry and discard every escalation this function makes.
+  currentRisk: () => PhoneIntel["spoofingRisk"],
+  bump: (risk: PhoneIntel["spoofingRisk"]) => void,
+): PhoneIntel {
+  const intl = parsed.countryCallingCode
+    ? parsed.countryCallingCode + parsed.nationalNumber
+    : cleaned;
 
   const isWangiri = WANGIRI_PREFIXES.some((p) => intl.startsWith(p));
   if (isWangiri) {
@@ -748,6 +816,7 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     bump("medium");
   }
 
+  const type = parsed.getType();
   const lineType: PhoneIntel["lineType"] =
     type === "TOLL_FREE" ? "freecall"
     : type === "SHARED_COST" ? "shared_cost"
@@ -763,8 +832,8 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     isDomestic: false,
     wangiriRisk: isWangiri,
     highScamCountry: !!highScamEntry || isWangiri,
-    spoofingRisk,
+    spoofingRisk: currentRisk(),
     spoofingNotes,
-    normalised,
+    normalised: parsed.isValid() ? parsed.formatInternational() : "+" + intl,
   };
 }
