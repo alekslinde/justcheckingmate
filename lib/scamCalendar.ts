@@ -168,9 +168,30 @@ const AU_SEASONS: ScamSeason[] = [
   },
 ];
 
-const CALENDARS: Partial<Record<RegionCode, ScamSeason[]>> = {
+// `satisfies` (rather than a plain annotation) keeps the literal key type, so
+// CalendarRegion below resolves to exactly the authored regions — "AU" today —
+// instead of widening to every RegionCode.
+const CALENDARS = {
   AU: AU_SEASONS,
-};
+} satisfies Partial<Record<RegionCode, ScamSeason[]>>;
+
+/**
+ * The regions that actually have an authored calendar, derived from CALENDARS
+ * rather than declared alongside it.
+ *
+ * This is what couples the two maps below: REGION_TIMEZONE is keyed by this
+ * type, so adding seasons for a new region without adding its timezone is a
+ * compile error rather than a silent revert to the raw server clock — which
+ * would reintroduce the very off-by-one-day bug regionToday exists to fix. The
+ * omission is invisible at runtime (regionToday falls back rather than throws),
+ * so the type is the only place it can be caught.
+ */
+type CalendarRegion = keyof typeof CALENDARS;
+
+/** Narrows an arbitrary region code to one that has an authored calendar. */
+function isCalendarRegion(code: RegionCode): code is CalendarRegion {
+  return code in CALENDARS;
+}
 
 /**
  * IANA timezone used to decide what "today" is for a region's calendar.
@@ -188,7 +209,7 @@ const CALENDARS: Partial<Record<RegionCode, ScamSeason[]>> = {
  * hours for everyone if we used UTC. Seasons are month-scale windows, so a
  * two-hour edge case is immaterial in a way a systematic skew is not.
  */
-const REGION_TIMEZONE: Partial<Record<RegionCode, string>> = {
+const REGION_TIMEZONE: Record<CalendarRegion, string> = {
   AU: "Australia/Sydney",
 };
 
@@ -202,8 +223,10 @@ const REGION_TIMEZONE: Partial<Record<RegionCode, string>> = {
  * returned value is not a true instant and must not be treated as one.
  */
 export function regionToday(code: RegionCode, now: Date = new Date()): Date {
+  // A region with no calendar has no seasons to place, so the server date is
+  // harmless there — the lookup is total over the regions that do have one.
+  if (!isCalendarRegion(code)) return now;
   const timeZone = REGION_TIMEZONE[code];
-  if (!timeZone) return now;
 
   // en-CA formats as YYYY-MM-DD, so the parts are unambiguous by type.
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -234,7 +257,7 @@ export function regionToday(code: RegionCode, now: Date = new Date()): Date {
  * is worse than showing nothing. Callers render nothing on an empty list.
  */
 export function calendarForRegion(code: RegionCode): ScamSeason[] {
-  return CALENDARS[code] ?? [];
+  return isCalendarRegion(code) ? CALENDARS[code] : [];
 }
 
 /** Whether any region has an authored calendar — drives nav/link visibility. */
@@ -278,14 +301,46 @@ export function activeSeasons(code: RegionCode, date: Date): ScamSeason[] {
 // simple rather than pulling in date arithmetic.
 const DAYS_BEFORE_MONTH = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
-// Clamped rather than trusting the caller: an out-of-range month indexes past
-// the table and yields undefined, which turns into NaN and propagates silently
-// into both the sort order and the rendered "starts in about NaN months". A
-// 0-based month is an easy authoring slip given the getMonth() + 1 calls
-// nearby, so this fails visibly-but-safely instead of poisoning the output.
+// Non-leap length of each month, 1-indexed to match DAYS_BEFORE_MONTH. February
+// is 28 for the same reason the table ignores leap years: these windows are
+// month-scale and a single day of drift never changes which season is active.
+const DAYS_IN_MONTH = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+// Both fields are clamped rather than trusted. An out-of-range month indexes
+// past the table and yields undefined → NaN, which poisons the sort order and
+// renders as "Starts in about NaN months"; an out-of-range day (a 45th, or a
+// 31st in a 30-day month) silently produces an ordinal that overlaps the next
+// month, mis-sorting the season and counting down to a date that never arrives.
+// A 0-based month is an easy slip given the getMonth() + 1 calls nearby, and the
+// day is the undefended half of the same pair — so both fail safely here.
+// isWellFormedWindow() below is what actually catches the mistake at test time;
+// this clamp only guarantees the rendered output stays sane if one slips past.
 function dayOfYear(month: number, day: number): number {
-  const clamped = Math.min(Math.max(Math.trunc(month), 1), 12);
-  return DAYS_BEFORE_MONTH[clamped] + day;
+  const m = Math.min(Math.max(Math.trunc(month), 1), 12);
+  const d = Math.min(Math.max(Math.trunc(day), 1), DAYS_IN_MONTH[m]);
+  return DAYS_BEFORE_MONTH[m] + d;
+}
+
+/**
+ * Whether a window's month/day pairs are real calendar dates.
+ *
+ * Exported for tests rather than called at render: a malformed window is an
+ * authoring bug to be caught in CI, not a runtime condition to branch on. The
+ * clamp in dayOfYear keeps the page sane if one ever ships anyway.
+ */
+export function isWellFormedWindow(window: SeasonWindow): boolean {
+  const validPair = (month: number, day: number) =>
+    Number.isInteger(month) &&
+    Number.isInteger(day) &&
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= DAYS_IN_MONTH[month];
+
+  return (
+    validPair(window.startMonth, window.startDay) &&
+    validPair(window.endMonth, window.endDay)
+  );
 }
 
 export function daysUntilStart(season: ScamSeason, date: Date): number {

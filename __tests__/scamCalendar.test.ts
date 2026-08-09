@@ -8,6 +8,7 @@ import {
   daysUntilStart,
   formatWindow,
   regionToday,
+  isWellFormedWindow,
   type ScamSeason,
 } from "@/lib/scamCalendar";
 import { supportedRegions } from "@/lib/regions";
@@ -49,16 +50,11 @@ describe("calendarForRegion", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("authors every season with valid month/day bounds", () => {
+  // Checks against each month's real length, not a blanket 31 — a 31 April or a
+  // 30 February would pass the loose bound and still be a date that never comes.
+  it("authors every season as a real calendar date", () => {
     for (const s of calendarForRegion("AU")) {
-      expect(s.window.startMonth).toBeGreaterThanOrEqual(1);
-      expect(s.window.startMonth).toBeLessThanOrEqual(12);
-      expect(s.window.endMonth).toBeGreaterThanOrEqual(1);
-      expect(s.window.endMonth).toBeLessThanOrEqual(12);
-      expect(s.window.startDay).toBeGreaterThanOrEqual(1);
-      expect(s.window.startDay).toBeLessThanOrEqual(31);
-      expect(s.window.endDay).toBeGreaterThanOrEqual(1);
-      expect(s.window.endDay).toBeLessThanOrEqual(31);
+      expect(isWellFormedWindow(s.window), `${s.id} has an impossible date`).toBe(true);
     }
   });
 
@@ -235,6 +231,80 @@ describe("dayOfYear bounds (via daysUntilStart)", () => {
   it("never returns NaN for a month above the table", () => {
     const bad = season({ startMonth: 13, startDay: 1, endMonth: 13, endDay: 2 });
     expect(Number.isNaN(daysUntilStart(bad, on(6, 1)))).toBe(false);
+  });
+
+  // The day was the undefended half of the pair: an out-of-range day produces an
+  // ordinal overlapping the next month, so the season sorts wrongly and counts
+  // down to a date that never arrives.
+  it("clamps a day beyond the end of the month", () => {
+    const bad = season({ startMonth: 4, startDay: 45, endMonth: 5, endDay: 1 });
+    const days = daysUntilStart(bad, on(1, 1));
+    expect(Number.isNaN(days)).toBe(false);
+    // 30 April is the real last day, so it can never read as further out than that.
+    expect(days).toBeLessThanOrEqual(daysUntilStart(season({ startMonth: 5, startDay: 1, endMonth: 5, endDay: 2 }), on(1, 1)));
+  });
+
+  it("clamps a 31st in a 30-day month to the month's real end", () => {
+    const impossible = season({ startMonth: 4, startDay: 31, endMonth: 5, endDay: 1 });
+    const real = season({ startMonth: 4, startDay: 30, endMonth: 5, endDay: 1 });
+    expect(daysUntilStart(impossible, on(1, 1))).toBe(daysUntilStart(real, on(1, 1)));
+  });
+
+  it("clamps a zero or negative day", () => {
+    const bad = season({ startMonth: 4, startDay: 0, endMonth: 5, endDay: 1 });
+    expect(daysUntilStart(bad, on(1, 1))).toBe(
+      daysUntilStart(season({ startMonth: 4, startDay: 1, endMonth: 5, endDay: 1 }), on(1, 1)),
+    );
+  });
+});
+
+describe("isWellFormedWindow", () => {
+  it("accepts a real window", () => {
+    expect(isWellFormedWindow({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 })).toBe(true);
+  });
+
+  it("accepts 29 February being absent — February tops out at 28", () => {
+    // Leap years are deliberately ignored throughout, so 29 Feb is not authorable.
+    expect(isWellFormedWindow({ startMonth: 2, startDay: 28, endMonth: 3, endDay: 1 })).toBe(true);
+    expect(isWellFormedWindow({ startMonth: 2, startDay: 29, endMonth: 3, endDay: 1 })).toBe(false);
+  });
+
+  it("rejects a day past the end of a 30-day month", () => {
+    expect(isWellFormedWindow({ startMonth: 4, startDay: 31, endMonth: 5, endDay: 1 })).toBe(false);
+  });
+
+  it("rejects an out-of-range month", () => {
+    expect(isWellFormedWindow({ startMonth: 0, startDay: 1, endMonth: 5, endDay: 1 })).toBe(false);
+    expect(isWellFormedWindow({ startMonth: 13, startDay: 1, endMonth: 5, endDay: 1 })).toBe(false);
+  });
+
+  it("rejects a non-integer date", () => {
+    expect(isWellFormedWindow({ startMonth: 4.5, startDay: 1, endMonth: 5, endDay: 1 })).toBe(false);
+    expect(isWellFormedWindow({ startMonth: 4, startDay: 1.5, endMonth: 5, endDay: 1 })).toBe(false);
+  });
+
+  it("checks the end of the window too, not just the start", () => {
+    expect(isWellFormedWindow({ startMonth: 4, startDay: 1, endMonth: 6, endDay: 31 })).toBe(false);
+  });
+});
+
+describe("calendar/timezone coupling", () => {
+  // Belt-and-braces alongside the compile-time guarantee: REGION_TIMEZONE is
+  // keyed by `keyof typeof CALENDARS`, so a region with seasons but no timezone
+  // fails to build. This asserts the observable consequence — that every region
+  // with a calendar actually resolves a date away from the raw server clock.
+  it("resolves a region-local date for every region that has a calendar", () => {
+    // 30 June 23:00 UTC — a boundary instant where any timezone-aware region
+    // must land on a different civil date than the UTC server does.
+    const instant = new Date(Date.UTC(2026, 5, 30, 23, 0));
+    for (const code of supportedRegions()) {
+      if (calendarForRegion(code).length === 0) continue;
+      const resolved = regionToday(code, instant);
+      expect(
+        resolved.getTime(),
+        `${code} has a calendar but fell back to the server clock`,
+      ).not.toBe(instant.getTime());
+    }
   });
 });
 
