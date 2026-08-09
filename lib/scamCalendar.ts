@@ -173,6 +173,60 @@ const CALENDARS: Partial<Record<RegionCode, ScamSeason[]>> = {
 };
 
 /**
+ * IANA timezone used to decide what "today" is for a region's calendar.
+ *
+ * Necessary because the server clock is not the user's clock: in production it
+ * is UTC, and AEST is UTC+10. Reading the raw server date would place an AU user
+ * loading the page at 9am on 1 July into 30 June — showing "Tax season" as
+ * *upcoming* on the exact morning ATO lodgement opens, which is precisely when
+ * the advice matters most. Every AU-facing date here (1 July, 30 June EOFY) sits
+ * on a boundary that a ten-hour skew crosses.
+ *
+ * One zone per region is a deliberate simplification. Australia spans three, so
+ * this is the eastern seaboard where most of the population lives; the error for
+ * a Perth user is at most two hours on a boundary day, against a guaranteed ten
+ * hours for everyone if we used UTC. Seasons are month-scale windows, so a
+ * two-hour edge case is immaterial in a way a systematic skew is not.
+ */
+const REGION_TIMEZONE: Partial<Record<RegionCode, string>> = {
+  AU: "Australia/Sydney",
+};
+
+/**
+ * Today's civil date in a region's local timezone, as a Date whose local-time
+ * fields (getMonth/getDate) read as that region's date.
+ *
+ * Intl gives the correct civil date without a timezone library and handles DST
+ * itself. The result is only ever consumed through getMonth()/getDate() by the
+ * windowing functions below, so re-anchoring those fields is sufficient — the
+ * returned value is not a true instant and must not be treated as one.
+ */
+export function regionToday(code: RegionCode, now: Date = new Date()): Date {
+  const timeZone = REGION_TIMEZONE[code];
+  if (!timeZone) return now;
+
+  // en-CA formats as YYYY-MM-DD, so the parts are unambiguous by type.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+
+  const field = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const year = field("year");
+  const month = field("month");
+  const day = field("day");
+
+  // Intl should always supply all three; if a runtime somehow doesn't, fall back
+  // to the server date rather than constructing an invalid one.
+  if (!year || !month || !day) return now;
+
+  // Anchored at midday so no local DST shift can move the date field.
+  return new Date(year, month - 1, day, 12);
+}
+
+/**
  * Seasons authored for a region, or an empty list where we have none.
  *
  * Empty is the honest answer, not a reason to substitute Australia's calendar:
@@ -224,8 +278,14 @@ export function activeSeasons(code: RegionCode, date: Date): ScamSeason[] {
 // simple rather than pulling in date arithmetic.
 const DAYS_BEFORE_MONTH = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
 
+// Clamped rather than trusting the caller: an out-of-range month indexes past
+// the table and yields undefined, which turns into NaN and propagates silently
+// into both the sort order and the rendered "starts in about NaN months". A
+// 0-based month is an easy authoring slip given the getMonth() + 1 calls
+// nearby, so this fails visibly-but-safely instead of poisoning the output.
 function dayOfYear(month: number, day: number): number {
-  return DAYS_BEFORE_MONTH[month] + day;
+  const clamped = Math.min(Math.max(Math.trunc(month), 1), 12);
+  return DAYS_BEFORE_MONTH[clamped] + day;
 }
 
 export function daysUntilStart(season: ScamSeason, date: Date): number {
@@ -242,10 +302,15 @@ export function daysUntilStart(season: ScamSeason, date: Date): number {
  * index; the full year is listed separately below it.
  */
 export function upcomingSeasons(code: RegionCode, date: Date, limit = 3): ScamSeason[] {
+  // Decorate-sort-undecorate: the distance is computed once per season rather
+  // than on every comparison, so the comparator is a plain numeric compare over
+  // fixed values and cannot go non-transitive if daysUntilStart ever changes.
   return calendarForRegion(code)
     .filter((s) => !isActiveOn(s, date))
-    .sort((a, b) => daysUntilStart(a, date) - daysUntilStart(b, date))
-    .slice(0, limit);
+    .map((season) => ({ season, days: daysUntilStart(season, date) }))
+    .sort((a, b) => a.days - b.days)
+    .slice(0, limit)
+    .map(({ season }) => season);
 }
 
 const MONTH_NAMES = [

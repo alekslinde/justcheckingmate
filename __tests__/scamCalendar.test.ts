@@ -7,6 +7,7 @@ import {
   upcomingSeasons,
   daysUntilStart,
   formatWindow,
+  regionToday,
   type ScamSeason,
 } from "@/lib/scamCalendar";
 import { supportedRegions } from "@/lib/regions";
@@ -177,6 +178,63 @@ describe("upcomingSeasons", () => {
 
   it("returns nothing for a region with no calendar", () => {
     expect(upcomingSeasons("US", on(8, 10))).toEqual([]);
+  });
+});
+
+describe("regionToday", () => {
+  // The bug this exists to prevent: production servers run UTC, AEST is UTC+10,
+  // so the server date lags the user's by up to ten hours. 1 July is when ATO
+  // lodgement opens and tax-scam advice matters most.
+  it("resolves an AU date that UTC would still call the previous day", () => {
+    // 30 June 23:00 UTC === 1 July 09:00 AEST.
+    const utcInstant = new Date(Date.UTC(2026, 5, 30, 23, 0));
+    expect(utcInstant.getUTCMonth() + 1).toBe(6); // server sees June
+    const au = regionToday("AU", utcInstant);
+    expect(au.getMonth() + 1).toBe(7); // user is already in July
+    expect(au.getDate()).toBe(1);
+  });
+
+  it("puts tax season live on the AU morning lodgement opens", () => {
+    const utcInstant = new Date(Date.UTC(2026, 5, 30, 23, 0));
+    const ids = activeSeasons("AU", regionToday("AU", utcInstant)).map((s) => s.id);
+    expect(ids).toContain("tax-time");
+  });
+
+  it("keeps EOFY active through the AU end of 30 June", () => {
+    // 30 June 13:00 UTC === 30 June 23:00 AEST — still EOFY for the user.
+    const utcInstant = new Date(Date.UTC(2026, 5, 30, 13, 0));
+    const ids = activeSeasons("AU", regionToday("AU", utcInstant)).map((s) => s.id);
+    expect(ids).toContain("eofy-business");
+  });
+
+  it("returns the given date unchanged for a region with no timezone mapped", () => {
+    const d = new Date(Date.UTC(2026, 5, 30, 23, 0));
+    expect(regionToday("GB", d).getTime()).toBe(d.getTime());
+  });
+
+  it("applies the summer DST offset, not a fixed one", () => {
+    // Sydney is UTC+11 in January (AEDT), not UTC+10, so 1 Jan 13:30 UTC is
+    // already 2 Jan locally. Intl handles the transition; a hardcoded offset
+    // would get this wrong for half the year.
+    const au = regionToday("AU", new Date(Date.UTC(2026, 0, 1, 13, 30)));
+    expect(Number.isNaN(au.getTime())).toBe(false);
+    expect(au.getMonth() + 1).toBe(1);
+    expect(au.getDate()).toBe(2);
+  });
+});
+
+describe("dayOfYear bounds (via daysUntilStart)", () => {
+  // A 0-based month is an easy authoring slip next to all the getMonth() + 1
+  // calls. Unclamped it indexes past the table and yields NaN, which sorts
+  // arbitrarily and renders as "Starts in about NaN months".
+  it("never returns NaN for an out-of-range month", () => {
+    const bad = season({ startMonth: 0, startDay: 1, endMonth: 13, endDay: 1 });
+    expect(Number.isNaN(daysUntilStart(bad, on(6, 1)))).toBe(false);
+  });
+
+  it("never returns NaN for a month above the table", () => {
+    const bad = season({ startMonth: 13, startDay: 1, endMonth: 13, endDay: 2 });
+    expect(Number.isNaN(daysUntilStart(bad, on(6, 1)))).toBe(false);
   });
 });
 

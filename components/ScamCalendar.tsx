@@ -15,6 +15,7 @@ import {
   calendarForRegion,
   daysUntilStart,
   formatWindow,
+  regionToday,
   type ScamSeason,
   type SeasonConfidence,
 } from "@/lib/scamCalendar";
@@ -32,12 +33,17 @@ const CONFIDENCE_LABEL: Record<SeasonConfidence, string> = {
   elevated: "Raised risk, not a fixed date",
 };
 
+// Thresholds are expressed in days and the handover points are exact, so the
+// label never jumps backwards: the last week-label is "about 8 weeks" at 59
+// days and the first month-label is "about 2 months" at 60. Rounding each unit
+// independently is what produced that seam — 59 days rounds to 8 weeks while 60
+// rounds to 2 months, so the same gap read as both. Switching on the day count
+// rather than on the rounded value keeps the ladder monotonic.
 function startsInLabel(days: number): string {
   if (days === 0) return "Starts today";
   if (days === 1) return "Starts tomorrow";
   if (days < 14) return `Starts in ${days} days`;
-  const weeks = Math.round(days / 7);
-  if (weeks < 9) return `Starts in about ${weeks} weeks`;
+  if (days < 60) return `Starts in about ${Math.round(days / 7)} weeks`;
   const months = Math.round(days / 30);
   return `Starts in about ${months} month${months === 1 ? "" : "s"}`;
 }
@@ -92,10 +98,10 @@ function SeasonCard({ season, active }: { season: ScamSeason; active: boolean })
 
 export default function ScamCalendar({
   region,
-  now = new Date(),
+  now,
 }: {
   region: RegionCode;
-  /** Injectable for tests and for stable rendering; defaults to render time. */
+  /** Injectable for tests; defaults to the region's civil date at render time. */
   now?: Date;
 }) {
   const all = calendarForRegion(region);
@@ -104,8 +110,13 @@ export default function ScamCalendar({
   // showing another country's seasons. Honest coverage over filled space.
   if (all.length === 0) return null;
 
-  const active = activeSeasons(region, now);
-  const upcoming = upcomingSeasons(region, now, 2);
+  // The server clock is UTC in production, so the raw date would put an AU user
+  // ~10 hours behind their own — enough to show a season starting "tomorrow" on
+  // the morning it actually opens. Resolve to the region's civil date instead.
+  const today = regionToday(region, now);
+
+  const active = activeSeasons(region, today);
+  const upcoming = upcomingSeasons(region, today, 2);
   const shownIds = new Set([...active, ...upcoming].map((s) => s.id));
   const rest = all.filter((s) => !shownIds.has(s.id));
 
@@ -142,7 +153,7 @@ export default function ScamCalendar({
           <div className="space-y-3">
             {upcoming.map((s) => (
               <div key={s.id} className="space-y-1.5">
-                <p className="text-xs text-gray-500">{startsInLabel(daysUntilStart(s, now))}</p>
+                <p className="text-xs text-gray-500">{startsInLabel(daysUntilStart(s, today))}</p>
                 <SeasonCard season={s} active={false} />
               </div>
             ))}
