@@ -2,7 +2,7 @@
 
 Australia's no-nonsense scam detector. Paste a dodgy link, suspicious text message, phishing email, or scam phone number and get an instant verdict — no account required, nothing kept, no data sold.
 
-Built specifically for Australians, with knowledge of local government domains, banks, phone number formats, and the scams that are actually doing the rounds here.
+Built specifically for Australians, with knowledge of local government domains, banks, phone number formats, and the scams that are actually doing the rounds here — and now with national coverage for the UK, US, New Zealand and Ireland too.
 
 ---
 
@@ -24,6 +24,30 @@ Under the hood it runs:
 
 **Forward it in:** on your phone? Forward a dodgy email to the app's inbox and it emails you back a straight-up verdict. It's read on arrival and no copy is kept.
 
+### Region-aware detection
+
+Detection is country-aware. A **region pack** ([`lib/regions/`](lib/regions/)) layers national signals — agencies, banks and brands, number-plan semantics, legitimate-domain allowlists, local campaigns — on top of a universal base set (generic urgency, "Hi Mum" voice-clone lures, URL shorteners, abused TLDs, phishing hosting).
+
+| Region | Coverage |
+| --- | --- |
+| 🇦🇺 Australia, 🇬🇧 United Kingdom, 🇺🇸 United States, 🇳🇿 New Zealand, 🇮🇪 Ireland | `full` |
+| 🇨🇦 Canada | `partial` |
+| Everywhere else | `none` — base signals only |
+
+The region comes from an explicit choice first, then a coarse country code from the edge, then a default; the IP itself is never read. **Coverage is stated honestly:** where a pack is `partial` or `none`, a clean result is downgraded from "safe" to "unknown" and a notice explains that nothing matched *because no local rule exists* — plus the patterns to judge it yourself. If the geo guess is wrong (roaming, VPN), you can correct the region right there and re-run.
+
+A region pack is **data, not logic** — the scoring engine is shared, only the signals change.
+
+### Threat Radar
+
+[`/radar`](app/radar/page.tsx) — campaigns actually circulating in the last few weeks: what the message looks like, what the tell is, and **whether we catch it yet** (`covered` / `partial` / `n/a`). Entries are promoted by hand from the weekly intel sweeps in [`docs/threat-intel/`](docs/), not auto-polled from vendor feeds, and only campaigns a person could plausibly *receive* qualify — infrastructure research stays in `docs/`.
+
+### Scam Calendar
+
+[`/calendar`](app/calendar/page.tsx) — which scams spike and when: tax season from July 1, the Black Friday rush, Christmas parcel lures running into January. Each window is labelled `fixed`, `floating` or `elevated` so a soft seasonal trend never reads as a hard deadline.
+
+Both the radar and the calendar are **strictly educational — neither touches scoring**. Seasonality raises a campaign's base rate, which is useful for a person to know and dangerous for a scorer to assume: a tax scam in March is still a scam, and a legitimate ATO email in July is still legitimate.
+
 ### Report a Scam
 Seen something dodgy? Lodge a report so others can be warned. Submissions are protected against bots with rate limiting, a honeypot field, timing checks, and duplicate detection. Reports that score too low on our own detector (i.e. the content looks legit) are flagged for review rather than published.
 
@@ -31,7 +55,9 @@ Seen something dodgy? Lodge a report so others can be warned. Submissions are pr
 A [`/learn`](app/learn/page.tsx) guide covering how to spot scams, how email authentication (SPF/DKIM/DMARC) works, common tactics, what to do if you've been caught, and where to report.
 
 ### English or Aussie
-A language toggle switches the whole interface between plain **English** and full-noise **Aussie** — same detection, different voice.
+A toggle switches the whole interface between plain **English** and full-noise **Aussie** — same detection, different voice.
+
+Internally this is two independent axes: **locale** (the language — `en` today) and **tone** (the register — `normal` or `regional`). "Aussie" was never a language, it's English in a regional voice, so splitting the axes means a future non-English locale doesn't have to choose between being a language or being a voice. Strings live in [`messages/`](messages/) as `en.normal.json` (the complete base bundle) and `en.regional.json` (overrides only, falling through to base).
 
 ---
 
@@ -67,7 +93,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```bash
 npm test         # run the Vitest suite
-npm run lint     # ESLint (Next 15.5 + strict react-hooks rules)
+npm run lint     # ESLint (Next 16.3 + strict react-hooks rules)
 npm run seed     # seed the database with sample reports
 npm run build    # production build
 ```
@@ -76,10 +102,11 @@ npm run build    # production build
 
 ## Tech stack
 
-- [Next.js 15](https://nextjs.org) (App Router) + [React 19](https://react.dev)
+- [Next.js 16](https://nextjs.org) (App Router) + [React 19](https://react.dev)
 - TypeScript (strict) + [Tailwind CSS v4](https://tailwindcss.com)
 - [Vitest](https://vitest.dev) for tests
 - [libSQL / Turso](https://turso.tech) in prod, local SQLite fallback in dev
+- [libphonenumber-js](https://github.com/catamphetamine/libphonenumber-js) — number parsing and line-type lookup (a static table, not a model)
 - [jsQR](https://github.com/cozmo/jsQR) — client-side QR code decoding
 - [Tesseract.js](https://tesseract.projectnaptha.com) — client-side OCR for screenshot uploads
 - [URLhaus](https://urlhaus.abuse.ch) (abuse.ch) — live malware/phishing URL blocklist
@@ -88,7 +115,9 @@ npm run build    # production build
 
 ## Detection logic
 
-All scam detection is **rule-based** and runs in [`lib/`](lib/) — chiefly [`scamDetector.ts`](lib/scamDetector.ts), with [`phoneIntel.ts`](lib/phoneIntel.ts), [`emailHeaders.ts`](lib/emailHeaders.ts), [`urlSanitizer.ts`](lib/urlSanitizer.ts), and friends. It uses keyword lists, domain allowlists/denylists, regex patterns, and a weighted scoring system. **No machine learning, no LLM, and no user content sent anywhere for scoring.**
+All scam detection is **rule-based** and runs in [`lib/`](lib/) — chiefly [`scamDetector.ts`](lib/scamDetector.ts), with [`phoneIntel.ts`](lib/phoneIntel.ts), [`emailHeaders.ts`](lib/emailHeaders.ts), [`urlSanitizer.ts`](lib/urlSanitizer.ts), and the per-country signal data in [`lib/regions/`](lib/regions/). It uses keyword lists, domain allowlists/denylists, regex patterns, and a weighted scoring system. **No machine learning, no LLM, and no user content sent anywhere for scoring.**
+
+The educational modules — [`threatRadar.ts`](lib/threatRadar.ts) and [`scamCalendar.ts`](lib/scamCalendar.ts) — are deliberately kept out of that path. Neither is imported by the scorer.
 
 The only outbound calls are to fixed, trusted infrastructure — the URLhaus blocklist (abuse.ch) and HEAD requests to a whitelist of known URL-shortener hosts to expand short links. Neither involves sending the content you paste off-device for analysis.
 
