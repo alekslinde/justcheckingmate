@@ -5,6 +5,7 @@
 // true in another market belongs in ./base.ts instead.
 
 import type { RegionDefinition } from "./types";
+import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 
 // Toll-road smishing (D2 / #53) — Linkt/EastLink/E-Toll campaigns.
 const URGENCY_TOLL = [
@@ -168,11 +169,9 @@ const NO_LINK_SENDERS = [
   "services australia", "australia post", "auspost",
 ];
 
-const FOREIGN_AUTHORITY_MENTIONS = [
-  "chinese police", "beijing police", "shanghai police", "chinese consulate",
-  "embassy of china", "chinese customs", "chinese immigration authority",
-  "chinese authorities",
-];
+// Shared Chinese-authority terms (see base.ts) with no additions: AU packs
+// omit interpol/europol, which the other regions carry.
+const FOREIGN_AUTHORITY_MENTIONS = [...CHINESE_AUTHORITY_MENTIONS];
 
 // AU-specific identifiers and schemes solicited by scammers. These are national
 // terms (tax file number, Medicare, BSB, superannuation) with no meaning in
@@ -398,7 +397,7 @@ export const AU: RegionDefinition = {
 
   foreignAuthorityMentions: FOREIGN_AUTHORITY_MENTIONS,
   foreignAuthorityFlag:
-    "Claims to be a foreign police or government authority — Chinese police, customs and consulate officials have no law-enforcement powers in Australia and never demand payments, transfers or secrecy. This is a known scam targeting the Chinese-Australian community (AFP warning, May 2026).",
+    "Claims to be a foreign police or government authority — Chinese police, customs, embassy and consulate officials have no law-enforcement powers in Australia and never demand payments, transfers or secrecy. This is a known scam targeting the Chinese-Australian community (AFP warning, May 2026).",
 
   bankIdentifiers: ["bsb"],
 

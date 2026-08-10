@@ -14,6 +14,7 @@
 // Phase 4). User-facing copy still says "United Kingdom".
 
 import type { RegionDefinition } from "./types";
+import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 
 // Road-charging smishing. The UK equivalent of the AU toll campaigns: Dart
 // Charge (Dartford Crossing), the Mersey Gateway and London's congestion
@@ -159,11 +160,10 @@ const NO_LINK_SENDERS = [
   "dvla", "royal mail", "royalmail", "tv licensing", "tv licence",
 ];
 
+// Interpol/Europol plus the shared Chinese-authority terms (see base.ts).
 const FOREIGN_AUTHORITY_MENTIONS = [
   "interpol", "europol",
-  "chinese police", "beijing police", "shanghai police", "chinese consulate",
-  "embassy of china", "chinese customs", "chinese immigration authority",
-  "chinese authorities",
+  ...CHINESE_AUTHORITY_MENTIONS,
 ];
 
 // UK-specific identifiers and schemes solicited by scammers. National terms

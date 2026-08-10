@@ -10,6 +10,7 @@
 // the scam layer only.
 
 import type { RegionDefinition } from "./types";
+import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 
 // Toll smishing. New Zealand has only three tolled roads (Northern Gateway,
 // Tauranga Eastern Link, Takitimu Drive), all run by NZTA Waka Kotahi — a much
@@ -152,11 +153,10 @@ const NO_LINK_SENDERS = [
   "acc", "nz post", "nzpost", "new zealand post",
 ];
 
+// Interpol/Europol plus the shared Chinese-authority terms (see base.ts).
 const FOREIGN_AUTHORITY_MENTIONS = [
   "interpol", "europol",
-  "chinese police", "beijing police", "shanghai police", "chinese consulate",
-  "embassy of china", "chinese customs", "chinese immigration authority",
-  "chinese authorities",
+  ...CHINESE_AUTHORITY_MENTIONS,
 ];
 
 // NZ-specific identifiers and schemes solicited by scammers. National terms

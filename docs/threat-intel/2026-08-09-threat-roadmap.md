@@ -316,8 +316,58 @@ Items not proposed this week but worth monitoring:
   emerges.
 - **GB AI-voice + LinkedIn bank fraud:** No text-side detection surface today;
   revisit if a text-follow-up script becomes available.
-- **PDF+QR hybrid (carry-forward from 2026-07-26, tracked as #113):** Still
-  outstanding. Not resurveyed this week — deferred to the implementing PR.
+- **PDF+QR hybrid (carry-forward from 2026-07-26, tracked as #113):** ~~Still
+  outstanding. Not resurveyed this week — deferred to the implementing PR.~~
+  **Corrected 2026-08-10 — this had already shipped when the sweep was written.**
+  `checkSms()` carries a dedicated inverted-phrasing pattern for it
+  (`scamDetector.ts`, "PDF-embedded Scanception quishing (D7 / #113)"), matching
+  "the attached PDF contains a QR code" where the generic scan-prompt patterns
+  find no verb phrase to latch onto. Verified firing on four phrasings, and
+  correctly silent on "the QR code on the attached flyer". The entry was carried
+  forward unchecked; a watchlist that says "outstanding" about shipped work is
+  worse than no watchlist, because it is what the next reader trusts. Nothing
+  outstanding here.
+
+- **Foreign-authority phrasing coverage — found 2026-08-10, FIXED 2026-08-10:**
+  `FOREIGN_AUTHORITY_MENTIONS` matched "chinese police", "chinese customs",
+  "embassy of china" and similar, but **not** the natural word-order variant
+  "Chinese Embassy", which scored 0 while "embassy of china" scored 31. Matching
+  is `\b`-delimited substring, so word order is literal.
+
+  The audit widened it: the same block was **copy-pasted into all six national
+  packs** (au/ca/gb/ie/nz/us), so the gap existed six times over. The scam is
+  diaspora-targeted rather than country-targeted, so there was never a regional
+  reason for the duplication.
+
+  Fixed by extracting `CHINESE_AUTHORITY_MENTIONS` to base.ts, spread by every
+  pack (non-AU packs prepend interpol/europol). Added both word orders for
+  embassy and consulate, plus `"public security bureau"` — the actual name of
+  the body being impersonated (公安局), and the one a victim hears on the phone.
+
+  Three candidates were **rejected** on FP grounds, since the flag is +35 alone:
+  `"chinese immigration"` (an IOC in the 2026-07-26 roadmap, but "Chinese
+  immigration rules changed in 2026" is ordinary migration-agent copy),
+  `"chinese government"` (routine in news), and `"china police"` (not idiomatic;
+  mostly headlines). Each needs a source showing the phrasing in a real lure.
+
+  **Known FP, accepted:** "Your visa appointment at the Chinese Embassy is
+  confirmed for 3pm Tuesday" now scores 35 (`suspicious`) on the mention alone.
+  Judged acceptable — an embassy does not send appointment confirmations by
+  unsolicited SMS, the verdict is "suspicious" rather than "likely scam", and
+  the advice given is to verify through official channels, which is correct
+  either way. Revisit if reports come in.
+
+- **"Hi Mum" opening message (AU/BASE) — NEW, found 2026-08-10:**
+  `URGENCY_VOICE_CLONE` in base.ts covers the escalation ("bail money",
+  "stranded overseas", "don't tell mum") but nothing matches the *first*
+  message, which is the one people actually receive: "Hi Mum, this is my new
+  number, my phone broke" scores **0**. The code comment already labels that
+  half "D17 — watchlist", so this is a known deferral rather than a regression —
+  but it was being described as shipped. Genuinely hard: the text is
+  indistinguishable from a real message from a relative, so the FP risk on
+  "new number" alone is high and a rule here would need to compound with a
+  payment ask. Flagged for a sweep to size properly; recording it so the
+  deferral stays visible rather than reading as coverage.
 - **Kali365 PhaaS (US/AU):** Platform-level intelligence only; no lure
   differentiator. Continue monitoring vendor telemetry for any distinct text
   patterns.

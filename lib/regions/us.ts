@@ -11,6 +11,7 @@
 // would hold true in another market belongs in ./base.ts instead.
 
 import type { RegionDefinition } from "./types";
+import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 
 // Toll smishing. The dominant US SMS scam of 2024-2026 by volume — the FBI's
 // IC3 issued a dedicated advisory. E-ZPass covers most of the eastern
@@ -157,11 +158,10 @@ const NO_LINK_SENDERS = [
   "medicare", "usps", "united states postal service",
 ];
 
+// Interpol/Europol plus the shared Chinese-authority terms (see base.ts).
 const FOREIGN_AUTHORITY_MENTIONS = [
   "interpol", "europol",
-  "chinese police", "beijing police", "shanghai police", "chinese consulate",
-  "embassy of china", "chinese customs", "chinese immigration authority",
-  "chinese authorities",
+  ...CHINESE_AUTHORITY_MENTIONS,
 ];
 
 // US-specific identifiers and schemes solicited by scammers. National terms
