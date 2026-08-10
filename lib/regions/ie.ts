@@ -14,6 +14,7 @@
 // this is the scam layer only.
 
 import type { RegionDefinition } from "./types";
+import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 
 // Toll smishing. eFlow runs the M50 barrier-free toll, which bills after the
 // fact and genuinely does issue penalty notices for unpaid passages — the same
@@ -157,11 +158,10 @@ const NO_LINK_SENDERS = [
   "an post", "anpost",
 ];
 
+// Interpol/Europol plus the shared Chinese-authority terms (see base.ts).
 const FOREIGN_AUTHORITY_MENTIONS = [
   "interpol", "europol",
-  "chinese police", "beijing police", "shanghai police", "chinese consulate",
-  "embassy of china", "chinese customs", "chinese immigration authority",
-  "chinese authorities",
+  ...CHINESE_AUTHORITY_MENTIONS,
 ];
 
 // Ireland-specific identifiers and schemes solicited by scammers. National terms

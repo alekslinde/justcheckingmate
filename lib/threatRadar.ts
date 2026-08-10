@@ -503,7 +503,7 @@ const AU_THREATS: ThreatEntry[] = [
     advice:
       "No foreign police force can arrest you in Australia or demand money here. The secrecy instruction is the tell — it exists to stop you asking someone. Hang up and tell someone anyway.",
     detection:
-      "Named foreign authorities — Chinese police, customs, the consulate — are flagged in text. But the pressure here happens on a live call we never see, and we only match the wordings we've listed.",
+      "Named foreign authorities — Chinese police, customs, the embassy, the consulate, the Public Security Bureau — are flagged in text, in either word order. But the pressure here happens on a live call we never see, which is why this stays a partial catch.",
     roadmap: "2026-07-26",
   },
   {

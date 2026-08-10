@@ -214,6 +214,46 @@ const CALLBACK_BRANDS = [
 // The generic phrasing is still caught as a brand mention via brandMentions.
 const CRYPTO_EXCHANGES = ["binance", "coinbase", "kraken"];
 
+/**
+ * Chinese-authority impersonation terms, shared by every region pack.
+ *
+ * Exported rather than declared per-pack because the identical block was
+ * copy-pasted into all six national packs. The scam is diaspora-targeted, not
+ * country-targeted — the same script runs against Chinese communities in
+ * Australia, the UK, Canada, the US, NZ and Ireland — so there was never a
+ * regional reason for six copies, and six copies meant a fix had to be applied
+ * six times or silently diverge. Packs spread this and append their own
+ * (`interpol`/`europol` outside AU).
+ *
+ * WORD ORDER IS LITERAL. Matching is `\b`-delimited substring, so "embassy of
+ * china" does not match "Chinese Embassy" — the natural English form, and the
+ * one a scam message actually uses. Both orders are therefore listed for each
+ * institution. Audited 2026-08-10; before that "Chinese Embassy" scored 0 while
+ * "embassy of china" scored 31.
+ *
+ * Deliberately excluded, and why — each of these is a *topic* rather than an
+ * institution, appearing in legitimate news, migration-law and university copy,
+ * and the flag is worth +35 on its own:
+ *   · "chinese immigration"  — listed as an IOC in the 2026-07-26 roadmap, but
+ *                              "Chinese immigration rules changed in 2026" is
+ *                              ordinary migration-agent copy.
+ *   · "chinese government"   — routine in news reporting.
+ *   · "china police"         — the adjectiveless form is not idiomatic English
+ *                              and mostly appears in headlines about China.
+ * Adding any of these needs a source showing the phrasing in a real lure.
+ */
+export const CHINESE_AUTHORITY_MENTIONS = [
+  // Police. "Public security bureau" (公安局) is the actual name of the body
+  // being impersonated, and the one a victim would be told over the phone.
+  "chinese police", "beijing police", "shanghai police",
+  "public security bureau",
+  // Consulate / embassy, both word orders.
+  "chinese consulate", "consulate of china",
+  "chinese embassy", "embassy of china",
+  // Customs, immigration and the catch-all.
+  "chinese customs", "chinese immigration authority", "chinese authorities",
+];
+
 export const BASE_SIGNALS: BaseSignals = {
   urgency: {
     generic: URGENCY_GENERIC,

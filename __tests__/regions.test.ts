@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { checkSms, checkUrl } from "@/lib/scamDetector";
 import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@/lib/regions";
-import { BASE_SIGNALS } from "@/lib/regions/base";
+import { BASE_SIGNALS, CHINESE_AUTHORITY_MENTIONS } from "@/lib/regions/base";
 import { AU } from "@/lib/regions/au";
 
 describe("resolveRegionPack", () => {
@@ -223,6 +223,81 @@ describe("AU region definition", () => {
     };
     for (const [name, list] of Object.entries(lists)) {
       expect({ [name]: new Set(list).size }).toEqual({ [name]: list.length });
+    }
+  });
+});
+
+describe("foreign-authority mentions", () => {
+  // The Chinese-authority block used to be copy-pasted into all six national
+  // packs. It is diaspora-targeted rather than country-targeted, so there was
+  // never a regional reason for six copies — and six copies meant the
+  // "Chinese Embassy" gap (found 2026-08-10) existed six times over.
+  const NATIONAL = supportedRegions().filter((c) => c !== FALLBACK_REGION);
+
+  it("is shared by every national pack rather than duplicated", () => {
+    for (const code of NATIONAL) {
+      const pack = resolveRegionPack(code);
+      for (const term of CHINESE_AUTHORITY_MENTIONS) {
+        expect(pack.foreignAuthorityMentions, code).toContain(term);
+      }
+    }
+  });
+
+  it("carries interpol/europol everywhere except AU", () => {
+    // AU's pack deliberately omits them; the AFP warning this list came from is
+    // specifically about Chinese-authority impersonation.
+    for (const code of NATIONAL) {
+      const has = resolveRegionPack(code).foreignAuthorityMentions.includes("interpol");
+      expect(has, code).toBe(code !== "AU");
+    }
+  });
+
+  it("lists both word orders for embassy and consulate", () => {
+    // Matching is \b-delimited substring, so word order is literal: before this
+    // was fixed, "embassy of china" was listed and scored 31 while the natural
+    // "Chinese Embassy" scored 0.
+    for (const pair of [
+      ["chinese embassy", "embassy of china"],
+      ["chinese consulate", "consulate of china"],
+    ]) {
+      for (const term of pair) {
+        expect(CHINESE_AUTHORITY_MENTIONS).toContain(term);
+      }
+    }
+  });
+
+  it("flags the phrasings a real lure uses", () => {
+    for (const claim of [
+      "This is the Chinese Embassy. You are named in a money laundering investigation.",
+      "The Chinese Embassy in Canberra requires you to verify your identity.",
+      "Consulate of China: your residency status is under review.",
+      "This is the Public Security Bureau. An arrest warrant has been issued.",
+      "Chinese police have opened a case against you.",
+    ]) {
+      const flags = checkSms(claim).flags.join(" | ");
+      expect(/foreign police or government authority/i.test(flags), claim.slice(0, 44)).toBe(true);
+    }
+  });
+
+  it("leaves topic words out, so ordinary copy stays clean", () => {
+    // Each of these was considered and rejected: they name a subject rather than
+    // an institution making contact, and the flag is worth +35 on its own.
+    for (const term of ["chinese immigration", "chinese government", "china police"]) {
+      expect(CHINESE_AUTHORITY_MENTIONS).not.toContain(term);
+    }
+    for (const legit of [
+      "Chinese immigration rules changed in 2026, see our firm's summary.",
+      "The Chinese government published new tariff schedules today.",
+    ]) {
+      const flags = checkSms(legit).flags.join(" | ");
+      expect(/foreign police or government authority/i.test(flags), legit.slice(0, 44)).toBe(false);
+    }
+  });
+
+  it("has no duplicates after the spread", () => {
+    for (const code of NATIONAL) {
+      const list = resolveRegionPack(code).foreignAuthorityMentions;
+      expect({ [code]: new Set(list).size }).toEqual({ [code]: list.length });
     }
   });
 });

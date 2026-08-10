@@ -360,9 +360,11 @@ describe("coverage claims match the shipped detector", () => {
     // "Hi Mum" opener: base.ts covers the money stage, not the first contact.
     expect(checkSms("Hi Mum, this is my new number, my phone broke").score).toBe(0);
 
-    // Foreign authority: the mentions list has "embassy of china" but not the
-    // natural inversion. Recorded in the 2026-08-09 roadmap watchlist.
-    expect(checkSms("This is the Chinese Embassy calling about a legal matter.").score).toBe(0);
+    // The "Chinese Embassy" word-order gap that used to sit here was fixed on
+    // 2026-08-10 — this test failed the moment the rule shipped, which is what
+    // pinning a gap is for. Kept as a regression guard on the fix instead.
+    const flags = checkSms("This is the Chinese Embassy. Pay a bond to clear your name.").flags;
+    expect(flags.some((f) => /foreign police or government authority/i.test(f))).toBe(true);
   });
 
   it("keeps n/a entries genuinely undetectable in text", async () => {

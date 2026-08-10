@@ -18,6 +18,7 @@
 // per the plan, a native-speaker review before shipping.
 
 import type { RegionDefinition } from "./types";
+import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 
 // Toll smishing. Canada's tolled infrastructure is concentrated — Highway 407
 // ETR in Ontario is by far the dominant cover, with the Confederation Bridge and
@@ -155,11 +156,10 @@ const NO_LINK_SENDERS = [
   "canada post", "canadapost", "postes canada",
 ];
 
+// Interpol/Europol plus the shared Chinese-authority terms (see base.ts).
 const FOREIGN_AUTHORITY_MENTIONS = [
   "interpol", "europol",
-  "chinese police", "beijing police", "shanghai police", "chinese consulate",
-  "embassy of china", "chinese customs", "chinese immigration authority",
-  "chinese authorities",
+  ...CHINESE_AUTHORITY_MENTIONS,
 ];
 
 // Canada-specific identifiers and schemes solicited by scammers. National terms
