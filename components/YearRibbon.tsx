@@ -38,10 +38,20 @@ export default function YearRibbon({
 
   const now = yearFraction(today);
 
+  // Height follows the lane count rather than being fixed: a region whose
+  // seasons never overlap gets one slim row, and a crowded one grows instead of
+  // stacking bands on top of each other.
+  const lanes = Math.max(...bands.map((b) => b.lane)) + 1;
+  const LANE_HEIGHT = 10;
+  const LANE_GAP = 3;
+  const PADDING = 5;
+  const height = lanes * LANE_HEIGHT + (lanes - 1) * LANE_GAP + PADDING * 2;
+
   return (
     <figure className="space-y-1.5 m-0">
       <div
-        className="relative h-8 rounded-lg bg-gray-800/40 border border-gray-700/50 overflow-hidden"
+        className="relative rounded-lg bg-gray-800/40 border border-gray-700/50 overflow-hidden"
+        style={{ height }}
         aria-hidden="true"
       >
         {/* Month gridlines, so a band's position reads as a month rather than
@@ -60,14 +70,14 @@ export default function YearRibbon({
             <span
               key={`${band.season.id}-${i}`}
               className={[
-                "absolute h-2.5 rounded-full",
-                active
-                  ? "bg-amber-400/80 top-1.5"
-                  : "bg-gray-600/70 bottom-1.5",
+                "absolute rounded-full",
+                active ? "bg-amber-400/80" : "bg-gray-600/70",
               ].join(" ")}
               style={{
                 left: `${band.start * 100}%`,
                 width: `${Math.max(band.length * 100, 1)}%`,
+                top: PADDING + band.lane * (LANE_HEIGHT + LANE_GAP),
+                height: LANE_HEIGHT,
               }}
             />
           );

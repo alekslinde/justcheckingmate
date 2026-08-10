@@ -458,6 +458,16 @@ export interface SeasonBand {
   start: number;
   /** Fraction of the year the window covers. Never crosses the year end. */
   length: number;
+  /**
+   * Row this band occupies so it doesn't overlap another, 0 upwards.
+   *
+   * Overlapping seasons drawn at one offset hide each other — June holds both
+   * EOFY and the start of winter energy, and late November holds Black Friday
+   * and the Christmas parcel run. Since a crowded month is precisely what the
+   * ribbon exists to show, occlusion there would hide the signal rather than a
+   * detail. Lanes are what let both be seen at once.
+   */
+  lane: number;
 }
 
 /** Where today sits in the year, as a fraction in [0, 1). */
@@ -474,26 +484,59 @@ export function yearFraction(date: DateLike): number {
  * rather than one band drawn backwards or silently clipped. Both carry the same
  * season, so a caller keying on season.id must expect duplicates; the ribbon
  * draws them as two segments of one campaign, which is what they are.
+ *
+ * Bands are then packed into lanes so none overlaps another horizontally. The
+ * two legs of a wrapping season are packed independently: they sit at opposite
+ * ends of the axis and forcing them onto one lane would push an unrelated
+ * season down for no visual gain.
+ *
+ * `start` is 0-based and `end` 1-based on purpose — the difference is then an
+ * inclusive day count, so a one-day window has a non-zero length instead of
+ * collapsing to nothing. Both fields come from dayOfYear, which clamps, so the
+ * arithmetic stays in range for any window an author can write.
  */
 export function seasonBands(code: RegionCode): SeasonBand[] {
-  const bands: SeasonBand[] = [];
+  return packSeasonBands(calendarForRegion(code));
+}
 
-  for (const season of calendarForRegion(code)) {
+/**
+ * seasonBands over an explicit season list rather than a region.
+ *
+ * Exported so the packing can be tested against windows no region authors —
+ * total overlap, single days, wraps meeting non-wraps — without inventing a
+ * fake region pack to hold them.
+ */
+export function packSeasonBands(seasons: readonly ScamSeason[]): SeasonBand[] {
+  const spans: Omit<SeasonBand, "lane">[] = [];
+
+  for (const season of seasons) {
     const { startMonth, startDay, endMonth, endDay } = season.window;
     const start = dayOfYear(startMonth, startDay) - 1;
     const end = dayOfYear(endMonth, endDay);
 
     if (start < end) {
-      bands.push({ season, start: start / 365, length: (end - start) / 365 });
+      spans.push({ season, start: start / 365, length: (end - start) / 365 });
       continue;
     }
 
     // Wraps: the tail of the year, then the head of the next.
-    bands.push({ season, start: start / 365, length: (365 - start) / 365 });
-    bands.push({ season, start: 0, length: end / 365 });
+    spans.push({ season, start: start / 365, length: (365 - start) / 365 });
+    spans.push({ season, start: 0, length: end / 365 });
   }
 
-  return bands;
+  // Greedy interval packing: earliest-starting span first, into the lowest lane
+  // whose last band already ends. Optimal for interval graphs, and with a
+  // handful of seasons the cost is irrelevant next to the clarity.
+  const laneEnds: number[] = [];
+
+  return spans
+    .sort((a, b) => a.start - b.start)
+    .map((span) => {
+      let lane = laneEnds.findIndex((end) => end <= span.start);
+      if (lane === -1) lane = laneEnds.length;
+      laneEnds[lane] = span.start + span.length;
+      return { ...span, lane };
+    });
 }
 
 const MONTH_NAMES = [

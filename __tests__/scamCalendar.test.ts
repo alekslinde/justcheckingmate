@@ -9,6 +9,7 @@ import {
   daysUntilStart,
   daysUntilEnd,
   seasonBands,
+  packSeasonBands,
   yearFraction,
   formatWindow,
   regionToday,
@@ -21,8 +22,8 @@ import { supportedRegions } from "@/lib/regions";
 // with new Date(y, m, d) keeps the test independent of the runner's timezone.
 const on = (month: number, day: number) => new Date(2026, month - 1, day);
 
-const season = (window: ScamSeason["window"]): ScamSeason => ({
-  id: "test",
+const season = (window: ScamSeason["window"], id = "test"): ScamSeason => ({
+  id,
   title: "Test",
   window,
   confidence: "fixed",
@@ -236,6 +237,82 @@ describe("seasonBands", () => {
       expect(band.length).toBeGreaterThan(0);
       expect(band.start + band.length).toBeLessThanOrEqual(1);
     }
+  });
+
+  // The mixed 0-based start / 1-based end in seasonBands is deliberate: the
+  // difference is an inclusive day count. Swept over every window an author
+  // could write, so a "tidy-up" that aligns the bases fails here.
+  it("stays inside the year for every representable window", () => {
+    const daysIn = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+    for (let sm = 1; sm <= 12; sm++) {
+      for (let em = 1; em <= 12; em++) {
+        for (const [sd, ed] of [[1, 1], [daysIn[sm], daysIn[em]], [1, daysIn[em]], [daysIn[sm], 1]]) {
+          const w = { startMonth: sm, startDay: sd, endMonth: em, endDay: ed };
+          const bands = packSeasonBands([season(w)]);
+
+          for (const band of bands) {
+            expect(band.start).toBeGreaterThanOrEqual(0);
+            expect(band.length).toBeGreaterThan(0);
+            expect(band.start + band.length).toBeLessThanOrEqual(1 + 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it("gives overlapping seasons different lanes", () => {
+    // 1–30 June sits entirely inside 1 June – 31 August.
+    const bands = packSeasonBands([
+      season({ startMonth: 6, startDay: 1, endMonth: 8, endDay: 31 }, "wide"),
+      season({ startMonth: 6, startDay: 1, endMonth: 6, endDay: 30 }, "narrow"),
+    ]);
+
+    expect(new Set(bands.map((b) => b.lane)).size).toBe(2);
+  });
+
+  it("reuses a lane for seasons that don't overlap", () => {
+    const bands = packSeasonBands([
+      season({ startMonth: 1, startDay: 1, endMonth: 2, endDay: 1 }, "early"),
+      season({ startMonth: 6, startDay: 1, endMonth: 7, endDay: 1 }, "late"),
+    ]);
+
+    expect(bands.every((b) => b.lane === 0)).toBe(true);
+  });
+
+  it("never overlaps two bands within a lane", () => {
+    const byLane = new Map<number, { start: number; length: number }[]>();
+    for (const band of seasonBands("AU")) {
+      const list = byLane.get(band.lane) ?? [];
+      list.push(band);
+      byLane.set(band.lane, list);
+    }
+
+    for (const list of byLane.values()) {
+      const sorted = [...list].sort((a, b) => a.start - b.start);
+      for (let i = 1; i < sorted.length; i++) {
+        expect(sorted[i].start).toBeGreaterThanOrEqual(
+          sorted[i - 1].start + sorted[i - 1].length,
+        );
+      }
+    }
+  });
+
+  it("uses no more lanes than the busiest overlap requires", () => {
+    // Nothing in the AU set stacks more than three deep on any single day.
+    const bands = seasonBands("AU");
+    const used = new Set(bands.map((b) => b.lane)).size;
+
+    let busiest = 0;
+    for (let d = 0; d < 365; d++) {
+      const point = d / 365;
+      const covering = bands.filter(
+        (b) => point >= b.start && point < b.start + b.length,
+      ).length;
+      busiest = Math.max(busiest, covering);
+    }
+
+    expect(used).toBe(busiest);
   });
 
   it("splits a wrapping season into a tail and a head segment", () => {

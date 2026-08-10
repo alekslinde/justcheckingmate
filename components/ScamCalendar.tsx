@@ -59,13 +59,21 @@ function startsInLabel(days: number, t: (k: MessageKey, v?: Record<string, strin
  * The "N left" label for an active season, on the same thresholds as
  * startsInLabel so a gap of 40 days describes itself as "about 6 weeks" in both
  * directions rather than switching units by which end of the window it names.
+ *
+ * The small counts do *not* mirror startsInLabel, because the two functions
+ * count different things. daysUntilStart is exclusive — 1 means the season
+ * begins tomorrow — while daysUntilEnd is inclusive of the end day, so 1 means
+ * it runs today *and* tomorrow: two days left, not one. Copying the "tomorrow"
+ * branch across is what made a season with two days left announce "1 day left".
  */
 function endsInLabel(days: number, t: (k: MessageKey, v?: Record<string, string | number>) => string): string {
   if (days === 0) return t("calendar.ends.today");
-  if (days === 1) return t("calendar.ends.tomorrow");
-  if (days < 14) return t("calendar.ends.days", { count: days });
-  if (days < 60) return t("calendar.ends.weeks", { count: Math.round(days / 7) });
-  const months = Math.round(days / 30);
+  // Inclusive throughout: `remaining` is how many days the season still covers,
+  // today included, which is what "N left" means to a reader.
+  const remaining = days + 1;
+  if (remaining < 14) return t("calendar.ends.days", { count: remaining });
+  if (remaining < 60) return t("calendar.ends.weeks", { count: Math.round(remaining / 7) });
+  const months = Math.round(remaining / 30);
   return t(months === 1 ? "calendar.ends.month" : "calendar.ends.months", { count: months });
 }
 
@@ -150,14 +158,14 @@ function SeasonCard({ season, today }: { season: ScamSeason; today: CivilDate })
  * triangle so the chevron can sit where the layout wants it.
  */
 function SeasonRow({ season, timing }: { season: ScamSeason; timing: string }) {
-  const { t } = useLang();
-
   return (
     <details className="group rounded-xl border bg-gray-800/40 border-gray-700/50 open:bg-gray-800/60">
-      <summary
-        className="flex items-center gap-3 p-3 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-xl hover:bg-gray-700/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
-        aria-label={`${season.title} — ${t("calendar.expand")}`}
-      >
+      {/* No aria-label here. One would replace the whole accessible name, so a
+          screen reader would hear "Tax season — show what to look for" and lose
+          the window, the confidence and the timing that a sighted user can scan
+          without expanding anything. The visible text is already the better
+          name; <summary> announces the expand/collapse affordance itself. */}
+      <summary className="flex items-center gap-3 p-3 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-xl hover:bg-gray-700/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">
         <span
           className="shrink-0 text-gray-500 text-xs transition-transform group-open:rotate-90"
           aria-hidden="true"
@@ -166,6 +174,8 @@ function SeasonRow({ season, timing }: { season: ScamSeason; timing: string }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-semibold text-gray-200 text-sm truncate">{season.title}</span>
+          {/* truncate clips visually on a narrow row; the full string stays in
+              the accessible name because it's still real text in the DOM. */}
           <span className="block text-xs text-gray-500 truncate">
             <SeasonMeta season={season} />
           </span>
