@@ -912,6 +912,31 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
         .toEqual({ host, hit: false });
     }
+    // The funds' real sites must stay clean.
+    for (const host of ["https://www.medibank.com.au", "https://bupa.com.au"]) {
+      expect({ host, verdict: checkUrl(host, undefined, "AU").verdict })
+        .toEqual({ host, verdict: "safe" });
+    }
+  });
+
+  it("documents the .com.au exemption's blanket effect on health-fund squats (D4)", () => {
+    // trustedHostSuffixes exempts .com.au wholesale, so a squat that manages to
+    // register one raises no impersonation flag. Pinned deliberately: this is a
+    // pack-wide property of the ABN-gated suffix rather than anything specific
+    // to the D4 brands — the long-standing commbank and mygov entries behave
+    // identically — and changing it means revisiting trustedHostSuffixes for
+    // every AU brand at once.
+    for (const host of [
+      "http://medibank-renew-login.com.au",
+      "http://commbank-secure-verify.com.au",
+      "http://mygov-verify-login.com.au",
+    ]) {
+      const result = checkUrl(host, undefined, "AU");
+      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, impersonation: false });
+      // Not silent, though — the generic phishing-URL signals still fire.
+      expect({ host, verdict: result.verdict }).toEqual({ host, verdict: "suspicious" });
+    }
   });
 
   // ── AU super "rule change" lure (D5 / 2026-08-09 roadmap / ATO Aug 2026) ────
@@ -966,6 +991,18 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       'Thanks for subscribing!\n\n<img src="https://cdn.example.com/logo.svg" alt="logo">',
       "Our brand kit includes logo.svg and icon.svg in the shared drive.",
       'Footer: <img src="https://track.example.com/pixel.svg" width="1">',
+      // Regression: a bare verb near any .svg used to be enough, so the standard
+      // marketing header flagged as a phishing attachment. On ONE line — the
+      // original guard passed only because [^\n] happened to block the newline,
+      // which is not a property worth relying on.
+      'View in browser <img src="https://e.co/l.svg">',
+      'View this email in your browser <img src="https://cdn.co/logo.svg">',
+      'See our new range <img src="https://e.co/banner.svg">',
+      'Download the report <img src="https://e.co/icon.svg">',
+      // Regression: bare "file"/"document" as the trailing half made ordinary
+      // office chatter a hit.
+      "Our logo.svg file lives in the shared drive.",
+      "The icon.svg document is in the brand kit.",
     ];
     for (const text of benign) {
       const flags = checkEmail(text).flags.join(" | ");
@@ -979,6 +1016,27 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     const result = checkEmail("Please see the attached invoice.svg for your records.");
     expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
     expect(result.verdict).not.toBe("likely_scam");
+  });
+
+  it("does not double-score one attachment via both rules (D6)", () => {
+    // "open the attached invoice.svg" satisfies the generic open-attachment rule
+    // (+25) and the SVG rule (+20) — but it is a single attachment, and charging
+    // both put it on exactly 45, the likely_scam boundary, by arithmetic alone.
+    // The specific SVG wording still replaces the generic flag.
+    const result = checkEmail("Please open the attached invoice.svg");
+    expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
+    expect(result.score).toBe(25);
+    expect(result.verdict).not.toBe("likely_scam");
+  });
+
+  it("still escalates an SVG attachment when a real second signal is present (D6)", () => {
+    // The point of keeping it low is that genuinely independent evidence is what
+    // escalates — here a spoofed sender domain, not a re-count of the same file.
+    const result = checkEmail(
+      "From: billing@ato-invoices.cyou\n\nATO: your statement is overdue. Open the attached invoice.svg immediately or penalties apply.",
+    );
+    expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
   });
 
   it("detects device-code / OAuth phishing language in email (D4 / #75)", () => {

@@ -748,7 +748,8 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   }
 
   // Asks to open attachment
-  if (/open.{0,20}(attachment|file|document|invoice)/i.test(text)) {
+  const opensAttachment = /open.{0,20}(attachment|file|document|invoice)/i.test(text);
+  if (opensAttachment) {
     flags.push("Prompts you to open an attachment — common malware delivery method");
     score += 25;
   }
@@ -763,20 +764,50 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   // marketing email, which is precisely the mail this app is handed. Matching a
   // bare ".svg" would flag a newsletter footer.
   //
-  // So the extension only counts when it is the thing being sent — .svg adjacent
-  // to attachment language, in either order ("the attached invoice.svg", or
-  // "statement.svg is attached"). A footer logo reference sits in an <img> URL
-  // with no attachment noun near it and stays unflagged.
+  // So the extension only counts when it is the thing being *sent*. Two
+  // deliberately narrow halves, both learned from review:
   //
-  // Scored well below the likely_scam threshold on purpose: an SVG attachment is
-  // a delivery-mechanism signal, not proof of intent. It escalates by compounding
-  // with the sender-spoof and urgency signals above, per the roadmap's note.
+  //   - The cue must be attachment language proper ("attached", "attachment",
+  //     "enclosed"), not a bare verb. An earlier version accepted
+  //     see/open/download/view, which made "View in browser <img …/logo.svg>" —
+  //     the standard marketing header — a phishing hit. Those verbs only count
+  //     when they govern an attachment noun ("open the attached …").
+  //   - The trailing half must not accept bare "file"/"document" as evidence
+  //     either: "our logo.svg file lives in the shared drive" is ordinary
+  //     office chatter. It needs an explicit attachment word, or a
+  //     document-type noun that is itself the payload framing (invoice,
+  //     statement, receipt, remittance).
+  //
+  // A footer logo reference has no such wording anywhere near it, on one line or
+  // several, so it stays unflagged.
+  //
+  // The URL guard matters independently: an .svg inside an href/src is an asset
+  // reference, not an attachment, so anything preceded by a scheme or a
+  // src=/href= attribute is excluded outright.
+  //
+  // Scored below the likely_scam threshold on purpose: an SVG attachment is a
+  // delivery-mechanism signal, not proof of intent — see the +25 interaction
+  // note at the scoring line below.
+  const ATTACH_WORD = String.raw`attach(?:ment|ments|ed|ing)?|enclosed`;
+  const PAYLOAD_NOUN = String.raw`invoice|statement|receipt|remittance`;
+  // .svg not sitting in a URL or an HTML attribute value.
+  const svgFile = String.raw`(?<!https?:\/\/[^\s"']{0,200})(?<!(?:src|href)\s*=\s*["'][^"']{0,200})\b[\w.-]+\.svg\b`;
   const svgAttachment =
-    /\b(?:attach(?:ment|ed|ing)?|enclosed|see|open|download|view)\b[^\n]{0,40}\b[\w.-]+\.svg\b/i.test(text) ||
-    /\b[\w.-]+\.svg\b[^\n]{0,40}\b(?:attach(?:ment|ed|ing)?|enclosed|document|file|invoice|statement|receipt)\b/i.test(text);
+    new RegExp(String.raw`\b(?:${ATTACH_WORD})\b[^\n]{0,40}?${svgFile}`, "i").test(text) ||
+    new RegExp(String.raw`${svgFile}[^\n]{0,40}?\b(?:${ATTACH_WORD})\b`, "i").test(text) ||
+    new RegExp(String.raw`\b(?:${PAYLOAD_NOUN})\b[^\n]{0,20}?${svgFile}`, "i").test(text) ||
+    new RegExp(String.raw`${svgFile}[^\n]{0,20}?\b(?:${PAYLOAD_NOUN})\b`, "i").test(text);
   if (svgAttachment) {
     flags.push("SVG file attached — SVG attachments are a known phishing delivery trick: the file looks like an image but can carry hidden code that opens a fake login page in your browser. Legitimate invoices and statements are not sent as .svg.");
-    score += 20;
+    // Only additive when the generic open-attachment rule above hasn't already
+    // scored. "Please open the attached invoice.svg" is one attachment, and
+    // both rules describe it — charging 25 + 20 double-counts a single fact and
+    // landed it on exactly 45, the likely_scam boundary, purely by arithmetic.
+    // Where both fire, the SVG flag still replaces the generic wording with the
+    // specific warning; it just doesn't stack a second charge for the same
+    // observation. Alone it stays at +20 (suspicious), escalating only by
+    // compounding with genuinely independent signals like sender spoofing.
+    if (!opensAttachment) score += 20;
   }
 
   // Device code / OAuth token phishing (D4 / #75 / FBI PSA260521). Attackers

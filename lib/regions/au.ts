@@ -240,8 +240,20 @@ const TYPOSQUAT_BRANDS = [
   // Crypto exchanges (D6 / #123). "binance" is long enough to be distinctive.
   "coinspot", "swyftx", "binance",
   // Private health insurers (D4 / 2026-08-09 roadmap). Credential-harvest pages
-  // for the big four AU funds. Their real sites are .com.au, which the trusted-
-  // suffix guard already exempts, so this only fires on the lookalike domains.
+  // for the big four AU funds.
+  //
+  // Their real sites are .com.au, which trustedHostSuffixes exempts — so this
+  // fires on lookalikes off that suffix (medibank-renew.cyou) and stays quiet on
+  // medibank.com.au itself. Note the exemption is blanket: a squat that does get
+  // a .com.au ("medibank-renew-login.com.au") raises no impersonation flag
+  // either, and is left to the login/verify-keyword and no-HTTPS signals.
+  //
+  // That is a pack-wide property of the ABN-gated suffix, not something specific
+  // to these brands — commbank and mygov have always behaved the same way — so
+  // it is deliberately not worked around here. Registering one requires a
+  // verified ABN matching the name, which is the eligibility gate the field
+  // documents; revisiting it would be a pack-wide change to trustedHostSuffixes.
+  //
   // "nib", "hcf" and "ahm" are too short for hostname substring matching and go
   // in the word list below.
   "medibank", "bupa",
