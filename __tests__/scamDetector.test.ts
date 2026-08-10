@@ -706,6 +706,45 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     },
   );
 
+  // ── AU state-government impersonation (D1 / #141 / ACSC ASC-2026-0807) ─────
+
+  it.each([
+    "VicRoads: your licence will be suspended over an unpaid fine.",
+    "Service NSW: an outstanding fine requires payment today.",
+    "Revenue NSW has issued a penalty notice against your vehicle.",
+    "Transport NSW: your registration is suspended pending payment.",
+    "QLD Transport: unpaid infringement on your account.",
+    "VCAT has scheduled a hearing regarding your unpaid debt.",
+  ])("flags AU state government agency impersonation: %s (D1 / #141)", (text) => {
+    const result = checkSms(`${text} Pay now: http://fines-pay.cyou/x`, undefined, "AU");
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+
+  it("does not treat state agency names as no-link senders (D1 / #141)", () => {
+    // noLinkSenders is a strict subset of authorityMentions and the flag copy
+    // names only the federal bodies — VicRoads does use links, so the stronger
+    // "removed links from their SMS" claim must not attach to it.
+    const result = checkSms(
+      "VicRoads: pay your fine at http://vicroads-fines.cyou/pay",
+      undefined,
+      "AU",
+    );
+    expect(result.flags.some((f) => f.includes("removed links"))).toBe(false);
+  });
+
+  it("does not fire state agency names inside ordinary words (D1 / #141)", () => {
+    // "vcat" is 4 chars, so it is substring-matched rather than boundary-matched.
+    // Guard against the class of bug that "acc" ⊂ "account" caused for NZ.
+    const benign = [
+      "The advocate will call you back about the invoice.",
+      "Please allocate the remaining budget this week.",
+    ];
+    for (const text of benign) {
+      const flags = checkSms(text, undefined, "AU").flags.join(" | ");
+      expect({ text, hit: flags.includes("government agency") }).toEqual({ text, hit: false });
+    }
+  });
+
   it("detects device-code / OAuth phishing language in email (D4 / #75)", () => {
     const result = checkEmail(
       "From: security@micros0ft-verify.com\n\nMicrosoft: enter this device code at microsoft.com/devicelogin to verify your new device.",

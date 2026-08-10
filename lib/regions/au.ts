@@ -124,6 +124,19 @@ const AUTHORITY_MENTIONS = [
   "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost",
   // myGov digital-identity layer rebranding to myID in 2026 (D2 / #73).
   "myid", "my id app",
+  // State-government agency impersonation (D1 / #141 / ACSC ASC-2026-0807).
+  // The federal entries above cover ATO/myGov/Centrelink, but the smishing kits
+  // catalogued by IDCARE and the ACSC in August 2026 impersonate state bodies —
+  // invariably an unpaid fine or licence-suspension threat with a payment link.
+  //
+  // All entries are multi-word or distinctive enough to substring-match safely:
+  // mentions() only boundary-matches entries of 3 characters or fewer, so bare
+  // "tmr" and "dot" are deliberately absent — they'd fire inside ordinary
+  // English. The qualified forms carry the signal without the collisions.
+  // "vcat" is 4 characters, so it is substring-matched: verified against
+  // /usr/share/dict/words with zero hits, and no common word contains it.
+  "vicroads", "service nsw", "servicensw", "transport nsw", "revenue nsw",
+  "tmr qld", "qld transport", "dot wa", "vcat",
 ];
 
 // ATO/myGov/Medicare/Centrelink/Australia Post removed links from their
