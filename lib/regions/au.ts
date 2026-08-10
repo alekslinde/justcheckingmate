@@ -21,6 +21,16 @@ const URGENCY_TOLL = [
 const URGENCY_PARCEL = [
   "parcel held", "delivery failed", "couldn't be delivered",
   "redelivery fee", "invalid postal code",
+  // Customs / import-duty framing (D2 / #142 / ABF media release 6 Aug 2026).
+  // Australia Post and DHL-branded SMS demand a "customs clearance" payment to
+  // release a parcel. The ABF has confirmed it never requests payment by SMS,
+  // and legitimate carriers bill duty through the invoice rather than a
+  // click-through link — so this framing has no clean use in a consumer SMS.
+  // us.ts and ca.ts already carry "customs fee"; AU was the gap.
+  "customs fee", "customs charge", "customs clearance",
+  "import duty", "duty and handling", "clearance fee",
+  "held at customs", "held at border", "held by customs",
+  "release your parcel",
 ];
 
 // NBN Co disconnection-threat smishing (D7 / #67).

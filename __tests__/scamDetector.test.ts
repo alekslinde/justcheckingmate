@@ -686,6 +686,26 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("Press Win+R"))).toBe(true);
   });
 
+  // ── AU customs / import-duty parcel lures (D2 / #142 / ABF 6 Aug 2026) ─────
+
+  it("detects customs-clearance parcel lures in AU (D2 / #142)", () => {
+    const result = checkSms(
+      "AusPost: your parcel is held at customs. Pay the outstanding import duty to release your parcel: http://auspost-clearance.cyou/pay",
+      undefined,
+      "AU",
+    );
+    expect(result.flags.some((f) => f.toLowerCase().includes("urgency"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it.each(["customs fee", "customs charge", "clearance fee", "held by customs", "held at border"])(
+    "flags the AU customs phrase %p (D2 / #142)",
+    (phrase) => {
+      const result = checkSms(`Your delivery is on hold. A ${phrase} is payable.`, undefined, "AU");
+      expect(result.flags.join(" | ").toLowerCase()).toContain("urgency");
+    },
+  );
+
   it("detects device-code / OAuth phishing language in email (D4 / #75)", () => {
     const result = checkEmail(
       "From: security@micros0ft-verify.com\n\nMicrosoft: enter this device code at microsoft.com/devicelogin to verify your new device.",
