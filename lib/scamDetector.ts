@@ -753,6 +753,32 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     score += 25;
   }
 
+  // SVG phishing attachment (D6 / 2026-08-09 roadmap / APWG Q2 2026, Proofpoint,
+  // Any.run). SVG attachments carry embedded JavaScript that redirects to a
+  // credential-harvest page, and they slip past scanners that only inspect
+  // Office and PDF formats while rendering directly in the browser when opened.
+  //
+  // The hard part is that .svg is also an utterly ordinary asset extension: it
+  // appears in the logo and tracking-pixel references at the foot of most
+  // marketing email, which is precisely the mail this app is handed. Matching a
+  // bare ".svg" would flag a newsletter footer.
+  //
+  // So the extension only counts when it is the thing being sent — .svg adjacent
+  // to attachment language, in either order ("the attached invoice.svg", or
+  // "statement.svg is attached"). A footer logo reference sits in an <img> URL
+  // with no attachment noun near it and stays unflagged.
+  //
+  // Scored well below the likely_scam threshold on purpose: an SVG attachment is
+  // a delivery-mechanism signal, not proof of intent. It escalates by compounding
+  // with the sender-spoof and urgency signals above, per the roadmap's note.
+  const svgAttachment =
+    /\b(?:attach(?:ment|ed|ing)?|enclosed|see|open|download|view)\b[^\n]{0,40}\b[\w.-]+\.svg\b/i.test(text) ||
+    /\b[\w.-]+\.svg\b[^\n]{0,40}\b(?:attach(?:ment|ed|ing)?|enclosed|document|file|invoice|statement|receipt)\b/i.test(text);
+  if (svgAttachment) {
+    flags.push("SVG file attached — SVG attachments are a known phishing delivery trick: the file looks like an image but can carry hidden code that opens a fake login page in your browser. Legitimate invoices and statements are not sent as .svg.");
+    score += 20;
+  }
+
   // Device code / OAuth token phishing (D4 / #75 / FBI PSA260521). Attackers
   // abuse Microsoft's OAuth device-code flow to steal a session token with no
   // fake login page — the victim enters the code on the real microsoft.com but

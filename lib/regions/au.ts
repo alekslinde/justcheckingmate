@@ -44,6 +44,19 @@ const URGENCY_UTILITY = [
 const URGENCY_PENSION = [
   "secure your super", "your super balance", "preservation age",
   "super fund deadline", "super account suspended",
+  // "Rule change" credential lures (D5 / 2026-08-09 roadmap / ATO + ASIC
+  // MoneySmart Aug 2026). The July 2026 preservation-age reforms gave scammers a
+  // real policy change to point at: "a new super rule change affects your
+  // balance — verify your details to avoid losing access."
+  //
+  // Every entry is anchored to super/superannuation rather than the bare "rule
+  // change" the roadmap first suggested. Regulatory change is exactly what
+  // legitimate fund and employer mail discusses, and this list feeds the
+  // urgency scorer directly — a bare "rule change" would fire on the ATO's own
+  // newsletters. Keeping "super" in the phrase is what holds the FP rate down
+  // while still matching the lure, which always names super to land the threat.
+  "super rule change", "superannuation rule change", "new super rules",
+  "super law change", "changes to your super",
 ];
 
 // Fake product-recall SMS lures (D1 / #80 / Amazon campaign May-June 2026).
@@ -226,13 +239,23 @@ const TYPOSQUAT_BRANDS = [
   "originenergy", "energyaustralia", "alintaenergy",
   // Crypto exchanges (D6 / #123). "binance" is long enough to be distinctive.
   "coinspot", "swyftx", "binance",
+  // Private health insurers (D4 / 2026-08-09 roadmap). Credential-harvest pages
+  // for the big four AU funds. Their real sites are .com.au, which the trusted-
+  // suffix guard already exempts, so this only fires on the lookalike domains.
+  // "nib", "hcf" and "ahm" are too short for hostname substring matching and go
+  // in the word list below.
+  "medibank", "bupa",
 ];
 
 // Brands too short for substring matching in a hostname. Previously excluded
 // from detection entirely to dodge the false positives; the word-boundary list
 // lets them be caught without the collisions ("agl-billing.com" hits,
 // "bagelshop.io" doesn't).
-const TYPOSQUAT_WORD_BRANDS = ["agl"];
+//
+// The short health funds (D4) rely on the same mechanism: the checker splits the
+// registrable label on separators, so "nib-renewal.com" and "hcf-login.net" hit
+// while "bonnibel.com" and "ahmed-photography.com" don't.
+const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "ahm"];
 
 // Consumer (non-government) brands impersonated in SMS bodies.
 const BRAND_MENTIONS = [
@@ -251,10 +274,36 @@ const BRAND_MENTIONS = [
   // AU crypto exchanges (D6 / #123) — "suspicious login" / "account
   // suspended" credential and 2FA harvesting.
   "coinspot", "swyftx", "binance", "crypto exchange",
+  // Private health insurers (D4 / 2026-08-09 roadmap / ACSC Aug 2026 advisory).
+  // Credential-harvest kits impersonating the big four AU funds, framed as
+  // "your policy is expiring" / "your membership is suspended". Health cover is
+  // near-universal here and the funds do email members about renewals, so these
+  // lean on the compound scorer rather than firing hard alone.
+  //
+  // Only the distinctive names are substring-matched. "medibank" and "bupa" are
+  // unambiguous; "nib", "hcf" and "ahm" are in the word list below.
+  //
+  // No "nib health" / "hcf health" entries: the bare names in the word list
+  // already match those phrases, and listing both puts one brand in both halves
+  // of the BrandSet for no gain.
+  "medibank", "bupa",
 ];
 
 // "agl" would fire on "bagel", "eagle" and "flagship" as a bare substring.
-const BRAND_MENTION_WORDS = ["agl"];
+//
+// The health funds (D4) join it for the same reason. This list is explicitly
+// boundary-matched at the call site, which is what these need — note the
+// automatic ≤3-character rule in mentions() does NOT apply here: brandMentions
+// is a BrandSet, and its `substring` half is matched with a plain
+// lower.includes(), so a short name placed there gets no protection at all.
+//   - "nib" appears inside 92 dictionary words (Aniba, bonnibel) and, more to
+//     the point, "nibble" and any brand ending in -nib.
+//   - "ahm" appears inside 41 (Ahmed, Ahmadi) — overwhelmingly personal names,
+//     which arrive constantly in the forwarded emails this app parses.
+//   - "hcf" has no dictionary collisions, but it is a three-letter acronym in a
+//     product that already learned this lesson with NZ "acc" ⊂ "account", so it
+//     gets the boundary too rather than relying on today's word list.
+const BRAND_MENTION_WORDS = ["agl", "nib", "hcf", "ahm"];
 
 // Names whose genuine mail always comes from a .gov.au / .com.au domain, so a
 // mismatched sender domain is textbook impersonation.
