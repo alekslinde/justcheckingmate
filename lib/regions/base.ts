@@ -76,6 +76,18 @@ const REQUEST_WORDS = [
   "run this to verify", "run the following to verify", "run this fix",
   "open run dialog", "open the run dialog",
   "copy and paste this fix", "paste to fix your browser",
+  // ClickFix macOS variant (D3 / #143 / ACSC ASC-2026-0809, Sophos X-Ops,
+  // CrowdStrike, CISA — all 9 Aug 2026). Same tactic, different keystroke: the
+  // fake overlay says press Cmd+Space, open Terminal, paste a `curl | bash`.
+  //
+  // These are deliberately the *weaker* half of the signal. "open terminal" and
+  // "run in terminal" appear verbatim in legitimate developer documentation, so
+  // at +15 each they inform the compound score without reaching a verdict alone.
+  // The high-confidence path is the dedicated regex in scamDetector, which
+  // requires the Terminal/Spotlight cue and a paste instruction together.
+  "open terminal", "press cmd+space", "press command+space",
+  "open spotlight", "paste in terminal", "run in terminal",
+  "curl | bash", "curl -s | sh",
   // Rental/property bond redirect fraud (D5 / #105). Scammers impersonate or
   // intercept real estate agency comms and send "updated bank details" just
   // before the bond is due. Legitimate agencies rarely change payment details

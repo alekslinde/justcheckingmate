@@ -65,6 +65,42 @@ function mentionsAny(text: string, entries: string[]): boolean {
   return entries.some((entry) => mentions(text, entry));
 }
 
+const MAC_CLICKFIX_FLAG =
+  "'Open Terminal and paste this' instruction detected — this is the macOS ClickFix variant: a fake CAPTCHA or 'browser fix' overlay talks you into running the attacker's command yourself, usually via Spotlight and Terminal. No legitimate site or verification step ever asks for this.";
+
+/**
+ * ClickFix macOS variant (D3 / #143 / ACSC ASC-2026-0809, 9 Aug 2026).
+ *
+ * The Windows path keys off "press Win+R", which nothing legitimate says. The
+ * macOS equivalent has no such luxury: "open Terminal" and `curl … | bash` are
+ * ordinary developer-documentation phrases, so matching either alone would flag
+ * every install guide on the internet.
+ *
+ * So each branch needs two halves — the *delivery* cue (Spotlight/Terminal, or a
+ * piped shell command) and the *clipboard* cue (paste/copy, or the fake-CAPTCHA
+ * framing that makes it social engineering). A install guide says "run this in
+ * Terminal" and stops; the lure says "press Cmd+Space, open Terminal, paste".
+ *
+ * Note the grouping: an unguarded `curl \| bash` alternative would fire on any
+ * README, which is exactly the false positive the issue asked to avoid.
+ */
+function isMacClickFix(text: string): boolean {
+  const delivery =
+    /\b(?:open|launch|start)\s+(?:the\s+)?terminal\b/i.test(text) ||
+    /\b(?:cmd|command)\s*\+\s*space\b/i.test(text) ||
+    /\bspotlight\b/i.test(text);
+  const shellPipe = /\bcurl\b[^\n]{0,120}\|\s*(?:sudo\s+)?(?:ba|z|)sh\b/i.test(text);
+  const clipboard =
+    /\b(?:paste|copy|pbpaste|ctrl\s*\+\s*v|cmd\s*\+\s*v|command\s*\+\s*v)\b/i.test(text);
+  // The fake-verification framing is itself a co-signal: it's what separates a
+  // malicious paste instruction from a legitimate one.
+  const captchaFraming =
+    /\b(?:captcha|i'?m not a robot|human verification|verify\s+(?:you'?re|you are)\s+(?:a\s+)?human|prove\s+you'?re\s+(?:a\s+)?human|browser\s+(?:fix|repair|error))\b/i.test(text);
+
+  return (delivery && (clipboard || captchaFraming)) ||
+    (shellPipe && (clipboard || captchaFraming));
+}
+
 /** Entries matched, for the compounds that score on how many distinct hits. */
 function mentionsCount(text: string, entries: string[]): number {
   return entries.filter((entry) => mentions(text, entry)).length;
@@ -461,6 +497,9 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
       /powershell\s+-[ec]/i.test(text)) {
     flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
     score += 50;
+  } else if (isMacClickFix(text)) {
+    flags.push(MAC_CLICKFIX_FLAG);
+    score += 50;
   }
 
   // ACMA SMS Sender ID "Unverified" label override language (D7 / #78 / post-1
@@ -842,6 +881,11 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
       /powershell\s+-[ec]/i.test(text)) {
     flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
+    score += 50;
+  } else if (isMacClickFix(text)) {
+    // The macOS variant matters more here than in checkSms: a pasted fake-CAPTCHA
+    // page is the likeliest way this reaches us.
+    flags.push(MAC_CLICKFIX_FLAG);
     score += 50;
   }
 
