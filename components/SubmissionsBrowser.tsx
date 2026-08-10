@@ -31,6 +31,72 @@ function CopyId({ id }: { id: string }) {
   );
 }
 
+/**
+ * A labelled filter dropdown.
+ *
+ * The native select indicator is suppressed (`appearance-none`) and redrawn as
+ * an inline SVG because WebKit on iOS paints its own indicator with light-mode
+ * chrome rather than `currentColor` — against the dark panel here that arrow is
+ * effectively invisible, while desktop Chrome and Firefox tint it from the text
+ * colour and look fine. Drawing it ourselves makes the control identical across
+ * platforms and matches the chevron on the radar cards, which was already built
+ * to this geometry.
+ *
+ * The SVG is `pointer-events-none` so taps fall through to the select and still
+ * open the native picker.
+ */
+function FilterSelect({
+  id,
+  labelKey,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  labelKey: MessageKey;
+  value: string;
+  options: { value: string; labelKey: MessageKey }[];
+  onChange: (value: string) => void;
+}) {
+  const { t } = useLang();
+  return (
+    <div className="bg-gray-900 px-4 py-3 space-y-1">
+      <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+        {t(labelKey)}
+      </label>
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full appearance-none bg-transparent pr-6 text-sm text-gray-200 focus:outline-none cursor-pointer"
+        >
+          {options.map((opt) => (
+            // The select is transparent to sit on the panel, but the dropdown
+            // popup is painted by the OS — without an explicit background the
+            // options inherit that transparency and render dark-on-dark.
+            <option key={opt.value} value={opt.value} className="bg-gray-900 text-gray-200">
+              {t(opt.labelKey)}
+            </option>
+          ))}
+        </select>
+        <svg
+          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-200"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 const TYPE_OPTIONS: { value: string; labelKey: MessageKey }[] = [
   { value: "all", labelKey: "subs.type.all" },
   ...REPORT_TYPES.map((t) => ({
@@ -235,56 +301,32 @@ export default function SubmissionsBrowser() {
           {/* ── Filter grid ─────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-800">
 
-            {/* Type */}
-            <div className="bg-gray-900 px-4 py-3 space-y-1">
-              <label htmlFor="subs-filter-type" className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                {t("subs.type.label")}
-              </label>
-              <select
-                id="subs-filter-type"
-                value={type}
-                onChange={(e) => update({ type: e.target.value, page: "" })}
-                className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
-              >
-                {TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-                ))}
-              </select>
-            </div>
+            <FilterSelect
+              id="subs-filter-type"
+              labelKey="subs.type.label"
+              value={type}
+              options={TYPE_OPTIONS}
+              onChange={(v) => update({ type: v, page: "" })}
+            />
 
-            {/* Period */}
-            <div className="bg-gray-900 px-4 py-3 space-y-1">
-              <label htmlFor="subs-filter-period" className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                {t("subs.period.label")}
-              </label>
-              <select
-                id="subs-filter-period"
-                value={periodDays}
-                onChange={(e) => update({ days: e.target.value, page: "" })}
-                className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
-              >
-                {PERIOD_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-                ))}
-              </select>
-            </div>
+            <FilterSelect
+              id="subs-filter-period"
+              labelKey="subs.period.label"
+              value={periodDays}
+              options={PERIOD_OPTIONS}
+              onChange={(v) => update({ days: v, page: "" })}
+            />
 
-            {/* Sort */}
-            <div className="bg-gray-900 px-4 py-3 space-y-1">
-              <label htmlFor="subs-filter-sort" className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                {t("subs.sort.label")}
-              </label>
-              <select
-                id="subs-filter-sort"
-                value={sort}
-                onChange={(e) => update({ sort: e.target.value, page: "" })}
-                className="w-full bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-                ))}
-              </select>
-            </div>
+            <FilterSelect
+              id="subs-filter-sort"
+              labelKey="subs.sort.label"
+              value={sort}
+              options={SORT_OPTIONS}
+              onChange={(v) => update({ sort: v, page: "" })}
+            />
+
+            {/* `sort` is a SortOption union; the select hands back a plain
+                string, so `update` narrows it at the call site above. */}
           </div>
         </div>
 
