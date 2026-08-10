@@ -82,12 +82,19 @@ const REQUEST_WORDS = [
   //
   // These are deliberately the *weaker* half of the signal. "open terminal" and
   // "run in terminal" appear verbatim in legitimate developer documentation, so
-  // at +15 each they inform the compound score without reaching a verdict alone.
-  // The high-confidence path is the dedicated regex in scamDetector, which
-  // requires the Terminal/Spotlight cue and a paste instruction together.
+  // they only inform the compound score — a lone hit is +15 in checkSms and +8
+  // in checkCustom, both well under the 20-point "suspicious" threshold, so an
+  // install guide stays "safe" on its own. The high-confidence path is
+  // isMacClickFix in scamDetector, which requires a Terminal/Spotlight cue and a
+  // paste instruction together.
+  //
+  // No `curl … | bash` entry here: this list is matched with a plain substring
+  // test, and a real command has a URL between the flags and the pipe
+  // ("curl -s https://… | sh"), so a literal "curl | bash" can never match. The
+  // piped-shell case is handled by the shellPipe regex in isMacClickFix, which
+  // can span the URL.
   "open terminal", "press cmd+space", "press command+space",
   "open spotlight", "paste in terminal", "run in terminal",
-  "curl | bash", "curl -s | sh",
   // Rental/property bond redirect fraud (D5 / #105). Scammers impersonate or
   // intercept real estate agency comms and send "updated bank details" just
   // before the bond is due. Legitimate agencies rarely change payment details

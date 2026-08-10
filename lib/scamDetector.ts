@@ -77,25 +77,49 @@ const MAC_CLICKFIX_FLAG =
  * every install guide on the internet.
  *
  * So each branch needs two halves — the *delivery* cue (Spotlight/Terminal, or a
- * piped shell command) and the *clipboard* cue (paste/copy, or the fake-CAPTCHA
- * framing that makes it social engineering). A install guide says "run this in
- * Terminal" and stops; the lure says "press Cmd+Space, open Terminal, paste".
+ * piped shell command) and the *clipboard* cue (a paste instruction, or the
+ * fake-CAPTCHA framing that makes it social engineering). An install guide says
+ * "run this in Terminal" and stops; the lure says "press Cmd+Space, open
+ * Terminal, paste".
  *
  * Note the grouping: an unguarded `curl \| bash` alternative would fire on any
  * README, which is exactly the false positive the issue asked to avoid.
+ *
+ * Both cue halves are deliberately narrower than they first appear, because a
+ * loose half defeats the two-half design — code review found each firing on its
+ * own:
+ *   - bare "copy" matched "open Terminal and copy the output into this ticket",
+ *     which is content moving *out* of the shell, the opposite direction;
+ *   - bare "spotlight" is an ordinary noun, so scam-awareness copy ("puts the
+ *     spotlight on scam trends… copy the link") self-triggered the flag — this
+ *     app publishes exactly that kind of writing.
  */
 function isMacClickFix(text: string): boolean {
   const delivery =
     /\b(?:open|launch|start)\s+(?:the\s+)?terminal\b/i.test(text) ||
     /\b(?:cmd|command)\s*\+\s*space\b/i.test(text) ||
-    /\bspotlight\b/i.test(text);
+    // "spotlight" is an ordinary English noun ("puts the spotlight on scam
+    // trends"), so it only counts as a delivery cue when used as the macOS
+    // launcher — opening it, or searching in it.
+    /\b(?:open|launch|press|hit|use|via)\s+(?:the\s+)?spotlight\b/i.test(text) ||
+    /\bspotlight\s+(?:search|and\s+type|then\s+type)\b/i.test(text);
   const shellPipe = /\bcurl\b[^\n]{0,120}\|\s*(?:sudo\s+)?(?:ba|z|)sh\b/i.test(text);
+  // Paste only — not bare "copy". The attack direction is content moving *into*
+  // the user's shell; "copy the output into this ticket" is the opposite, and
+  // matching it flagged a legitimate support instruction as likely_scam.
+  // "copy" is still matched where it's explicitly paired with pasting.
   const clipboard =
-    /\b(?:paste|copy|pbpaste|ctrl\s*\+\s*v|cmd\s*\+\s*v|command\s*\+\s*v)\b/i.test(text);
+    /\b(?:paste|pbpaste|ctrl\s*\+\s*v|cmd\s*\+\s*v|command\s*\+\s*v)\b/i.test(text) ||
+    /\bcopy\b[^\n]{0,40}\b(?:paste|run|execute|enter|terminal)\b/i.test(text);
   // The fake-verification framing is itself a co-signal: it's what separates a
   // malicious paste instruction from a legitimate one.
   const captchaFraming =
-    /\b(?:captcha|i'?m not a robot|human verification|verify\s+(?:you'?re|you are)\s+(?:a\s+)?human|prove\s+you'?re\s+(?:a\s+)?human|browser\s+(?:fix|repair|error))\b/i.test(text);
+    /\b(?:captcha|human verification|browser\s+(?:fix|repair|error))\b/i.test(text) ||
+    // "…not a robot" / "…you are human", with any leading verb — the campaigns
+    // vary it freely ("I'm not a robot", "confirm you are not a robot",
+    // "verify you're human", "prove you are human").
+    /\b(?:i'?m|i am|you'?re|you are)\s+(?:not\s+a\s+robot|(?:a\s+)?human)\b/i.test(text) ||
+    /\b(?:confirm|verify|prove|check)\s+(?:that\s+)?(?:you'?re|you are|i'?m|i am)\s+(?:not\s+a\s+robot|(?:a\s+)?human)\b/i.test(text);
 
   return (delivery && (clipboard || captchaFraming)) ||
     (shellPipe && (clipboard || captchaFraming));

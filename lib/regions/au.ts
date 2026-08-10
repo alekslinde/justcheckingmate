@@ -129,14 +129,21 @@ const AUTHORITY_MENTIONS = [
   // catalogued by IDCARE and the ACSC in August 2026 impersonate state bodies —
   // invariably an unpaid fine or licence-suspension threat with a payment link.
   //
-  // All entries are multi-word or distinctive enough to substring-match safely:
-  // mentions() only boundary-matches entries of 3 characters or fewer, so bare
-  // "tmr" and "dot" are deliberately absent — they'd fire inside ordinary
-  // English. The qualified forms carry the signal without the collisions.
-  // "vcat" is 4 characters, so it is substring-matched: verified against
+  // mentions() only boundary-matches entries of 3 characters or fewer, so
+  // everything here is substring-matched and must be distinctive on its own.
+  // Bare "tmr" and "dot" are absent for that reason — they'd fire inside
+  // ordinary English.
+  //
+  // "dot wa" was dropped for the same reason after code review: at 6 characters
+  // it takes the substring path, so it matched "the dot was red" and "site dot
+  // washington dot edu" — people do write URLs out longhand when reporting a
+  // scam. The full agency name is what the lure actually uses and carries no
+  // such collision.
+  //
+  // "vcat" is 4 characters and so also substring-matched: verified against
   // /usr/share/dict/words with zero hits, and no common word contains it.
   "vicroads", "service nsw", "servicensw", "transport nsw", "revenue nsw",
-  "tmr qld", "qld transport", "dot wa", "vcat",
+  "tmr qld", "qld transport", "department of transport wa", "vcat",
 ];
 
 // ATO/myGov/Medicare/Centrelink/Australia Post removed links from their
