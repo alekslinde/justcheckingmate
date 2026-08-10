@@ -72,9 +72,18 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
 
   return (
     <article className="rounded-xl border border-gray-700/50 bg-gray-800/40">
-      <details className="group">
-        <summary className="cursor-pointer list-none p-4 min-h-[44px] rounded-xl hover:bg-gray-800/60 transition-colors">
-          <div className="flex items-start gap-3">
+      <details>
+        {/* Keeps the browser's native disclosure triangle rather than drawing a
+            chevron. Both existing <details> in the app (EmailExportGuide,
+            BugReportProvider) leave the marker alone, so suppressing it here
+            with list-none was the odd one out — and the "›" the custom arrow
+            used is already spoken for as a static list bullet in LearnContent,
+            where it never rotates or responds to anything. Reusing an inert
+            bullet as the interactive control taught two meanings for one glyph.
+            The native marker also comes with the platform's own open/closed
+            states and high-contrast handling for free. */}
+        <summary className="cursor-pointer p-4 min-h-[44px] rounded-xl hover:bg-gray-800/60 transition-colors marker:text-gray-500">
+          <div className="inline-flex items-start gap-3 w-[calc(100%-1.5rem)] align-top">
             <div className="min-w-0 flex-1">
               {/* h4, one level below the group heading — the cards nest inside
                   "Circulating now", and matching its level would flatten the
@@ -101,12 +110,6 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
                 )}
               </p>
             </div>
-            <span
-              className="shrink-0 text-gray-500 group-open:rotate-90 transition-transform mt-0.5"
-              aria-hidden="true"
-            >
-              ›
-            </span>
           </div>
           {/* Visible only to assistive tech: the chevron alone doesn't say what
               opening the row would reveal. */}
