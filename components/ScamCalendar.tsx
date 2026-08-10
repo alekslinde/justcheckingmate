@@ -155,23 +155,27 @@ function SeasonCard({ season, today }: { season: ScamSeason; today: CivilDate })
  * the right screen-reader semantics, and find-in-page over the collapsed text
  * for free, none of which a div-and-state version gets without work. The
  * `marker:hidden` and `[&::-webkit-details-marker]` rules drop the platform
- * triangle so the chevron can sit where the layout wants it.
+ * triangle so the SVG chevron can sit where the layout wants it.
+ *
+ * The disclosure chevron matches ThreatCard on the radar: a right-aligned inline
+ * SVG (a downward V, rotated 180° on open) at `text-gray-200`, stroke-width 2.5,
+ * rather than the left-hand text triangle this row used to draw. The two pages
+ * share a card idiom, so they should share the affordance that opens the card.
+ *
+ * `min-w-0` on the root lets the row shrink inside the two-column grid the "rest
+ * of the year" section lays it out in. Grid items default to `min-width: auto`,
+ * so without this the shrink-0 timing text forces the track wider than the card
+ * and the row spills past its right edge.
  */
 function SeasonRow({ season, timing }: { season: ScamSeason; timing: string }) {
   return (
-    <details className="group rounded-xl border bg-gray-800/40 border-gray-700/50 open:bg-gray-800/60">
+    <details className="group min-w-0 rounded-xl border bg-gray-800/40 border-gray-700/50 open:bg-gray-800/60">
       {/* No aria-label here. One would replace the whole accessible name, so a
           screen reader would hear "Tax season — show what to look for" and lose
           the window, the confidence and the timing that a sighted user can scan
           without expanding anything. The visible text is already the better
           name; <summary> announces the expand/collapse affordance itself. */}
       <summary className="flex items-center gap-3 p-3 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-xl hover:bg-gray-700/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">
-        <span
-          className="shrink-0 text-gray-500 text-xs transition-transform group-open:rotate-90"
-          aria-hidden="true"
-        >
-          ▸
-        </span>
         <span className="min-w-0 flex-1">
           <span className="block font-semibold text-gray-200 text-sm truncate">{season.title}</span>
           {/* truncate clips visually on a narrow row; the full string stays in
@@ -181,6 +185,22 @@ function SeasonRow({ season, timing }: { season: ScamSeason; timing: string }) {
           </span>
         </span>
         <span className="shrink-0 text-xs text-gray-500">{timing}</span>
+        {/* Same chevron geometry as ThreatCard: a downward V from this path at
+            text-gray-200 and stroke-width 2.5, rotated 180° on open. Drawn as an
+            SVG rather than a text glyph so stroke weight is explicit and the
+            rotation is smooth. */}
+        <svg
+          className="shrink-0 w-5 h-5 text-gray-200 transition-transform duration-200 group-open:rotate-180"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </summary>
 
       <div className="px-3 pb-3 pt-1 space-y-3 border-t border-gray-700/50 mt-1">
