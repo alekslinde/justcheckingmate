@@ -13,7 +13,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-// @ts-expect-error — plain .mjs script, no type declarations
+// Plain .mjs script with no type declarations. `allowJs` lets TypeScript infer
+// its shape from the source, so the import resolves without a suppression.
 import { parseRegistry, validate } from "../scripts/check-sources.mjs";
 
 const REGISTRY_PATH = resolve(__dirname, "../docs/threat-intel/sources.yml");
@@ -30,10 +31,15 @@ type Entry = {
   retired?: string;
   expect?: string;
 };
+// `version` and `updated` are nullable because the parser initialises them to
+// null and only fills them from a `version:`/`updated:` header. The fragment
+// fixtures below omit that header deliberately, so null is a real value here,
+// not a defensive guess — typing them as `string` would make every fragment
+// parse need a cast that lies about the shape.
 type Registry = {
   errors: string[];
-  version: string;
-  updated: string;
+  version: string | null;
+  updated: string | null;
   tiers: Record<string, Entry[]>;
   brands: Entry[];
   indicators: string[];

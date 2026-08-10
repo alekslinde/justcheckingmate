@@ -21,6 +21,16 @@ const URGENCY_TOLL = [
 const URGENCY_PARCEL = [
   "parcel held", "delivery failed", "couldn't be delivered",
   "redelivery fee", "invalid postal code",
+  // Customs / import-duty framing (D2 / #142 / ABF media release 6 Aug 2026).
+  // Australia Post and DHL-branded SMS demand a "customs clearance" payment to
+  // release a parcel. The ABF has confirmed it never requests payment by SMS,
+  // and legitimate carriers bill duty through the invoice rather than a
+  // click-through link — so this framing has no clean use in a consumer SMS.
+  // us.ts and ca.ts already carry "customs fee"; AU was the gap.
+  "customs fee", "customs charge", "customs clearance",
+  "import duty", "duty and handling", "clearance fee",
+  "held at customs", "held at border", "held by customs",
+  "release your parcel",
 ];
 
 // NBN Co disconnection-threat smishing (D7 / #67).
@@ -114,6 +124,26 @@ const AUTHORITY_MENTIONS = [
   "linkt", "eastlink", "e-toll", "etoll", "australia post", "auspost",
   // myGov digital-identity layer rebranding to myID in 2026 (D2 / #73).
   "myid", "my id app",
+  // State-government agency impersonation (D1 / #141 / ACSC ASC-2026-0807).
+  // The federal entries above cover ATO/myGov/Centrelink, but the smishing kits
+  // catalogued by IDCARE and the ACSC in August 2026 impersonate state bodies —
+  // invariably an unpaid fine or licence-suspension threat with a payment link.
+  //
+  // mentions() only boundary-matches entries of 3 characters or fewer, so
+  // everything here is substring-matched and must be distinctive on its own.
+  // Bare "tmr" and "dot" are absent for that reason — they'd fire inside
+  // ordinary English.
+  //
+  // "dot wa" was dropped for the same reason after code review: at 6 characters
+  // it takes the substring path, so it matched "the dot was red" and "site dot
+  // washington dot edu" — people do write URLs out longhand when reporting a
+  // scam. The full agency name is what the lure actually uses and carries no
+  // such collision.
+  //
+  // "vcat" is 4 characters and so also substring-matched: verified against
+  // /usr/share/dict/words with zero hits, and no common word contains it.
+  "vicroads", "service nsw", "servicensw", "transport nsw", "revenue nsw",
+  "tmr qld", "qld transport", "department of transport wa", "vcat",
 ];
 
 // ATO/myGov/Medicare/Centrelink/Australia Post removed links from their
