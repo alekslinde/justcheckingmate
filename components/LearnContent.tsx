@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { AUTH_LEGEND, StaticAuthPill } from "@/components/AuthBadges";
 import EmailExportGuide from "@/components/EmailExportGuide";
+import Collapsible from "@/components/Collapsible";
 
 // Type icons mirror the input/report type pickers used across the app, so they
 // stay as a consistent scanning aid. The tactic/source/flag lists used purely
@@ -65,6 +67,23 @@ export default function LearnContent({
 }) {
   const { t } = useLang();
 
+  // Reveal a collapsed section when its table-of-contents link is followed.
+  // A jump link to a closed <details> would otherwise scroll to a bare header
+  // and hide the content it promised; this opens the target on load and on every
+  // in-page hash change. Anchors that aren't collapsibles (the emergency block,
+  // the core teaching, the part headers) are left untouched.
+  useEffect(() => {
+    const openTarget = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (el instanceof HTMLDetailsElement) el.open = true;
+    };
+    openTarget();
+    window.addEventListener("hashchange", openTarget);
+    return () => window.removeEventListener("hashchange", openTarget);
+  }, []);
+
   return (
     <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       <div>
@@ -124,40 +143,37 @@ export default function LearnContent({
         intro={t("learn.part.spot.intro")}
       />
 
-      {/* Card 1 — orientation: what scams look like and where they arrive. */}
-      <article className={`${CARD} scroll-mt-20`} id="what-scams-look-like">
-        {/* What this tool checks */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.types.heading")}</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {SCAM_TYPE_ICONS.map((icon, i) => (
-              <div key={i} className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2.5">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span aria-hidden="true">{icon}</span>
-                  <span className="text-sm font-medium text-gray-200">{t(key(`learn.types.${i + 1}.label`))}</span>
-                </div>
-                <p className="text-xs text-gray-500">{t(key(`learn.types.${i + 1}.desc`))}</p>
+      {/* Card 1 — orientation. Collapsed by default: it's read once to get your
+          bearings, not on every visit, so it opens on demand rather than pushing
+          the core teaching below it down the page. Split into two disclosures,
+          one per heading, so each opens to a single focused topic. */}
+      <Collapsible id="what-scams-look-like" title={t("learn.types.heading")}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {SCAM_TYPE_ICONS.map((icon, i) => (
+            <div key={i} className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2.5">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span aria-hidden="true">{icon}</span>
+                <span className="text-sm font-medium text-gray-200">{t(key(`learn.types.${i + 1}.label`))}</span>
               </div>
-            ))}
-          </div>
-        </section>
+              <p className="text-xs text-gray-500">{t(key(`learn.types.${i + 1}.desc`))}</p>
+            </div>
+          ))}
+        </div>
+      </Collapsible>
 
-        {/* Where scams come from */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.sources.heading")}</h2>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {Array.from({ length: SOURCE_COUNT }, (_, i) => (
-              <div key={i} className="flex items-start gap-2.5">
-                <span className="text-emerald-400/70 mt-0.5 shrink-0" aria-hidden="true">›</span>
-                <p className="text-sm text-gray-300">
-                  <span className="font-medium text-gray-100">{t(key(`learn.sources.${i + 1}.title`))}.</span>{" "}
-                  <span className="text-gray-400">{t(key(`learn.sources.${i + 1}.desc`))}</span>
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </article>
+      <Collapsible title={t("learn.sources.heading")}>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {Array.from({ length: SOURCE_COUNT }, (_, i) => (
+            <div key={i} className="flex items-start gap-2.5">
+              <span className="text-emerald-400/70 mt-0.5 shrink-0" aria-hidden="true">›</span>
+              <p className="text-sm text-gray-300">
+                <span className="font-medium text-gray-100">{t(key(`learn.sources.${i + 1}.title`))}.</span>{" "}
+                <span className="text-gray-400">{t(key(`learn.sources.${i + 1}.desc`))}</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      </Collapsible>
 
       {/* Card 2 — the actual teaching: recognising a scam in front of you. */}
       <article className={`${CARD} scroll-mt-20`} id="how-to-spot">
@@ -225,11 +241,11 @@ export default function LearnContent({
         </Link>
       </article>
 
-      {/* Card 3 — reference material. Last because it's consulted when a result
-          mentions SPF or DMARC, not read start to finish like the cards above. */}
-      <article className={`${CARD} scroll-mt-20`} id="technical-signals">
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.auth.heading")}</h2>
+      {/* Card 3 — reference material. Collapsed by default: it's consulted when a
+          result mentions SPF or DMARC, not read start to finish, so it no longer
+          spends a screen of the page on a legend most readers never need. */}
+      <Collapsible id="technical-signals" title={t("learn.auth.heading")}>
+        <div className="space-y-3">
           <p className="text-sm text-gray-400">{t("learn.auth.intro")}</p>
           <div className="space-y-4 pt-1">
             {AUTH_LEGEND.map((entry) => (
@@ -246,8 +262,8 @@ export default function LearnContent({
               </div>
             ))}
           </div>
-        </section>
-      </article>
+        </div>
+      </Collapsible>
 
       {/* Where to report + disclaimer */}
       <section id="where-to-report" className="scroll-mt-20 bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-5">
@@ -276,25 +292,22 @@ export default function LearnContent({
         intro={t("learn.part.using.intro")}
       />
 
-      <article className={CARD}>
-        {/* Taking a photo */}
-        <section className="space-y-2">
-          <h2 className={H2}>{t("learn.using.photo.heading")}</h2>
-          <p className="text-sm text-gray-400">{t("check.help.photo.body")}</p>
-        </section>
+      {/* Task guides, one collapsible each. This is how-to reference reached for
+          when you're about to capture a scam, not part of the read — so each
+          opens on demand rather than stacking three open sections at the foot of
+          an already-long page. The email guide renders open inside its own
+          disclosure (the outer Collapsible is the toggle). */}
+      <Collapsible title={t("learn.using.photo.heading")}>
+        <p className="text-sm text-gray-400">{t("check.help.photo.body")}</p>
+      </Collapsible>
 
-        {/* Uploading an image */}
-        <section className="space-y-2">
-          <h2 className={H2}>{t("learn.using.image.heading")}</h2>
-          <p className="text-sm text-gray-400">{t("check.help.image.body")}</p>
-        </section>
+      <Collapsible title={t("learn.using.image.heading")}>
+        <p className="text-sm text-gray-400">{t("check.help.image.body")}</p>
+      </Collapsible>
 
-        {/* Getting the email source — reuses the per-mail-client export guide. */}
-        <section className="space-y-2">
-          <h2 className={H2}>{t("learn.using.email.heading")}</h2>
-          <EmailExportGuide expandable={false} />
-        </section>
-      </article>
+      <Collapsible title={t("learn.using.email.heading")}>
+        <EmailExportGuide expandable={false} />
+      </Collapsible>
 
       <p className="text-center text-sm text-gray-400 pb-4">
         <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium">
