@@ -316,8 +316,39 @@ Items not proposed this week but worth monitoring:
   emerges.
 - **GB AI-voice + LinkedIn bank fraud:** No text-side detection surface today;
   revisit if a text-follow-up script becomes available.
-- **PDF+QR hybrid (carry-forward from 2026-07-26, tracked as #113):** Still
-  outstanding. Not resurveyed this week — deferred to the implementing PR.
+- **PDF+QR hybrid (carry-forward from 2026-07-26, tracked as #113):** ~~Still
+  outstanding. Not resurveyed this week — deferred to the implementing PR.~~
+  **Corrected 2026-08-10 — this had already shipped when the sweep was written.**
+  `checkSms()` carries a dedicated inverted-phrasing pattern for it
+  (`scamDetector.ts`, "PDF-embedded Scanception quishing (D7 / #113)"), matching
+  "the attached PDF contains a QR code" where the generic scan-prompt patterns
+  find no verb phrase to latch onto. Verified firing on four phrasings, and
+  correctly silent on "the QR code on the attached flyer". The entry was carried
+  forward unchecked; a watchlist that says "outstanding" about shipped work is
+  worse than no watchlist, because it is what the next reader trusts. Nothing
+  outstanding here.
+
+- **Foreign-authority phrasing coverage (AU) — NEW, found 2026-08-10:**
+  `FOREIGN_AUTHORITY_MENTIONS` in au.ts matches "chinese police", "chinese
+  customs", "embassy of china" and similar (scoring 24–42 on realistic lures),
+  but **not** the natural word-order variant "Chinese Embassy", which scores 0.
+  Found while auditing detection claims for the threat radar, not from a source
+  report — so it needs corroboration before it justifies a rule. Candidate
+  addition: `"chinese embassy"`, and possibly the same inversion for other
+  consulates. Low FP risk; the phrase has little legitimate use in a scam-check
+  context. Not proposed here — this file is a record of the 2026-08-09 sweep.
+
+- **"Hi Mum" opening message (AU/BASE) — NEW, found 2026-08-10:**
+  `URGENCY_VOICE_CLONE` in base.ts covers the escalation ("bail money",
+  "stranded overseas", "don't tell mum") but nothing matches the *first*
+  message, which is the one people actually receive: "Hi Mum, this is my new
+  number, my phone broke" scores **0**. The code comment already labels that
+  half "D17 — watchlist", so this is a known deferral rather than a regression —
+  but it was being described as shipped. Genuinely hard: the text is
+  indistinguishable from a real message from a relative, so the FP risk on
+  "new number" alone is high and a rule here would need to compound with a
+  payment ask. Flagged for a sweep to size properly; recording it so the
+  deferral stays visible rather than reading as coverage.
 - **Kali365 PhaaS (US/AU):** Platform-level intelligence only; no lure
   differentiator. Continue monitoring vendor telemetry for any distinct text
   patterns.

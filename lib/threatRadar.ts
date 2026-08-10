@@ -439,7 +439,14 @@ const AU_THREATS: ThreatEntry[] = [
     title: "QR codes in phishing (quishing)",
     channel: "mixed",
     status: "watchlist",
-    coverage: "partial",
+    // `covered`, not `partial`. Both halves ship: the text side matches
+    // scan-prompt language *and* the inverted PDF-hybrid phrasing ("the
+    // attachment contains a QR code", D7/#113) that the generic patterns miss,
+    // and the image side decodes the code client-side via jsqr in CheckFlow and
+    // feeds the URL through the normal scoring path. Downgrading this to
+    // `partial` claimed a gap that does not exist — which is the same failure as
+    // hiding a real one, just pointed the other way.
+    coverage: "covered",
     firstSeen: "2026-06-21",
     lastSeen: "2026-07-26",
     summary:
@@ -451,9 +458,9 @@ const AU_THREATS: ThreatEntry[] = [
       "\"Scan to verify your account\"",
     ],
     advice:
-      "Preview the address before opening — most phone cameras show it first. On a parking meter, check whether the code is a sticker sitting on top of a printed one. Type the address yourself where you can.",
+      "Preview the address before opening — most phone cameras show it first, or upload a photo of the code here and we'll check it. On a parking meter, check whether the code is a sticker sitting on top of a printed one.",
     detection:
-      "We flag scan-this-code language in emails, but we can't read the code itself — a photo of one tells us nothing about where it goes.",
+      "We flag scan-this-code wording, including the \"the attached PDF contains a QR code\" phrasing. You can also upload a photo of the code — we read it on your device and check where it actually goes.",
     roadmap: "2026-07-26",
   },
   {
@@ -474,7 +481,7 @@ const AU_THREATS: ThreatEntry[] = [
     advice:
       "Any bank-detail change gets a phone call to a number you already had — never one from the email. Send $1 first and confirm it landed before the rest.",
     detection:
-      "We flag changed-bank-detail language, but a compromised real mailbox has no spoofing for us to catch. The phone call is the check that works.",
+      "Rental wording plus a bank-detail change scores highly, and \"our details have changed\" is flagged on its own. But a compromised real mailbox has no spoofing for us to catch, so the phone call is still the check that works.",
     roadmap: "2026-07-26",
   },
   {
@@ -496,7 +503,7 @@ const AU_THREATS: ThreatEntry[] = [
     advice:
       "No foreign police force can arrest you in Australia or demand money here. The secrecy instruction is the tell — it exists to stop you asking someone. Hang up and tell someone anyway.",
     detection:
-      "We flag foreign-authority language in text, but the pressure here happens on a live call we never see.",
+      "Named foreign authorities — Chinese police, customs, the consulate — are flagged in text. But the pressure here happens on a live call we never see, and we only match the wordings we've listed.",
     roadmap: "2026-07-26",
   },
   {
@@ -585,7 +592,14 @@ const AU_THREATS: ThreatEntry[] = [
     title: "\"Hi Mum\" messages from a new number",
     channel: "sms",
     status: "active",
-    coverage: "covered",
+    // `partial`, corrected 2026-08-10. This claimed `covered` with "dedicated
+    // detection, including the reluctance-to-call pattern" — neither is true.
+    // base.ts URGENCY_VOICE_CLONE covers the *escalation* ("bail money",
+    // "stranded overseas", "don't tell mum") but has nothing for the opening
+    // message, which is the one people actually receive: "Hi Mum, new number,
+    // phone broke" scores 0. The code comment marks that half "D17 — watchlist",
+    // i.e. surveyed and never implemented. Found by the coverage-claim test.
+    coverage: "partial",
     firstSeen: "2026-06-21",
     lastSeen: "2026-07-01",
     summary:
@@ -597,7 +611,8 @@ const AU_THREATS: ThreatEntry[] = [
     ],
     advice:
       "Ring the old number. A broken phone doesn't break the number — and someone who won't take a call is telling you something.",
-    detection: "This one has dedicated detection, including the reluctance-to-call pattern.",
+    detection:
+      "We catch the money stage — \"bail money\", \"stranded overseas\", \"don't tell Mum\". The opening message is the gap: \"Hi Mum, new number\" on its own reads exactly like a real one, so ringing the old number is the check that works.",
     roadmap: "2026-06-21",
   },
   {

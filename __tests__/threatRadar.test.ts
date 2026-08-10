@@ -314,6 +314,72 @@ describe("formatRadarDate", () => {
   });
 });
 
+describe("coverage claims match the shipped detector", () => {
+  // The radar's whole value over a news feed is the coverage claim, and it is
+  // the one field nothing else can check: `detection` is prose, so a stale
+  // sentence stays green forever. The quishing entry shipped claiming "we can't
+  // read the code itself" when jsqr decodes QR images client-side and the
+  // PDF-hybrid pattern (D7/#113) had already shipped — an understated claim,
+  // which erodes trust exactly as much as an overstated one.
+  //
+  // These sample a representative lure per entry and assert the matching flag
+  // is raised. Asserting on the *flag* rather than the score is deliberate:
+  // scores are scaled and rebalanced, so a threshold here would break on
+  // unrelated tuning while proving less. The flag firing is the coverage claim.
+  const SAMPLES: Array<{ id: string; text: string; flag: RegExp }> = [
+    { id: "quishing", text: "The attached PDF contains a QR code — scan it to pay your invoice.", flag: /QR code scan prompt/i },
+    { id: "rental-bond-fraud", text: "Your rental bond is due - our bank details have changed, new account number below", flag: /property bond fraud/i },
+    { id: "foreign-authority-diaspora", text: "This is the Chinese Police. A parcel in your name contained contraband.", flag: /foreign police or government authority/i },
+    { id: "toll-road-smishing", text: "Linkt: you have an unpaid toll of $4.80. Pay now to avoid a $195 fine.", flag: /toll/i },
+    // The escalation phase, not the opener — the opener is the documented gap
+    // that makes this entry `partial`. Sampling the opener here would assert a
+    // signal we don't have; sampling the escalation asserts the half we do.
+    { id: "hi-mum", text: "Hi Mum, I've been in an accident and need bail money urgently", flag: /urgency/i },
+  ];
+
+  it("covers every sampled entry with a live signal", async () => {
+    const { checkEmail } = await import("@/lib/scamDetector");
+    for (const { id, text, flag } of SAMPLES) {
+      const entry = AU.find((t) => t.id === id);
+      expect(entry, `${id} missing from the radar`).toBeDefined();
+      // Only meaningful for entries claiming coverage; `n/a` entries are
+      // excluded by construction since none appear above.
+      expect(entry!.coverage, `${id} sampled but not claiming coverage`).not.toBe("n/a");
+      const flags = checkEmail(text).flags.join(" | ");
+      expect(flag.test(flags), `${id} raised no matching flag. Got: ${flags.slice(0, 160)}`).toBe(true);
+    }
+  });
+
+  it("pins the known gaps that make entries partial", async () => {
+    // Documents *why* these are `partial` rather than `covered`, so the reason
+    // is a failing test if it ever changes rather than a comment nobody reads.
+    // If one of these starts scoring, the rule shipped and the badge should be
+    // upgraded — that is a pass-worthy change, so the assertion is the prompt.
+    const { checkSms } = await import("@/lib/scamDetector");
+
+    // "Hi Mum" opener: base.ts covers the money stage, not the first contact.
+    expect(checkSms("Hi Mum, this is my new number, my phone broke").score).toBe(0);
+
+    // Foreign authority: the mentions list has "embassy of china" but not the
+    // natural inversion. Recorded in the 2026-08-09 roadmap watchlist.
+    expect(checkSms("This is the Chinese Embassy calling about a legal matter.").score).toBe(0);
+  });
+
+  it("keeps n/a entries genuinely undetectable in text", async () => {
+    // The other direction: an `n/a` entry that started scoring would mean the
+    // badge is now understating us, which is how the quishing entry went wrong.
+    const { checkEmail } = await import("@/lib/scamDetector");
+    const samples: Record<string, string> = {
+      "sim-swap": "We have received a request to port your number to another carrier",
+    };
+    for (const [id, text] of Object.entries(samples)) {
+      const entry = AU.find((t) => t.id === id);
+      expect(entry?.coverage, id).toBe("n/a");
+      expect(checkEmail(text).score, `${id} now scores — revisit the n/a badge`).toBeLessThan(15);
+    }
+  });
+});
+
 describe("scoring independence", () => {
   it("is not imported by the detector", () => {
     // The radar is educational data. If scamDetector ever imported it, a verdict
