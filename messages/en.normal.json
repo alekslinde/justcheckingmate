@@ -392,6 +392,8 @@
   "calendar.rest.count": "{count} more this year",
   "calendar.ribbon.label": "Where these seasons fall across the year",
   "calendar.ribbon.today": "Today",
+  "calendar.reviewed": "Reviewed {date}",
+  "calendar.sources": "Sources",
   "home.season.heading": "In season right now",
   "home.season.cta": "See the full scam calendar →",
   "nav.radar": "Radar",
