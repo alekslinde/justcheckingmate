@@ -16,11 +16,14 @@
 
 import Link from "next/link";
 import { useLang, type MessageKey } from "@/lib/lang";
+import YearRibbon from "@/components/YearRibbon";
 import {
   activeSeasons,
   upcomingSeasons,
+  remainingSeasons,
   calendarForRegion,
   daysUntilStart,
+  daysUntilEnd,
   formatWindow,
   type ScamSeason,
   type CivilDate,
@@ -30,6 +33,11 @@ import type { RegionCode } from "@/lib/regions";
 // Matches the card styling used across Learn and About.
 const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
+
+// How many not-yet-active seasons get their own "coming up" row. The rest fold
+// into the collapsed index below, so this is a display budget rather than the
+// glance-sized strip upcomingSeasons() documents as its default.
+const UPCOMING_LIMIT = 2;
 
 /**
  * The "starts in N" label, chosen by day count.
@@ -47,32 +55,36 @@ function startsInLabel(days: number, t: (k: MessageKey, v?: Record<string, strin
   return t(months === 1 ? "calendar.starts.month" : "calendar.starts.months", { count: months });
 }
 
-function SeasonCard({ season, active }: { season: ScamSeason; active: boolean }) {
+/**
+ * The "N left" label for an active season, on the same thresholds as
+ * startsInLabel so a gap of 40 days describes itself as "about 6 weeks" in both
+ * directions rather than switching units by which end of the window it names.
+ */
+function endsInLabel(days: number, t: (k: MessageKey, v?: Record<string, string | number>) => string): string {
+  if (days === 0) return t("calendar.ends.today");
+  if (days === 1) return t("calendar.ends.tomorrow");
+  if (days < 14) return t("calendar.ends.days", { count: days });
+  if (days < 60) return t("calendar.ends.weeks", { count: Math.round(days / 7) });
+  const months = Math.round(days / 30);
+  return t(months === 1 ? "calendar.ends.month" : "calendar.ends.months", { count: months });
+}
+
+/** Window and confidence, the one-line subtitle shared by the card and the row. */
+function SeasonMeta({ season }: { season: ScamSeason }) {
+  const { t } = useLang();
+  return (
+    <>
+      {formatWindow(season.window)} · {t(`calendar.confidence.${season.confidence}` as MessageKey)}
+    </>
+  );
+}
+
+/** The lures + advice body. Shared so a collapsed row expands to the same content. */
+function SeasonBody({ season }: { season: ScamSeason }) {
   const { t } = useLang();
 
   return (
-    <article
-      className={[
-        "rounded-xl border p-4 space-y-3",
-        active
-          ? "bg-amber-500/5 border-amber-500/30"
-          : "bg-gray-800/40 border-gray-700/50",
-      ].join(" ")}
-    >
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h3 className="font-bold text-gray-100 text-base">{season.title}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {formatWindow(season.window)} · {t(`calendar.confidence.${season.confidence}` as MessageKey)}
-          </p>
-        </div>
-        {active && (
-          <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-full px-2.5 py-1">
-            {t("calendar.badge.active")}
-          </span>
-        )}
-      </div>
-
+    <>
       <p className="text-sm text-gray-400">{season.why}</p>
 
       <div className="space-y-1.5">
@@ -93,7 +105,78 @@ function SeasonCard({ season, active }: { season: ScamSeason; active: boolean })
         <span className="text-emerald-400/80 mt-2 shrink-0" aria-hidden="true">✓</span>
         <p className="text-sm text-gray-300 pt-1.5">{season.advice}</p>
       </div>
+    </>
+  );
+}
+
+/**
+ * A season in full — used only for what's active right now.
+ *
+ * Everything else is a SeasonRow. Giving a season five months away the same
+ * height as the one the user is standing in was what made this page six phone
+ * screens long, so full weight is now reserved for the thing that's true today.
+ */
+function SeasonCard({ season, today }: { season: ScamSeason; today: CivilDate }) {
+  const { t } = useLang();
+
+  return (
+    <article className="rounded-xl border p-4 space-y-3 bg-amber-500/10 border-amber-500/40">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className="font-bold text-gray-100 text-base">{season.title}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            <SeasonMeta season={season} />
+          </p>
+        </div>
+        {/* How much of the window is left, not just that it's open: ten weeks of
+            tax season remaining is more actionable than "active". */}
+        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-full px-2.5 py-1">
+          {t("calendar.badge.active")} · {endsInLabel(daysUntilEnd(season, today), t)}
+        </span>
+      </div>
+
+      <SeasonBody season={season} />
     </article>
+  );
+}
+
+/**
+ * A collapsed season — title, timing, and a disclosure.
+ *
+ * Native <details>/<summary> rather than useState: it brings keyboard support,
+ * the right screen-reader semantics, and find-in-page over the collapsed text
+ * for free, none of which a div-and-state version gets without work. The
+ * `marker:hidden` and `[&::-webkit-details-marker]` rules drop the platform
+ * triangle so the chevron can sit where the layout wants it.
+ */
+function SeasonRow({ season, timing }: { season: ScamSeason; timing: string }) {
+  const { t } = useLang();
+
+  return (
+    <details className="group rounded-xl border bg-gray-800/40 border-gray-700/50 open:bg-gray-800/60">
+      <summary
+        className="flex items-center gap-3 p-3 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-xl hover:bg-gray-700/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+        aria-label={`${season.title} — ${t("calendar.expand")}`}
+      >
+        <span
+          className="shrink-0 text-gray-500 text-xs transition-transform group-open:rotate-90"
+          aria-hidden="true"
+        >
+          ▸
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-gray-200 text-sm truncate">{season.title}</span>
+          <span className="block text-xs text-gray-500 truncate">
+            <SeasonMeta season={season} />
+          </span>
+        </span>
+        <span className="shrink-0 text-xs text-gray-500">{timing}</span>
+      </summary>
+
+      <div className="px-3 pb-3 pt-1 space-y-3 border-t border-gray-700/50 mt-1">
+        <SeasonBody season={season} />
+      </div>
+    </details>
   );
 }
 
@@ -146,17 +229,20 @@ export default function ScamCalendar({
   if (all.length === 0) return standalone ? <EmptyState /> : null;
 
   const active = activeSeasons(region, today);
-  const upcoming = upcomingSeasons(region, today, 2);
-  const shownIds = new Set([...active, ...upcoming].map((s) => s.id));
-  const rest = all.filter((s) => !shownIds.has(s.id));
+  const upcoming = upcomingSeasons(region, today, UPCOMING_LIMIT);
+  const rest = remainingSeasons(region, today, UPCOMING_LIMIT);
 
   return (
     <article className={CARD} id="scam-calendar">
+      {/* Intro only. The neutrality line moved to the outro: it's a disclaimer
+          about how we score, and standing it between the reader and the season
+          they came for spent the top of the page on a caveat. */}
       <section className="space-y-2">
         <h2 className={H2}>{t("calendar.title")}</h2>
         <p className="text-sm text-gray-400">{t("calendar.intro")}</p>
-        <p className="text-sm text-gray-500">{t("calendar.neutrality")}</p>
       </section>
+
+      <YearRibbon region={region} today={today} />
 
       {active.length > 0 && (
         <section className="space-y-3">
@@ -165,42 +251,55 @@ export default function ScamCalendar({
           </h3>
           <div className="space-y-3">
             {active.map((s) => (
-              <SeasonCard key={s.id} season={s} active />
+              <SeasonCard key={s.id} season={s} today={today} />
             ))}
           </div>
         </section>
       )}
 
       {upcoming.length > 0 && (
-        <section className="space-y-3">
+        <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
             {t("calendar.upcoming.heading")}
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {upcoming.map((s) => (
-              <div key={s.id} className="space-y-1.5">
-                <p className="text-xs text-gray-500">{startsInLabel(daysUntilStart(s, today), t)}</p>
-                <SeasonCard season={s} active={false} />
-              </div>
+              <SeasonRow
+                key={s.id}
+                season={s}
+                timing={startsInLabel(daysUntilStart(s, today), t)}
+              />
             ))}
           </div>
         </section>
       )}
 
       {rest.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            {t("calendar.rest.heading")}
-          </h3>
-          <div className="space-y-3">
+        <section className="space-y-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              {t("calendar.rest.heading")}
+            </h3>
+            <span className="text-xs text-gray-600">
+              {t("calendar.rest.count", { count: rest.length })}
+            </span>
+          </div>
+          {/* Two columns from sm up: four rows become two, and the section
+              reads as an index rather than a queue of things to get through. */}
+          <div className="grid gap-2 sm:grid-cols-2">
             {rest.map((s) => (
-              <SeasonCard key={s.id} season={s} active={false} />
+              <SeasonRow
+                key={s.id}
+                season={s}
+                timing={startsInLabel(daysUntilStart(s, today), t)}
+              />
             ))}
           </div>
         </section>
       )}
 
       <div className="border-t border-gray-800 pt-4 space-y-3">
+        <p className="text-xs text-gray-500">{t("calendar.neutrality")}</p>
         <p className="text-xs text-gray-500">{t("calendar.outro")}</p>
         {/* Only on the standalone page — inline, the surrounding page already
             carries its own navigation and this would be a link to itself. */}

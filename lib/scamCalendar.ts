@@ -383,6 +383,57 @@ export function daysUntilStart(season: ScamSeason, date: DateLike): number {
 }
 
 /**
+ * Days remaining in a season's window, counting the end day itself.
+ *
+ * Only meaningful while the season is active — the wrap-around that makes
+ * daysUntilStart total over the year would here turn "ended three weeks ago"
+ * into "340 days left", which reads as a season that has barely begun. Callers
+ * check isActiveOn first; this returns 0 rather than a wrapped figure so a
+ * missed check degrades to a quiet "last day" instead of a confident lie.
+ */
+export function daysUntilEnd(season: ScamSeason, date: DateLike): number {
+  if (!isActiveOn(season, date)) return 0;
+
+  const { month, day } = asCivilDate(date);
+  const today = dayOfYear(month, day);
+  const end = dayOfYear(season.window.endMonth, season.window.endDay);
+
+  // Inclusive of the end day: on 30 October a window closing 31 October has one
+  // day left, not zero. A wrapping window (Nov 20 → Jan 15) puts the end behind
+  // today for the whole November–December leg, so the year's length is added
+  // back exactly as in daysUntilStart.
+  const diff = end - today;
+  return diff >= 0 ? diff : diff + 365;
+}
+
+/**
+ * Seasons that aren't active and aren't in the "coming up" strip, ordered by
+ * how soon they start.
+ *
+ * Split out from the component because the ordering is the point: taking the
+ * authored list and removing what's shown above leaves the remainder in
+ * *authoring* order, which for AU interleaves January and June seasons and
+ * reads as a bug. Sorting by the same key the strip uses makes the two
+ * sections one continuous walk forward through the year, split by a fold.
+ */
+export function remainingSeasons(
+  code: RegionCode,
+  date: DateLike,
+  upcomingLimit: number,
+): ScamSeason[] {
+  const shown = new Set([
+    ...activeSeasons(code, date),
+    ...upcomingSeasons(code, date, upcomingLimit),
+  ].map((s) => s.id));
+
+  return calendarForRegion(code)
+    .filter((s) => !shown.has(s.id))
+    .map((season) => ({ season, days: daysUntilStart(season, date) }))
+    .sort((a, b) => a.days - b.days)
+    .map(({ season }) => season);
+}
+
+/**
  * Seasons that aren't active yet, ordered by how soon they start.
  *
  * `limit` defaults to 3 — the calendar's "coming up" strip is a glance, not an
@@ -398,6 +449,51 @@ export function upcomingSeasons(code: RegionCode, date: DateLike, limit = 3): Sc
     .sort((a, b) => a.days - b.days)
     .slice(0, limit)
     .map(({ season }) => season);
+}
+
+/** A season's window projected onto the year, as fractions in [0, 1]. */
+export interface SeasonBand {
+  season: ScamSeason;
+  /** Fraction of the year at which the window opens. */
+  start: number;
+  /** Fraction of the year the window covers. Never crosses the year end. */
+  length: number;
+}
+
+/** Where today sits in the year, as a fraction in [0, 1). */
+export function yearFraction(date: DateLike): number {
+  const { month, day } = asCivilDate(date);
+  return (dayOfYear(month, day) - 1) / 365;
+}
+
+/**
+ * Season windows as bands on a single left-to-right year axis.
+ *
+ * A wrapping window (Nov 20 → Jan 15) has no single span on an axis that starts
+ * in January, so it emits *two* bands — the December leg and the January leg —
+ * rather than one band drawn backwards or silently clipped. Both carry the same
+ * season, so a caller keying on season.id must expect duplicates; the ribbon
+ * draws them as two segments of one campaign, which is what they are.
+ */
+export function seasonBands(code: RegionCode): SeasonBand[] {
+  const bands: SeasonBand[] = [];
+
+  for (const season of calendarForRegion(code)) {
+    const { startMonth, startDay, endMonth, endDay } = season.window;
+    const start = dayOfYear(startMonth, startDay) - 1;
+    const end = dayOfYear(endMonth, endDay);
+
+    if (start < end) {
+      bands.push({ season, start: start / 365, length: (end - start) / 365 });
+      continue;
+    }
+
+    // Wraps: the tail of the year, then the head of the next.
+    bands.push({ season, start: start / 365, length: (365 - start) / 365 });
+    bands.push({ season, start: 0, length: end / 365 });
+  }
+
+  return bands;
 }
 
 const MONTH_NAMES = [

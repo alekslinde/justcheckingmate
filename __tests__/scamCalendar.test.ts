@@ -5,7 +5,11 @@ import {
   isActiveOn,
   activeSeasons,
   upcomingSeasons,
+  remainingSeasons,
   daysUntilStart,
+  daysUntilEnd,
+  seasonBands,
+  yearFraction,
   formatWindow,
   regionToday,
   isWellFormedWindow,
@@ -151,6 +155,112 @@ describe("daysUntilStart", () => {
     const s = season({ startMonth: 2, startDay: 1, endMonth: 3, endDay: 1 });
     // From 2 Feb, next February start is nearly a full year away.
     expect(daysUntilStart(s, on(2, 2))).toBeGreaterThan(300);
+  });
+});
+
+describe("daysUntilEnd", () => {
+  it("counts inclusively to the last day", () => {
+    const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
+    expect(daysUntilEnd(s, on(10, 30))).toBe(1);
+  });
+
+  it("is zero on the final day", () => {
+    const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
+    expect(daysUntilEnd(s, on(10, 31))).toBe(0);
+  });
+
+  it("handles a window that wraps the year end", () => {
+    const s = season({ startMonth: 11, startDay: 20, endMonth: 1, endDay: 15 });
+    // 1 December sits in the November leg; the 15 January close is 45 days on.
+    expect(daysUntilEnd(s, on(12, 1))).toBe(45);
+    // 1 January sits in the January leg — same window, no wrap needed.
+    expect(daysUntilEnd(s, on(1, 1))).toBe(14);
+  });
+
+  // The guard that keeps an inactive season from reporting most of a year left.
+  it("returns zero rather than a wrapped count when inactive", () => {
+    const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
+    expect(daysUntilEnd(s, on(11, 20))).toBe(0);
+  });
+});
+
+describe("remainingSeasons", () => {
+  it("excludes active and upcoming seasons", () => {
+    const date = on(8, 10);
+    const ids = remainingSeasons("AU", date, 2).map((s) => s.id);
+    const shown = [
+      ...activeSeasons("AU", date).map((s) => s.id),
+      ...upcomingSeasons("AU", date, 2).map((s) => s.id),
+    ];
+    for (const id of shown) expect(ids).not.toContain(id);
+  });
+
+  it("orders by soonest start rather than authored order", () => {
+    const date = on(8, 10);
+    const list = remainingSeasons("AU", date, 2);
+    const gaps = list.map((s) => daysUntilStart(s, date));
+    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
+  });
+
+  it("accounts for every authored season exactly once across the three groups", () => {
+    const date = on(8, 10);
+    const ids = [
+      ...activeSeasons("AU", date),
+      ...upcomingSeasons("AU", date, 2),
+      ...remainingSeasons("AU", date, 2),
+    ].map((s) => s.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.sort()).toEqual(calendarForRegion("AU").map((s) => s.id).sort());
+  });
+
+  it("returns nothing for a region with no calendar", () => {
+    expect(remainingSeasons("US", on(8, 10), 2)).toEqual([]);
+  });
+});
+
+describe("seasonBands", () => {
+  it("emits one band per non-wrapping season and two for a wrapping one", () => {
+    const bands = seasonBands("AU");
+    const wrapping = calendarForRegion("AU").filter(
+      (s) =>
+        s.window.startMonth * 100 + s.window.startDay >
+        s.window.endMonth * 100 + s.window.endDay,
+    );
+    expect(bands).toHaveLength(calendarForRegion("AU").length + wrapping.length);
+  });
+
+  it("keeps every band inside the year", () => {
+    for (const band of seasonBands("AU")) {
+      expect(band.start).toBeGreaterThanOrEqual(0);
+      expect(band.length).toBeGreaterThan(0);
+      expect(band.start + band.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("splits a wrapping season into a tail and a head segment", () => {
+    const parts = seasonBands("AU").filter((b) => b.season.id === "christmas-parcels");
+    expect(parts).toHaveLength(2);
+    expect(parts.some((b) => b.start === 0)).toBe(true);
+    expect(parts.some((b) => b.start + b.length === 1)).toBe(true);
+  });
+
+  it("returns nothing for a region with no calendar", () => {
+    expect(seasonBands("US")).toEqual([]);
+  });
+});
+
+describe("yearFraction", () => {
+  it("is zero on 1 January and near one at year end", () => {
+    expect(yearFraction(on(1, 1))).toBe(0);
+    expect(yearFraction(on(12, 31))).toBeCloseTo(1, 1);
+    expect(yearFraction(on(12, 31))).toBeLessThan(1);
+  });
+
+  it("increases monotonically through the year", () => {
+    const points = [on(1, 1), on(4, 15), on(7, 1), on(10, 31), on(12, 20)];
+    const fractions = points.map(yearFraction);
+    expect([...fractions].sort((a, b) => a - b)).toEqual(fractions);
   });
 });
 
