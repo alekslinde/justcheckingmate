@@ -878,6 +878,10 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("well-known company"))).toBe(true);
   });
 
+  // All three stay in brandMentions, including "ahm" — a message body naming a
+  // fund is the lure itself, and the boundary match makes it safe here. Only the
+  // URL checker drops "ahm", where a hostname label can legitimately be that
+  // token; see the typosquat test below.
   it.each(["nib", "hcf", "ahm"])(
     "boundary-matches the short health fund %p rather than substring-matching it (D4)",
     (fund) => {
@@ -909,6 +913,14 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     }
     // Separator-split label matching keeps these clear.
     for (const host of ["https://bonnibel.com", "https://ahmed-photography.com"]) {
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, hit: false });
+    }
+    // "ahm" is not a URL-checker brand: boundary matching stops substring
+    // collisions but not a label that genuinely IS the token, and "ahm" is a
+    // common surname/initialism, so these unrelated businesses would have
+    // scored the full +45 brand hit — likely_scam on that signal alone.
+    for (const host of ["http://ahm-photography.com", "http://ahm-legal.com", "http://ahm-transport.com"]) {
       expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
         .toEqual({ host, hit: false });
     }
@@ -1003,6 +1015,13 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       // office chatter a hit.
       "Our logo.svg file lives in the shared drive.",
       "The icon.svg document is in the brand kit.",
+      // Regression: the URL guard only covered absolute and quoted-attribute
+      // .svg, so a root-relative or unquoted src — just as ordinary in real
+      // HTML mail — was still read as an attachment.
+      "<img src=/assets/logo.svg> your statement is ready",
+      "<img src=logo.svg> see the statement below",
+      'Footer <img src="/assets/logo.svg"> statement',
+      "<img src='/img/pixel.svg'> your invoice is ready to view online",
     ];
     for (const text of benign) {
       const flags = checkEmail(text).flags.join(" | ");
@@ -1027,6 +1046,20 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
     expect(result.score).toBe(25);
     expect(result.verdict).not.toBe("likely_scam");
+  });
+
+  it("still charges the SVG signal when the email carries two distinct attachments (D6)", () => {
+    // The de-dup is about one file described twice, not about the word
+    // "attachment" appearing anywhere in the email. Keying it off a whole-text
+    // boolean suppressed the SVG charge here too — under-scoring a mail that
+    // carries a decoy document AND an SVG payload, which is strictly worse than
+    // the single-file case it was meant to protect.
+    const result = checkEmail(
+      "Please open the attached document.\n\nSeparately, your invoice.svg is attached for the other account.",
+    );
+    expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("Prompts you to open"))).toBe(true);
+    expect(result.score).toBe(45);
   });
 
   it("still escalates an SVG attachment when a real second signal is present (D6)", () => {

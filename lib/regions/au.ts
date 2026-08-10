@@ -254,8 +254,9 @@ const TYPOSQUAT_BRANDS = [
   // verified ABN matching the name, which is the eligibility gate the field
   // documents; revisiting it would be a pack-wide change to trustedHostSuffixes.
   //
-  // "nib", "hcf" and "ahm" are too short for hostname substring matching and go
-  // in the word list below.
+  // "nib" and "hcf" are too short for hostname substring matching and go in the
+  // word list below. "ahm" is excluded from the URL checker entirely — see the
+  // note there; it stays in brandMentions, which is where the lures name it.
   "medibank", "bupa",
 ];
 
@@ -267,7 +268,23 @@ const TYPOSQUAT_BRANDS = [
 // The short health funds (D4) rely on the same mechanism: the checker splits the
 // registrable label on separators, so "nib-renewal.com" and "hcf-login.net" hit
 // while "bonnibel.com" and "ahmed-photography.com" don't.
-const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "ahm"];
+//
+// "ahm" is deliberately absent, on review. Boundary matching stops the
+// substring collisions but not a hostname whose label genuinely *is* the token:
+// "ahm-photography.com" and "ahm-legal.com" split to ["ahm","..."] and score the
+// full +45 brand hit, which is likely_scam on that signal alone. Unlike nib (a
+// pen tip) and hcf (an initialism), "ahm" is a common surname and personal
+// initialism with no health-insurance meaning outside AU, so the plausible
+// hostname space is dominated by unrelated small businesses. The fund is still
+// covered where it matters — brandMentions carries "ahm" for message bodies,
+// which is where the lures actually name it.
+//
+// nib and hcf are kept, but the same failure mode exists for them in a milder
+// form ("nib-pens.com", "hcf-plumbing.com"), as it already did for the
+// pre-existing "agl" ("agl-industries.com"). Worth revisiting for all three
+// together if the URL checker ever gains a co-signal requirement for short
+// brands; not worth diverging from the established pattern for one entry here.
+const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf"];
 
 // Consumer (non-government) brands impersonated in SMS bodies.
 const BRAND_MENTIONS = [
