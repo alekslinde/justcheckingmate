@@ -104,6 +104,17 @@ npm run build    ← Production build
 - Detection logic is intentionally open source: transparency lets the
   community improve it, and obscuring keyword lists wouldn't stop
   sophisticated scammers.
-- Next.js 15.5 / React 19 / Tailwind v4 are newer than most training data —
+- Next.js 16.3 / React 19 / Tailwind v4 are newer than most training data —
   check the official docs rather than assuming older behaviour.
 ```
+
+---
+
+## Next.js agent rules
+
+`next dev` maintains a managed block of Next-specific agent rules. It lives in
+`AGENTS.md` — Next rewrites that file on version bumps, so treat it as
+generated and don't hand-edit it. The import below pulls it into this file so
+the rules still load; keep the line so the block stays out of CLAUDE.md.
+
+@AGENTS.md
