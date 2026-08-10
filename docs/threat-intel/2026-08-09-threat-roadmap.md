@@ -4,6 +4,14 @@ _Weekly threat-intelligence sweep. Research and proposals only — no detection
 code is modified in this document. All proposals require human review before
 implementation._
 
+> **Delivery status (2026-08-10).** All six proposals have since been
+> implemented and this document has been annotated in place: D1–D3 via
+> #141/#142/#143, D4–D6 via `detector/roadmap-d4-d6`. Two Pack-Interface Notes
+> (D4, D5) rested on premises that turned out to be wrong about how the scorer
+> works; both are struck through and corrected there rather than silently
+> edited, since the reasoning is what the next sweep will reuse. The research
+> below is otherwise preserved as written at sweep time.
+
 ---
 
 ## Executive Summary
@@ -17,8 +25,9 @@ uptick in SVG-embedded redirect campaigns globally.
 
 For AU specifically, peak tax-season pressure is producing two fresh surfaces:
 **state government agency impersonation** (VicRoads, Service NSW, etc.) and
-**customs/import-duty fee** smishing — both carried forward from last week
-where they remain unimplemented. Two medium-priority signals round out the AU
+**customs/import-duty fee** smishing — both carried forward from last week where
+they remained unimplemented at the time of writing (both have since shipped; see
+Delivery status above). Two medium-priority signals round out the AU
 column: a **super "rule change" credential lure** exploiting July 2026 SG
 changes, and **private health insurer impersonation** (Medibank, Bupa, nib, hcf)
 which has appeared in phishing kits distributed in AU-targeting forums.
@@ -191,14 +200,19 @@ Sources: APWG Phishing Activity Trends Q2 2026; Proofpoint Threat Insight July
 _Routing: `base.ts` = fires in all regions; `lib/regions/XX.ts` = region-specific._
 _FP column: Low (<1%), Medium (1–5%), High (>5%) estimated false-positive rate._
 
-| # | Tactic | Proposed Addition | Target File | Region | FP | Priority |
-|---|--------|-------------------|-------------|--------|----|----------|
-| D1 | State gov agency impersonation | Add `"vicroads"`, `"service nsw"`, `"servicensw"`, `"transport nsw"`, `"revenue nsw"`, `"tmr qld"`, `"qld transport"`, `"dot wa"`, `"sa dept of transport"`, `"vcat"` to `authorityMentions.word[]` in au.ts | `lib/regions/au.ts` | AU | Low | **HIGH** |
-| D2 | Customs / import-duty fee (AU) | Add `"customs fee"`, `"customs charge"`, `"customs clearance"`, `"import duty"`, `"duty and handling"`, `"clearance fee"`, `"held at customs"`, `"held at border"`, `"held by customs"`, `"release your parcel"` to `urgency.parcel[]` in au.ts | `lib/regions/au.ts` | AU | Low | **HIGH** |
-| D3 | ClickFix macOS variant | Add to base.ts `requestWords[]`: `"open terminal"`, `"press cmd+space"`, `"press command+space"`, `"open spotlight"`, `"paste in terminal"`, `"run in terminal"`, `"curl \| bash"`, `"curl -s \| sh"`. Also extend ClickFix regex in scamDetector.ts `checkSms()` to cover macOS-specific clipboard patterns | `lib/regions/base.ts`, `lib/scamDetector.ts` | BASE | Medium (developer content; scored lower without other signals) | **HIGH** |
-| D4 | Private health insurer impersonation (AU) | Add `"medibank"`, `"bupa"` to `typosquatBrands.substring[]` and `brandMentions.substring[]`; add `"nib health"`, `"hcf"`, `"ahm"` to `brandMentions.substring[]`; add `"nib"` to `brandMentions.word[]` (short — needs word boundary) in au.ts | `lib/regions/au.ts` | AU | Low | **MEDIUM** |
-| D5 | Super "rule change" lure | Add `"super rule change"`, `"superannuation rule change"`, `"new super rules"`, `"super law change"`, `"changes to your super"` to `urgency.pension[]` in au.ts | `lib/regions/au.ts` | AU | Medium (financial news; should compound with authority or URL signal) | **MEDIUM** |
-| D6 | SVG phishing attachment | In `checkEmail()` in scamDetector.ts: add pattern matching `.svg` attachment references adjacent to credential-harvest language (`/\.svg[^a-z].*\b(attachment|attached|file|document)\b/i` or vice-versa); score +20 compound with existing sender-spoof or urgency signal | `lib/scamDetector.ts` | BASE | Medium (SVG in legitimate marketing email) | **MEDIUM** |
+**Status as of 2026-08-10: all six proposals are implemented.** D1–D3 shipped via
+#141/#142/#143; D4–D6 shipped in `detector/roadmap-d4-d6`. The "Proposed
+Addition" column records what was proposed at sweep time — where implementation
+review changed that, the deviation is recorded in Pack-Interface Notes below.
+
+| # | Tactic | Proposed Addition | Target File | Region | FP | Priority | Status |
+|---|--------|-------------------|-------------|--------|----|----------|--------|
+| D1 | State gov agency impersonation | Add `"vicroads"`, `"service nsw"`, `"servicensw"`, `"transport nsw"`, `"revenue nsw"`, `"tmr qld"`, `"qld transport"`, `"dot wa"`, `"sa dept of transport"`, `"vcat"` to `authorityMentions.word[]` in au.ts | `lib/regions/au.ts` | AU | Low | **HIGH** | **SHIPPED** (#141) |
+| D2 | Customs / import-duty fee (AU) | Add `"customs fee"`, `"customs charge"`, `"customs clearance"`, `"import duty"`, `"duty and handling"`, `"clearance fee"`, `"held at customs"`, `"held at border"`, `"held by customs"`, `"release your parcel"` to `urgency.parcel[]` in au.ts | `lib/regions/au.ts` | AU | Low | **HIGH** | **SHIPPED** (#142) |
+| D3 | ClickFix macOS variant | Add to base.ts `requestWords[]`: `"open terminal"`, `"press cmd+space"`, `"press command+space"`, `"open spotlight"`, `"paste in terminal"`, `"run in terminal"`, `"curl \| bash"`, `"curl -s \| sh"`. Also extend ClickFix regex in scamDetector.ts `checkSms()` to cover macOS-specific clipboard patterns | `lib/regions/base.ts`, `lib/scamDetector.ts` | BASE | Medium (developer content; scored lower without other signals) | **HIGH** | **SHIPPED** (#143) |
+| D4 | Private health insurer impersonation (AU) | Add `"medibank"`, `"bupa"` to `typosquatBrands.substring[]` and `brandMentions.substring[]`; add `"nib health"`, `"hcf"`, `"ahm"` to `brandMentions.substring[]`; add `"nib"` to `brandMentions.word[]` (short — needs word boundary) in au.ts | `lib/regions/au.ts` | AU | Low | **MEDIUM** | **SHIPPED** (2026-08-10) |
+| D5 | Super "rule change" lure | Add `"super rule change"`, `"superannuation rule change"`, `"new super rules"`, `"super law change"`, `"changes to your super"` to `urgency.pension[]` in au.ts | `lib/regions/au.ts` | AU | Medium (financial news; should compound with authority or URL signal) | **MEDIUM** | **SHIPPED** (2026-08-10) |
+| D6 | SVG phishing attachment | In `checkEmail()` in scamDetector.ts: add pattern matching `.svg` attachment references adjacent to credential-harvest language (`/\.svg[^a-z].*\b(attachment|attached|file|document)\b/i` or vice-versa); score +20 compound with existing sender-spoof or urgency signal | `lib/scamDetector.ts` | BASE | Medium (SVG in legitimate marketing email) | **MEDIUM** | **SHIPPED** (2026-08-10) |
 
 ---
 
@@ -224,23 +238,57 @@ it appears in legitimate developer-facing copy; the regex in `checkSms()` is the
 higher-confidence path for ClickFix.
 
 **D4 — `brandMentions.word[]` for `"nib"`:**
-`"nib"` is 3 characters, so `mentionsAny()` will apply word-boundary matching
-automatically. Confirm this behaviour against `mentionsAny()` in scamDetector.ts
-before placing it in `substring[]`. Use `word[]` explicitly for clarity and to
-avoid relying on the auto-boundary rule.
+~~`"nib"` is 3 characters, so `mentionsAny()` will apply word-boundary matching
+automatically.~~ **Corrected at implementation — this premise was wrong, and
+acting on it would have shipped the false positives it was trying to avoid.**
+
+The auto-boundary rule in `mentions()` applies to the *plain string arrays*
+(`authorityMentions`, `noLinkSenders`, `foreignAuthorityMentions`). `brandMentions`
+is a `BrandSet`, and `checkSms()` matches its `substring` half with a bare
+`lower.includes(b)` — no length check anywhere on that path. A three-character
+name placed in `substring[]` gets no protection at all.
+
+So `word[]` is not merely "clearer" here, it is load-bearing. Implemented with
+`"nib"`, `"hcf"` and `"ahm"` in `word[]`, alongside the existing `"agl"`:
+
+- `"nib"` is inside 92 `/usr/share/dict/words` entries, plus "nibble";
+- `"ahm"` is inside 41, overwhelmingly personal names (Ahmed, Ahmadi) — which
+  arrive constantly in the forwarded email this app parses;
+- `"hcf"` has zero dictionary hits but is boundary-matched anyway, rather than
+  resting on today's word list staying true.
+
+`"medibank"` and `"bupa"` are distinctive enough for `substring[]` as proposed.
+The same split applies to `typosquatBrands`, whose `word` half matches on
+separator-split hostname labels — so `nib-renewal.com` hits, `bonnibel.com`
+doesn't.
 
 **D5 — `urgency.pension[]` compound scoring:**
 "Rule change" is medium FP because financial news and legitimate fund
-communications also discuss regulatory changes. Implementor should check whether
-the pension urgency list is used standalone or requires compounding with another
-signal. If standalone, consider requiring co-occurrence with a link or authority
-mention before flagging.
+communications also discuss regulatory changes. ~~Implementor should check
+whether the pension urgency list is used standalone.~~ **Checked: it is
+standalone.** The groups are flattened into `RegionPack.urgencyWords` and scored
+directly in `checkSms()` at +10 per hit (capped at 35), with no compounding
+requirement.
+
+Rather than add a compounding gate for one group — which would have meant
+special-casing the flat union every other signal relies on — every entry is
+anchored to super/superannuation (`"super rule change"`, not `"rule change"`).
+The lure always names super in order to land the threat, so anchoring costs no
+recall, while a bare `"rule change"` would have fired on the ATO's own
+newsletters and ordinary HR mail.
 
 **D6 — `checkEmail()` SVG pattern:**
 Regex must not match `.svg` filenames appearing in email footers (e.g. company
 logo references). Anchoring on attachment-adjacent language ("see attached",
 "open the file", "download") reduces false positives. The score contribution
 (+20 suggested) should not be enough to reach `likely_scam` alone.
+
+Implemented as two alternatives so the extension matches in either order — the
+attachment noun may precede the filename ("see the attached invoice.svg") or
+follow it ("statement.svg is attached"). Both are bounded to a 40-character
+window so an attachment noun elsewhere in a long email doesn't reach down to a
+footer logo. Verified at +20: the signal alone lands at `suspicious`, and
+escalates only by compounding with the sender-spoof and urgency signals.
 
 ---
 
@@ -275,7 +323,13 @@ Items not proposed this week but worth monitoring:
   patterns.
 - **"Report Fraud" GB agency rename:** Pack maintainer should update
   `reportingBody` in gb.ts from "Action Fraud" to "Report Fraud" (or add both
-  for a transition window).
+  for a transition window). **Still outstanding as of 2026-08-10** — deliberately
+  left out of the D4–D6 implementation, which is AU/BASE scoped. Note this is
+  live user-facing copy in two places, not just the one the sweep found:
+  `reportingBody` (gb.ts:381) and the foreign-authority flag text (gb.ts:345),
+  which also ends "Report it to Action Fraud." Both currently point UK users at
+  a body decommissioned in December 2025, so this is a small correctness fix
+  rather than cosmetic housekeeping.
 - **SVG in AU-targeted campaigns specifically:** If SVG attachment reports
   become AU-specific in framing, consider au.ts supplementary scoring.
 
