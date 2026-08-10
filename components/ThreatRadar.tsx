@@ -75,8 +75,9 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
       <details className="group">
         {/* Matches the filter dropdowns on the reports page, which are the app's
             existing "open this to see more" affordance: a right-aligned chevron
-            at the same weight and near-white tint the native <select> indicator
-            inherits from `text-gray-200`.
+            at the same weight and near-white tint. Those dropdowns draw their
+            own chevron rather than using the native <select> indicator, which
+            iOS Safari paints in light-mode chrome regardless of text colour.
             The default <details> marker is suppressed because it can't be sized
             or coloured to match — it renders as a small dim triangle on the
             left, far weaker than the control it sits beside. Drawn as an inline
@@ -110,10 +111,9 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
                 )}
               </p>
             </div>
-            {/* Same geometry as the <select> chevrons on /submissions: a
-                downward V that rotates 180° on open. `text-gray-200` is the
-                colour those inherit; stroke-width 2.5 matches their visual
-                weight, which a 1.5 stroke at this size does not. */}
+            {/* Same geometry as the <select> chevrons on /submissions, which
+                are drawn from this same path at `text-gray-200` and
+                stroke-width 2.5 — a downward V, rotated 180° here on open. */}
             <svg
               className="shrink-0 w-5 h-5 mt-0.5 text-gray-200 transition-transform duration-200 group-open:rotate-180"
               viewBox="0 0 24 24"
