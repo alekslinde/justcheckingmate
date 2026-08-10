@@ -342,7 +342,7 @@ export const GB: RegionDefinition = {
 
   foreignAuthorityMentions: FOREIGN_AUTHORITY_MENTIONS,
   foreignAuthorityFlag:
-    "Claims to be a foreign or international police authority — Interpol and Europol have no direct enforcement powers over UK residents and never contact individuals to demand payment, and foreign police and consular officials have no jurisdiction in the UK. Report it to Action Fraud.",
+    "Claims to be a foreign or international police authority — Interpol and Europol have no direct enforcement powers over UK residents and never contact individuals to demand payment, and foreign police and consular officials have no jurisdiction in the UK. Report it to Report Fraud at reportfraud.police.uk.",
 
   bankIdentifiers: ["sort code", "iban"],
 
@@ -378,7 +378,24 @@ export const GB: RegionDefinition = {
   // away. Asserting one would be false, and the rule is skipped where the field
   // is absent.
 
-  reportingBody: "Action Fraud",
+  // Action Fraud was replaced by Report Fraud (reportfraud.police.uk, 0300 123
+  // 2040) — City of London Police launched the new service on 4 December 2025
+  // and completed the public switchover on 20 January 2026. Searches for Action
+  // Fraud now redirect there.
+  //
+  // The URL is included for the same reason the US pack carries
+  // reportfraud.ftc.gov: this string is the last line of a "this is almost
+  // certainly a scam" verdict, and a renamed agency is exactly where someone
+  // acting on that advice gets lost. Naming both forms during the transition
+  // would be worse — "report it to Report Fraud (formerly Action Fraud)" reads
+  // as uncertainty at the moment the user needs a clear instruction.
+  //
+  // Note the service covers England, Wales and Northern Ireland only; Scotland
+  // reports fraud to Police Scotland on 101. That gap predates the rename —
+  // Action Fraud had the same boundary — and the pack has no sub-national
+  // resolution to act on it, so the copy stays with the body that covers most
+  // GB users rather than asserting something wrong for Scottish ones.
+  reportingBody: "Report Fraud (reportfraud.police.uk)",
 
   phonePlan: {
     // Ofcom premium-rate ranges: 09 (premium services) and 070 (personal

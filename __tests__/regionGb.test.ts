@@ -30,8 +30,13 @@ describe("GB pack shape", () => {
     expect(resolveRegionPack("UK").code).not.toBe("GB");
   });
 
-  it("names Action Fraud as the reporting body", () => {
-    expect(pack.reportingBody).toBe("Action Fraud");
+  it("names Report Fraud as the reporting body, not the decommissioned Action Fraud", () => {
+    // City of London Police replaced Action Fraud with Report Fraud on
+    // 4 Dec 2025, public switchover 20 Jan 2026. This string is the last line of
+    // a "this is almost certainly a scam" verdict, so a stale agency name sends
+    // someone acting on that advice to a service that no longer exists.
+    expect(pack.reportingBody).toBe("Report Fraud (reportfraud.police.uk)");
+    expect(pack.reportingBody).not.toContain("Action Fraud");
   });
 
   it("omits senderIdFlag — the UK has no ACMA-style register", () => {
@@ -141,7 +146,9 @@ describe("GB SMS detection", () => {
       "GB",
     );
     expect(r.verdict).toBe("likely_scam");
-    expect(flagText(r)).toContain("action fraud");
+    // Points at Report Fraud, not the decommissioned Action Fraud.
+    expect(flagText(r)).toContain("reportfraud.police.uk");
+    expect(flagText(r)).not.toContain("action fraud");
   });
 
   it("detects the Government Gateway re-registration lure", () => {
@@ -368,9 +375,11 @@ describe("GB phone detection", () => {
     expect(notes).not.toContain("ATO");
   });
 
-  it("reports Action Fraud when a UK number scores badly", () => {
+  it("reports Report Fraud when a UK number scores badly", () => {
     const r = checkPhone("09112345678", "GB");
-    expect(r.details + r.flags.join(" ")).toContain("Action Fraud");
+    const copy = r.details + r.flags.join(" ");
+    expect(copy).toContain("Report Fraud");
+    expect(copy).toContain("reportfraud.police.uk");
   });
 });
 

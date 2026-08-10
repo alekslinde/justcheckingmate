@@ -931,23 +931,64 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     }
   });
 
-  it("documents the .com.au exemption's blanket effect on health-fund squats (D4)", () => {
-    // trustedHostSuffixes exempts .com.au wholesale, so a squat that manages to
-    // register one raises no impersonation flag. Pinned deliberately: this is a
-    // pack-wide property of the ABN-gated suffix rather than anything specific
-    // to the D4 brands — the long-standing commbank and mygov entries behave
-    // identically — and changing it means revisiting trustedHostSuffixes for
-    // every AU brand at once.
+  it("scores brand squats on .com.au now the blanket exemption is gone", () => {
+    // .com.au used to be exempt wholesale, so these raised no impersonation flag
+    // at all — the suffix scammers can buy with a free ABN was suppressing the
+    // strongest signal against them. Not specific to the D4 brands: the
+    // long-standing commbank and mygov entries were equally invisible.
     for (const host of [
       "http://medibank-renew-login.com.au",
       "http://commbank-secure-verify.com.au",
       "http://mygov-verify-login.com.au",
+      "http://anz-online-banking.com.au",
+      "http://westpac-secure.com.au",
+      "http://my-commbank.com.au",
+    ]) {
+      const result = checkUrl(host, undefined, "AU");
+      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, impersonation: true });
+    }
+  });
+
+  it("keeps real .com.au brand sites clean without the suffix exemption", () => {
+    // The protection that matters is the other exemption in checkUrl — the brand
+    // owning the registrable label — which is region-agnostic and unaffected by
+    // the trustedHostSuffixes change. Government sites keep their own exemption.
+    for (const host of [
+      "https://medibank.com.au", "https://www.medibank.com.au", "https://bupa.com.au",
+      "https://nib.com.au", "https://hcf.com.au", "https://ahm.com.au",
+      "https://commbank.com.au", "https://www.westpac.com.au", "https://anz.com.au",
+      "https://telstra.com.au", "https://qantas.com.au", "https://agl.com.au",
+      "https://my.gov.au", "https://ato.gov.au", "https://servicesaustralia.gov.au",
     ]) {
       const result = checkUrl(host, undefined, "AU");
       expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
         .toEqual({ host, impersonation: false });
-      // Not silent, though — the generic phishing-URL signals still fire.
-      expect({ host, verdict: result.verdict }).toEqual({ host, verdict: "suspicious" });
+    }
+  });
+
+  it("does not flag Velocity Frequent Flyer's own site or unrelated 'velocity' businesses", () => {
+    // "velocity" was a substring brand whose comment assumed the real site was
+    // .com.au and therefore exempt. It is velocityfrequentflyer.com — a .com,
+    // where no suffix exemption applied, and the brand never owned that label
+    // either, so the program's own site scored likely_scam. The bare word also
+    // hit unrelated real businesses.
+    for (const host of [
+      "https://www.velocityfrequentflyer.com",
+      "https://business.velocityfrequentflyer.com",
+      "https://join.velocityfrequentflyer.com",
+      "https://velocityglobal.com",
+      "https://velocitypartners.com",
+      "https://www.velocitybank.com",
+    ]) {
+      const result = checkUrl(host, undefined, "AU");
+      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, impersonation: false });
+    }
+    // The squat shapes must still score.
+    for (const host of ["http://velocity-points-login.cyou", "http://velocityfrequentflyer-login.top"]) {
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, hit: true });
     }
   });
 

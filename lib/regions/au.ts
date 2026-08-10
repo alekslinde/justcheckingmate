@@ -229,9 +229,25 @@ const TYPOSQUAT_BRANDS = [
   "australiansuper", "unisuper", "sunsuper", "cbus", "hesta", "ampsuper",
   // Loyalty programs (D2 / #81) — ACCC Feb 2026 Qantas impersonation alert;
   // top-3 impersonated AU loyalty brands. Already in emailHeaders.ts
-  // IMPERSONATED_BRANDS; this closes the URL-checker gap. Real domains end in
-  // .com.au, which the trusted-suffix guard already excludes.
-  "qantas", "velocity",
+  // IMPERSONATED_BRANDS; this closes the URL-checker gap.
+  //
+  // Bare "velocity" was here and was wrong twice over. The comment it carried
+  // claimed the real domains end in .com.au and were covered by the trusted
+  // suffix — but Velocity Frequent Flyer's actual site is
+  // velocityfrequentflyer.com, a .com, where no suffix exemption applies. The
+  // brand also never owned that registrable label ("velocityfrequentflyer" is
+  // not "velocity"), so exemption (2) missed it too: the program's own site, and
+  // its business./join. subdomains, all scored likely_scam.
+  //
+  // Worse, "velocity" is an ordinary English word and a common company name —
+  // velocityglobal.com, velocitypartners.com and velocitybank.com are unrelated
+  // real businesses that were all being called likely_scam on this signal alone.
+  //
+  // The full program name is distinctive enough to substring-match safely, and
+  // is what squats actually imitate. Bare "velocity" moves to the word list,
+  // where it still catches "velocity-points-login.cyou" without firing inside
+  // longer legitimate labels.
+  "qantas", "velocityfrequentflyer",
   // Energy retailers (D3 / #121). AGL and Origin Energy both have documented
   // AU phishing campaigns; August is peak winter billing season. Bare "agl" is
   // deliberately absent — it lives in the word-boundary list below, because
@@ -242,17 +258,10 @@ const TYPOSQUAT_BRANDS = [
   // Private health insurers (D4 / 2026-08-09 roadmap). Credential-harvest pages
   // for the big four AU funds.
   //
-  // Their real sites are .com.au, which trustedHostSuffixes exempts — so this
-  // fires on lookalikes off that suffix (medibank-renew.cyou) and stays quiet on
-  // medibank.com.au itself. Note the exemption is blanket: a squat that does get
-  // a .com.au ("medibank-renew-login.com.au") raises no impersonation flag
-  // either, and is left to the login/verify-keyword and no-HTTPS signals.
-  //
-  // That is a pack-wide property of the ABN-gated suffix, not something specific
-  // to these brands — commbank and mygov have always behaved the same way — so
-  // it is deliberately not worked around here. Registering one requires a
-  // verified ABN matching the name, which is the eligibility gate the field
-  // documents; revisiting it would be a pack-wide change to trustedHostSuffixes.
+  // medibank.com.au stays clean because the brand owns the registrable label,
+  // not because of any suffix exemption — and squats on the same suffix
+  // (medibank-renew-login.com.au) now score, since `.com.au` was removed from
+  // trustedHostSuffixes. See the note there.
   //
   // "nib" and "hcf" are too short for hostname substring matching and go in the
   // word list below. "ahm" is excluded from the URL checker entirely — see the
@@ -284,7 +293,11 @@ const TYPOSQUAT_BRANDS = [
 // pre-existing "agl" ("agl-industries.com"). Worth revisiting for all three
 // together if the URL checker ever gains a co-signal requirement for short
 // brands; not worth diverging from the established pattern for one entry here.
-const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf"];
+// "velocity" joins them: an ordinary English word, so substring matching scored
+// velocityglobal.com and the program's own velocityfrequentflyer.com. As a label
+// word it still catches "velocity-points-login.cyou" — the shape squats use —
+// while leaving longer legitimate labels alone.
+const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "velocity"];
 
 // Consumer (non-government) brands impersonated in SMS bodies.
 const BRAND_MENTIONS = [
@@ -397,7 +410,35 @@ export const AU: RegionDefinition = {
     `Named fraudulent investment platform detected ("${platform}") — ASIC and Scamwatch have issued specific warnings that this is a scam. Do not invest.`,
 
   typosquatBrands: { substring: TYPOSQUAT_BRANDS, word: TYPOSQUAT_WORD_BRANDS },
-  trustedHostSuffixes: [".gov.au", ".com.au"],
+  // Restricted registries only, matching every other pack.
+  //
+  // `.com.au` was removed after review. It was never a deliberate choice for AU:
+  // git blame puts it in the commit that added the UK pack, where the field was
+  // created to generalise `.co.uk` handling and simply inherited the existing
+  // hardcoded behaviour. Three reasons it had to go:
+  //
+  //  1. It was the only commercial suffix in any pack. Every other region lists
+  //     government/military-only suffixes (.gov.uk/.nhs.uk, .gov/.mil,
+  //     .gc.ca/.canada.ca, .govt.nz/.mil.nz, .gov.ie).
+  //  2. The ABN gate it rested on is real but is not proof of identity. auDA
+  //     does require a validated ABN/ACN, yet the ACCC warns plainly that
+  //     scammers register .au domains and even display stolen ABNs. An ABN is
+  //     free and takes minutes; the gate raises cost, it does not verify who you
+  //     are — which is what a blanket scoring exemption treats it as.
+  //  3. It suppressed brand scoring on exactly the domains scammers buy.
+  //     medibank-renew-login.com.au, commbank-secure-verify.com.au and
+  //     mygov-verify-login.com.au all raised no impersonation flag at all.
+  //
+  // Removing it costs nothing measurable: a sweep of every brand in this pack
+  // across .com.au/.net.au/.org.au plus www./secure./login./my. subdomains — 315
+  // canonical hosts — produced zero false positives. Real brand sites are
+  // already protected by the *other* exemption in checkUrl: the brand owning the
+  // registrable label ("medibank" IS the label in medibank.com.au). That guard
+  // is what does the real work, and it is region-agnostic.
+  //
+  // `.gov.au` stays: government registration is genuinely eligibility-verified,
+  // and it is the suffix the impersonated agencies actually use.
+  trustedHostSuffixes: [".gov.au"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 
