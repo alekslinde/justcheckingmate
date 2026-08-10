@@ -5,7 +5,12 @@ import {
   isActiveOn,
   activeSeasons,
   upcomingSeasons,
+  remainingSeasons,
   daysUntilStart,
+  daysUntilEnd,
+  seasonBands,
+  packSeasonBands,
+  yearFraction,
   formatWindow,
   regionToday,
   isWellFormedWindow,
@@ -17,8 +22,8 @@ import { supportedRegions } from "@/lib/regions";
 // with new Date(y, m, d) keeps the test independent of the runner's timezone.
 const on = (month: number, day: number) => new Date(2026, month - 1, day);
 
-const season = (window: ScamSeason["window"]): ScamSeason => ({
-  id: "test",
+const season = (window: ScamSeason["window"], id = "test"): ScamSeason => ({
+  id,
   title: "Test",
   window,
   confidence: "fixed",
@@ -151,6 +156,188 @@ describe("daysUntilStart", () => {
     const s = season({ startMonth: 2, startDay: 1, endMonth: 3, endDay: 1 });
     // From 2 Feb, next February start is nearly a full year away.
     expect(daysUntilStart(s, on(2, 2))).toBeGreaterThan(300);
+  });
+});
+
+describe("daysUntilEnd", () => {
+  it("counts inclusively to the last day", () => {
+    const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
+    expect(daysUntilEnd(s, on(10, 30))).toBe(1);
+  });
+
+  it("is zero on the final day", () => {
+    const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
+    expect(daysUntilEnd(s, on(10, 31))).toBe(0);
+  });
+
+  it("handles a window that wraps the year end", () => {
+    const s = season({ startMonth: 11, startDay: 20, endMonth: 1, endDay: 15 });
+    // 1 December sits in the November leg; the 15 January close is 45 days on.
+    expect(daysUntilEnd(s, on(12, 1))).toBe(45);
+    // 1 January sits in the January leg — same window, no wrap needed.
+    expect(daysUntilEnd(s, on(1, 1))).toBe(14);
+  });
+
+  // The guard that keeps an inactive season from reporting most of a year left.
+  it("returns zero rather than a wrapped count when inactive", () => {
+    const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
+    expect(daysUntilEnd(s, on(11, 20))).toBe(0);
+  });
+});
+
+describe("remainingSeasons", () => {
+  it("excludes active and upcoming seasons", () => {
+    const date = on(8, 10);
+    const ids = remainingSeasons("AU", date, 2).map((s) => s.id);
+    const shown = [
+      ...activeSeasons("AU", date).map((s) => s.id),
+      ...upcomingSeasons("AU", date, 2).map((s) => s.id),
+    ];
+    for (const id of shown) expect(ids).not.toContain(id);
+  });
+
+  it("orders by soonest start rather than authored order", () => {
+    const date = on(8, 10);
+    const list = remainingSeasons("AU", date, 2);
+    const gaps = list.map((s) => daysUntilStart(s, date));
+    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
+  });
+
+  it("accounts for every authored season exactly once across the three groups", () => {
+    const date = on(8, 10);
+    const ids = [
+      ...activeSeasons("AU", date),
+      ...upcomingSeasons("AU", date, 2),
+      ...remainingSeasons("AU", date, 2),
+    ].map((s) => s.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.sort()).toEqual(calendarForRegion("AU").map((s) => s.id).sort());
+  });
+
+  it("returns nothing for a region with no calendar", () => {
+    expect(remainingSeasons("US", on(8, 10), 2)).toEqual([]);
+  });
+});
+
+describe("seasonBands", () => {
+  it("emits one band per non-wrapping season and two for a wrapping one", () => {
+    const bands = seasonBands("AU");
+    const wrapping = calendarForRegion("AU").filter(
+      (s) =>
+        s.window.startMonth * 100 + s.window.startDay >
+        s.window.endMonth * 100 + s.window.endDay,
+    );
+    expect(bands).toHaveLength(calendarForRegion("AU").length + wrapping.length);
+  });
+
+  it("keeps every band inside the year", () => {
+    for (const band of seasonBands("AU")) {
+      expect(band.start).toBeGreaterThanOrEqual(0);
+      expect(band.length).toBeGreaterThan(0);
+      expect(band.start + band.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  // The mixed 0-based start / 1-based end in seasonBands is deliberate: the
+  // difference is an inclusive day count. Swept over every window an author
+  // could write, so a "tidy-up" that aligns the bases fails here.
+  it("stays inside the year for every representable window", () => {
+    const daysIn = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+    for (let sm = 1; sm <= 12; sm++) {
+      for (let em = 1; em <= 12; em++) {
+        for (const [sd, ed] of [[1, 1], [daysIn[sm], daysIn[em]], [1, daysIn[em]], [daysIn[sm], 1]]) {
+          const w = { startMonth: sm, startDay: sd, endMonth: em, endDay: ed };
+          const bands = packSeasonBands([season(w)]);
+
+          for (const band of bands) {
+            expect(band.start).toBeGreaterThanOrEqual(0);
+            expect(band.length).toBeGreaterThan(0);
+            expect(band.start + band.length).toBeLessThanOrEqual(1 + 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it("gives overlapping seasons different lanes", () => {
+    // 1–30 June sits entirely inside 1 June – 31 August.
+    const bands = packSeasonBands([
+      season({ startMonth: 6, startDay: 1, endMonth: 8, endDay: 31 }, "wide"),
+      season({ startMonth: 6, startDay: 1, endMonth: 6, endDay: 30 }, "narrow"),
+    ]);
+
+    expect(new Set(bands.map((b) => b.lane)).size).toBe(2);
+  });
+
+  it("reuses a lane for seasons that don't overlap", () => {
+    const bands = packSeasonBands([
+      season({ startMonth: 1, startDay: 1, endMonth: 2, endDay: 1 }, "early"),
+      season({ startMonth: 6, startDay: 1, endMonth: 7, endDay: 1 }, "late"),
+    ]);
+
+    expect(bands.every((b) => b.lane === 0)).toBe(true);
+  });
+
+  it("never overlaps two bands within a lane", () => {
+    const byLane = new Map<number, { start: number; length: number }[]>();
+    for (const band of seasonBands("AU")) {
+      const list = byLane.get(band.lane) ?? [];
+      list.push(band);
+      byLane.set(band.lane, list);
+    }
+
+    for (const list of byLane.values()) {
+      const sorted = [...list].sort((a, b) => a.start - b.start);
+      for (let i = 1; i < sorted.length; i++) {
+        expect(sorted[i].start).toBeGreaterThanOrEqual(
+          sorted[i - 1].start + sorted[i - 1].length,
+        );
+      }
+    }
+  });
+
+  it("uses no more lanes than the busiest overlap requires", () => {
+    // Nothing in the AU set stacks more than three deep on any single day.
+    const bands = seasonBands("AU");
+    const used = new Set(bands.map((b) => b.lane)).size;
+
+    let busiest = 0;
+    for (let d = 0; d < 365; d++) {
+      const point = d / 365;
+      const covering = bands.filter(
+        (b) => point >= b.start && point < b.start + b.length,
+      ).length;
+      busiest = Math.max(busiest, covering);
+    }
+
+    expect(used).toBe(busiest);
+  });
+
+  it("splits a wrapping season into a tail and a head segment", () => {
+    const parts = seasonBands("AU").filter((b) => b.season.id === "christmas-parcels");
+    expect(parts).toHaveLength(2);
+    expect(parts.some((b) => b.start === 0)).toBe(true);
+    expect(parts.some((b) => b.start + b.length === 1)).toBe(true);
+  });
+
+  it("returns nothing for a region with no calendar", () => {
+    expect(seasonBands("US")).toEqual([]);
+  });
+});
+
+describe("yearFraction", () => {
+  it("is zero on 1 January and near one at year end", () => {
+    expect(yearFraction(on(1, 1))).toBe(0);
+    expect(yearFraction(on(12, 31))).toBeCloseTo(1, 1);
+    expect(yearFraction(on(12, 31))).toBeLessThan(1);
+  });
+
+  it("increases monotonically through the year", () => {
+    const points = [on(1, 1), on(4, 15), on(7, 1), on(10, 31), on(12, 20)];
+    const fractions = points.map(yearFraction);
+    expect([...fractions].sort((a, b) => a - b)).toEqual(fractions);
   });
 });
 
