@@ -878,6 +878,10 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("well-known company"))).toBe(true);
   });
 
+  // All three stay in brandMentions, including "ahm" — a message body naming a
+  // fund is the lure itself, and the boundary match makes it safe here. Only the
+  // URL checker drops "ahm", where a hostname label can legitimately be that
+  // token; see the typosquat test below.
   it.each(["nib", "hcf", "ahm"])(
     "boundary-matches the short health fund %p rather than substring-matching it (D4)",
     (fund) => {
@@ -912,6 +916,14 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
         .toEqual({ host, hit: false });
     }
+    // "ahm" is not a URL-checker brand: boundary matching stops substring
+    // collisions but not a label that genuinely IS the token, and "ahm" is a
+    // common surname/initialism, so these unrelated businesses would have
+    // scored the full +45 brand hit — likely_scam on that signal alone.
+    for (const host of ["http://ahm-photography.com", "http://ahm-legal.com", "http://ahm-transport.com"]) {
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, hit: false });
+    }
     // The funds' real sites must stay clean.
     for (const host of ["https://www.medibank.com.au", "https://bupa.com.au"]) {
       expect({ host, verdict: checkUrl(host, undefined, "AU").verdict })
@@ -919,23 +931,64 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     }
   });
 
-  it("documents the .com.au exemption's blanket effect on health-fund squats (D4)", () => {
-    // trustedHostSuffixes exempts .com.au wholesale, so a squat that manages to
-    // register one raises no impersonation flag. Pinned deliberately: this is a
-    // pack-wide property of the ABN-gated suffix rather than anything specific
-    // to the D4 brands — the long-standing commbank and mygov entries behave
-    // identically — and changing it means revisiting trustedHostSuffixes for
-    // every AU brand at once.
+  it("scores brand squats on .com.au now the blanket exemption is gone", () => {
+    // .com.au used to be exempt wholesale, so these raised no impersonation flag
+    // at all — the suffix scammers can buy with a free ABN was suppressing the
+    // strongest signal against them. Not specific to the D4 brands: the
+    // long-standing commbank and mygov entries were equally invisible.
     for (const host of [
       "http://medibank-renew-login.com.au",
       "http://commbank-secure-verify.com.au",
       "http://mygov-verify-login.com.au",
+      "http://anz-online-banking.com.au",
+      "http://westpac-secure.com.au",
+      "http://my-commbank.com.au",
+    ]) {
+      const result = checkUrl(host, undefined, "AU");
+      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, impersonation: true });
+    }
+  });
+
+  it("keeps real .com.au brand sites clean without the suffix exemption", () => {
+    // The protection that matters is the other exemption in checkUrl — the brand
+    // owning the registrable label — which is region-agnostic and unaffected by
+    // the trustedHostSuffixes change. Government sites keep their own exemption.
+    for (const host of [
+      "https://medibank.com.au", "https://www.medibank.com.au", "https://bupa.com.au",
+      "https://nib.com.au", "https://hcf.com.au", "https://ahm.com.au",
+      "https://commbank.com.au", "https://www.westpac.com.au", "https://anz.com.au",
+      "https://telstra.com.au", "https://qantas.com.au", "https://agl.com.au",
+      "https://my.gov.au", "https://ato.gov.au", "https://servicesaustralia.gov.au",
     ]) {
       const result = checkUrl(host, undefined, "AU");
       expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
         .toEqual({ host, impersonation: false });
-      // Not silent, though — the generic phishing-URL signals still fire.
-      expect({ host, verdict: result.verdict }).toEqual({ host, verdict: "suspicious" });
+    }
+  });
+
+  it("does not flag Velocity Frequent Flyer's own site or unrelated 'velocity' businesses", () => {
+    // "velocity" was a substring brand whose comment assumed the real site was
+    // .com.au and therefore exempt. It is velocityfrequentflyer.com — a .com,
+    // where no suffix exemption applied, and the brand never owned that label
+    // either, so the program's own site scored likely_scam. The bare word also
+    // hit unrelated real businesses.
+    for (const host of [
+      "https://www.velocityfrequentflyer.com",
+      "https://business.velocityfrequentflyer.com",
+      "https://join.velocityfrequentflyer.com",
+      "https://velocityglobal.com",
+      "https://velocitypartners.com",
+      "https://www.velocitybank.com",
+    ]) {
+      const result = checkUrl(host, undefined, "AU");
+      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, impersonation: false });
+    }
+    // The squat shapes must still score.
+    for (const host of ["http://velocity-points-login.cyou", "http://velocityfrequentflyer-login.top"]) {
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+        .toEqual({ host, hit: true });
     }
   });
 
@@ -1003,6 +1056,13 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       // office chatter a hit.
       "Our logo.svg file lives in the shared drive.",
       "The icon.svg document is in the brand kit.",
+      // Regression: the URL guard only covered absolute and quoted-attribute
+      // .svg, so a root-relative or unquoted src — just as ordinary in real
+      // HTML mail — was still read as an attachment.
+      "<img src=/assets/logo.svg> your statement is ready",
+      "<img src=logo.svg> see the statement below",
+      'Footer <img src="/assets/logo.svg"> statement',
+      "<img src='/img/pixel.svg'> your invoice is ready to view online",
     ];
     for (const text of benign) {
       const flags = checkEmail(text).flags.join(" | ");
@@ -1027,6 +1087,20 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
     expect(result.score).toBe(25);
     expect(result.verdict).not.toBe("likely_scam");
+  });
+
+  it("still charges the SVG signal when the email carries two distinct attachments (D6)", () => {
+    // The de-dup is about one file described twice, not about the word
+    // "attachment" appearing anywhere in the email. Keying it off a whole-text
+    // boolean suppressed the SVG charge here too — under-scoring a mail that
+    // carries a decoy document AND an SVG payload, which is strictly worse than
+    // the single-file case it was meant to protect.
+    const result = checkEmail(
+      "Please open the attached document.\n\nSeparately, your invoice.svg is attached for the other account.",
+    );
+    expect(result.flags.some((f) => f.includes("SVG file attached"))).toBe(true);
+    expect(result.flags.some((f) => f.includes("Prompts you to open"))).toBe(true);
+    expect(result.score).toBe(45);
   });
 
   it("still escalates an SVG attachment when a real second signal is present (D6)", () => {

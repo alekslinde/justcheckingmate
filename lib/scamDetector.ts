@@ -782,32 +782,49 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   // several, so it stays unflagged.
   //
   // The URL guard matters independently: an .svg inside an href/src is an asset
-  // reference, not an attachment, so anything preceded by a scheme or a
-  // src=/href= attribute is excluded outright.
+  // reference, not an attachment. Scheme-prefixed URLs and attribute values are
+  // both excluded — quoted or not, absolute or root-relative, since
+  // `<img src=/assets/logo.svg>` is as ordinary as the quoted absolute form.
   //
   // Scored below the likely_scam threshold on purpose: an SVG attachment is a
   // delivery-mechanism signal, not proof of intent — see the +25 interaction
   // note at the scoring line below.
   const ATTACH_WORD = String.raw`attach(?:ment|ments|ed|ing)?|enclosed`;
   const PAYLOAD_NOUN = String.raw`invoice|statement|receipt|remittance`;
-  // .svg not sitting in a URL or an HTML attribute value.
-  const svgFile = String.raw`(?<!https?:\/\/[^\s"']{0,200})(?<!(?:src|href)\s*=\s*["'][^"']{0,200})\b[\w.-]+\.svg\b`;
-  const svgAttachment =
-    new RegExp(String.raw`\b(?:${ATTACH_WORD})\b[^\n]{0,40}?${svgFile}`, "i").test(text) ||
-    new RegExp(String.raw`${svgFile}[^\n]{0,40}?\b(?:${ATTACH_WORD})\b`, "i").test(text) ||
-    new RegExp(String.raw`\b(?:${PAYLOAD_NOUN})\b[^\n]{0,20}?${svgFile}`, "i").test(text) ||
-    new RegExp(String.raw`${svgFile}[^\n]{0,20}?\b(?:${PAYLOAD_NOUN})\b`, "i").test(text);
-  if (svgAttachment) {
+  // .svg not sitting in a URL or an HTML attribute value. The three lookbehinds
+  // cover, in order: an absolute URL; a quoted attribute value; and an unquoted
+  // or root-relative attribute value (`src=/assets/logo.svg`, `src=logo.svg`),
+  // which the quoted pattern alone misses.
+  const svgFile = String.raw`(?<!https?:\/\/[^\s"']{0,200})(?<!(?:src|href)\s*=\s*["'][^"']{0,200})(?<!(?:src|href)\s*=\s*[^\s"'<>]{0,200})\b[\w.-]+\.svg\b`;
+  const svgPatterns = [
+    new RegExp(String.raw`\b(?:${ATTACH_WORD})\b[^\n]{0,40}?${svgFile}`, "i"),
+    new RegExp(String.raw`${svgFile}[^\n]{0,40}?\b(?:${ATTACH_WORD})\b`, "i"),
+    new RegExp(String.raw`\b(?:${PAYLOAD_NOUN})\b[^\n]{0,20}?${svgFile}`, "i"),
+    new RegExp(String.raw`${svgFile}[^\n]{0,20}?\b(?:${PAYLOAD_NOUN})\b`, "i"),
+  ];
+  const svgMatch = svgPatterns.reduce<RegExpMatchArray | null>(
+    (found, re) => found ?? text.match(re), null);
+  if (svgMatch) {
     flags.push("SVG file attached — SVG attachments are a known phishing delivery trick: the file looks like an image but can carry hidden code that opens a fake login page in your browser. Legitimate invoices and statements are not sent as .svg.");
-    // Only additive when the generic open-attachment rule above hasn't already
-    // scored. "Please open the attached invoice.svg" is one attachment, and
-    // both rules describe it — charging 25 + 20 double-counts a single fact and
-    // landed it on exactly 45, the likely_scam boundary, purely by arithmetic.
-    // Where both fire, the SVG flag still replaces the generic wording with the
-    // specific warning; it just doesn't stack a second charge for the same
-    // observation. Alone it stays at +20 (suspicious), escalating only by
-    // compounding with genuinely independent signals like sender spoofing.
-    if (!opensAttachment) score += 20;
+    // De-duplicated against the generic open-attachment rule above, but only
+    // when both are describing the *same* attachment. "Please open the attached
+    // invoice.svg" is one file and both rules match it — charging 25 + 20
+    // double-counts a single fact and landed it on exactly 45, the likely_scam
+    // boundary, purely by arithmetic.
+    //
+    // The test is locality, not a whole-text boolean: an email can legitimately
+    // say "open the attached remittance advice" in one paragraph and carry a
+    // separate invoice.svg in another. Those are two attachments and two
+    // independent facts, so the SVG charge still applies. Keying off
+    // `opensAttachment` alone suppressed it there too, which under-scored a
+    // strictly worse email than the single-file case.
+    //
+    // Where both do describe one file, the SVG flag still replaces the generic
+    // wording with the specific warning; it just doesn't stack a second charge.
+    const opensSameFile =
+      opensAttachment &&
+      new RegExp(String.raw`open.{0,20}(?:attachment|file|document|invoice)[^\n]{0,20}?\.svg\b`, "i").test(text);
+    if (!opensSameFile) score += 20;
   }
 
   // Device code / OAuth token phishing (D4 / #75 / FBI PSA260521). Attackers
