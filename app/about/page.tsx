@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "About & Privacy — Just Checking, Mate",
   description:
-    "What Just Checking, Mate stores, what it never stores (your IP, your uploads), how the checker works, and how to block and report spam in common email clients, phones and messaging apps.",
+    "What Just Checking, Mate stores, what it never stores (your IP, your uploads), how the checker works, which countries it covers, and how to block and report spam in common email clients, phones and messaging apps.",
 };
 
 // This page is the canonical record of the project's privacy behaviour, so it
@@ -33,9 +33,10 @@ export default function AboutPage() {
         <section className="space-y-3">
           <h2 className={H2}>What this is</h2>
           <p className={P}>
-            Just Checking, Mate is a free scam checker built for Australians. Paste a suspicious
-            link, text, email or phone number and get an instant best-effort verdict — no account,
-            no tracking, no data sold. It&apos;s an independent project by{" "}
+            Just Checking, Mate is a free scam checker built for Australians, with local coverage
+            for the UK, US, New Zealand and Ireland as well. Paste a suspicious link, text, email
+            or phone number and get an instant best-effort verdict — no account, no tracking, no
+            data sold. It&apos;s an independent project by{" "}
             <a
               href="https://alekslinde.com"
               target="_blank"
@@ -67,6 +68,50 @@ export default function AboutPage() {
             analysis is pure pattern-matching — no request is ever made to a scammer&apos;s site, so
             they can&apos;t tell their link is being investigated. Our security policy blocks the
             browser from contacting any outside server.
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className={H2}>Where we think you are</h2>
+          <p className={P}>
+            Scams are local, so the checks are too — the agencies, banks, brands and phone-number
+            rules we match against are the ones for your country. We cover Australia, the UK, the
+            US, New Zealand and Ireland in full, Canada in part, and fall back to
+            country-neutral checks everywhere else.
+          </p>
+          <p className={P}>
+            To pick the right set we use{" "}
+            <strong className="text-gray-100">a two-letter country code, and nothing finer</strong>{" "}
+            — derived from your connection by the network, never read from your IP address by us,
+            and not stored when you run a check. If it guesses wrong, because you&apos;re
+            travelling or on a VPN, you can change the region yourself and check again.
+          </p>
+          <p className={P}>
+            <strong className="text-gray-100">We tell you when we haven&apos;t checked much.</strong>{" "}
+            Outside the countries we cover properly, &ldquo;nothing found&rdquo; can just mean
+            &ldquo;we have no local rules to find it with&rdquo; — so instead of showing a
+            confident all-clear, we say the coverage is limited and show you what to look for
+            yourself.
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className={H2}>Threat radar &amp; scam calendar</h2>
+          <p className={P}>
+            The <Link href="/radar" className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300">threat radar</Link>{" "}
+            lists campaigns doing the rounds in the last few weeks, and the{" "}
+            <Link href="/calendar" className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300">scam calendar</Link>{" "}
+            shows when scams spike through the year — tax time, Black Friday, the Christmas parcel
+            rush. Both are hand-written from published threat intelligence and{" "}
+            <strong className="text-gray-100">read nothing about you</strong>; they&apos;re the same
+            pages for everyone in your country.
+          </p>
+          <p className={P}>
+            Both are there to teach, and{" "}
+            <strong className="text-gray-100">neither changes a verdict</strong>. The date is never
+            part of the score: a tax scam in March is still a scam, and a genuine ATO email in July
+            is still genuine. The radar also says plainly which campaigns we catch and which we
+            don&apos;t yet.
           </p>
         </section>
 
