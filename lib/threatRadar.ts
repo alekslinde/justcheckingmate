@@ -122,10 +122,37 @@ export interface ThreatEntry {
    */
   detection?: string;
   /**
-   * The sweep this was promoted from, e.g. "2026-08-09". Renders as a link to
-   * the roadmap in docs/threat-intel/ so a reader can follow the evidence.
+   * The sweep this was promoted from, e.g. "2026-08-09". Rendered as a link to
+   * the roadmap so a reader can follow the evidence — see roadmapUrl().
    */
   roadmap: string;
+}
+
+/**
+ * Where the roadmaps are published.
+ *
+ * They live in docs/ and are not served by the app, so the evidence link has to
+ * point at the repository. That is not a workaround: the sweeps are markdown
+ * research documents with their own review history, and GitHub renders them
+ * with that history attached, which is more of the provenance than a rehosted
+ * copy would carry.
+ *
+ * Hardcoded rather than derived from SITE_URL — the repo origin and the site
+ * origin are different things, and deriving one from the other would break the
+ * link on any deploy that isn't the canonical one.
+ */
+const ROADMAP_BASE =
+  "https://github.com/alekslinde/justcheckingmate/blob/main/docs/threat-intel";
+
+/**
+ * Public URL for the sweep an entry was promoted from.
+ *
+ * The filename convention is asserted by a test against the real directory, so
+ * a renamed roadmap fails CI rather than shipping a 404 in place of the
+ * evidence — which would be worse than showing no citation at all.
+ */
+export function roadmapUrl(entry: ThreatEntry): string {
+  return `${ROADMAP_BASE}/${entry.roadmap}-threat-roadmap.md`;
 }
 
 // ── Australia ───────────────────────────────────────────────────────────────

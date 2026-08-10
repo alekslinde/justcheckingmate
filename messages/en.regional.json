@@ -91,7 +91,7 @@
   "calendar.neutrality": "Background knowledge only — we give every message the same once-over, whatever the date.",
   "calendar.outro": "Out of season doesn't mean you're right. These run all year — they just work best when you're half expecting them.",
   "calendar.empty.body": "We only put up seasonal patterns for places we've actually done the legwork on. Having a guess at another country's tax dates would be worse than saying nothing.",
-  "radar.intro": "What's actually going round Australia right now, pulled from our weekly look at the scam reporting. Each one tells you straight whether we catch it yet.",
+  "radar.intro": "What's actually going round {region} right now, pulled from our weekly look at the scam reporting. Each one tells you straight whether we catch it yet.",
   "radar.neutrality": "Background knowledge only — being on this list doesn't change how we score a message.",
   "radar.active.heading": "Going round right now",
   "radar.watchlist.heading": "Gone quiet, but not gone",
@@ -99,6 +99,9 @@
   "radar.coverage.none.body": "No rule for this one yet, and we'd rather say so. The advice above is what's protecting you.",
   "radar.coverage.na.body": "This one happens on a call or on paper, so there's no message for us to have a squiz at. Knowing the script is the defence.",
   "radar.empty.body": "We only put up live campaign data for places we've actually done the legwork on. Showing you another country's scams would be worse than showing you none.",
-  "radar.method.body": "We go through scam reporting from government bodies, security researchers and Australian sources every week. What's here gets promoted by hand off the back of that — nothing's pulled in automatically, because the sources worth trusting most don't publish feeds.",
-  "home.radar.heading": "Going round right now"
+  "radar.method.body": "We go through scam reporting from government bodies, security researchers and local sources every week. What's here gets promoted by hand off the back of that — nothing's pulled in automatically, because the sources worth trusting most don't publish feeds.",
+  "home.radar.heading": "Going round right now",
+  "radar.coverage.partial": "Half caught",
+  "radar.coverage.none": "Not caught yet",
+  "radar.coverage.na": "Nothing to catch in text"
 }

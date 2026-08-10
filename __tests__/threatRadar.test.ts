@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   radarForRegion,
   hasRadar,
@@ -7,10 +9,12 @@ import {
   lastUpdated,
   isWellFormedDate,
   formatRadarDate,
+  roadmapUrl,
   type ThreatEntry,
 } from "@/lib/threatRadar";
 import { supportedRegions } from "@/lib/regions";
 import enNormal from "@/messages/en.normal.json";
+import enRegional from "@/messages/en.regional.json";
 
 const AU = radarForRegion("AU");
 
@@ -53,13 +57,27 @@ describe("authoring invariants", () => {
     }
   });
 
-  it("cites a roadmap that exists in docs/threat-intel", async () => {
+  it("cites a roadmap that exists in docs/threat-intel", () => {
     // The roadmap link is the whole provenance claim — an entry citing a sweep
-    // that doesn't exist is an unsourced assertion presented as a sourced one.
-    const { existsSync } = await import("node:fs");
+    // that doesn't exist is an unsourced assertion presented as a sourced one,
+    // and now renders as a public 404 (see roadmapUrl).
+    //
+    // Resolved from __dirname rather than cwd: a cwd-relative path silently
+    // passes from the repo root and silently *stops checking* from anywhere
+    // else, which is the failure mode a provenance guard can least afford.
     for (const threat of AU) {
-      const path = `docs/threat-intel/${threat.roadmap}-threat-roadmap.md`;
+      const path = resolve(__dirname, `../docs/threat-intel/${threat.roadmap}-threat-roadmap.md`);
       expect(existsSync(path), `${threat.id} cites missing ${path}`).toBe(true);
+    }
+  });
+
+  it("builds a roadmap URL matching the checked filename", () => {
+    // Ties the rendered link to the assertion above: the test proves the file
+    // exists, this proves the URL points at that same filename.
+    for (const threat of AU) {
+      expect(roadmapUrl(threat)).toBe(
+        `https://github.com/alekslinde/justcheckingmate/blob/main/docs/threat-intel/${threat.roadmap}-threat-roadmap.md`,
+      );
     }
   });
 
@@ -92,6 +110,39 @@ describe("authoring invariants", () => {
       const coverageKey =
         threat.coverage === "n/a" ? "radar.coverage.na" : `radar.coverage.${threat.coverage}`;
       expect(keys.has(coverageKey), threat.coverage).toBe(true);
+    }
+  });
+});
+
+describe("i18n", () => {
+  it("translates the coverage badges as a complete set in the regional tone", () => {
+    // These four render side by side in one list. Overriding some and not others
+    // put two registers in the same row of badges — the regional bundle said
+    // "We catch this one" next to the base "Partly caught".
+    //
+    // Partial override is legitimate for prose (a paragraph reads fine in the
+    // base register); it is not for a set of labels that appear together.
+    const keys = [
+      "radar.coverage.covered",
+      "radar.coverage.partial",
+      "radar.coverage.none",
+      "radar.coverage.na",
+    ] as const;
+
+    const overridden = keys.filter((k) => k in enRegional);
+    expect(overridden.length === 0 || overridden.length === keys.length, overridden.join(", ")).toBe(true);
+  });
+
+  it("keeps the {region} placeholder in every radar.intro translation", () => {
+    // The interpolation is what stops the intro hardcoding one country. A
+    // bundle that drops the token silently reintroduces the bug for that tone.
+    for (const [name, bundle] of [
+      ["normal", enNormal],
+      ["regional", enRegional],
+    ] as const) {
+      const intro = (bundle as Record<string, string>)["radar.intro"];
+      if (intro === undefined) continue;
+      expect(intro, name).toContain("{region}");
     }
   });
 });
@@ -202,12 +253,15 @@ describe("formatRadarDate", () => {
 });
 
 describe("scoring independence", () => {
-  it("is not imported by the detector", async () => {
+  it("is not imported by the detector", () => {
     // The radar is educational data. If scamDetector ever imported it, a verdict
     // could move because a campaign was listed — exactly the coupling the module
     // header rules out, and the same guarantee scamCalendar makes.
-    const { readFileSync } = await import("node:fs");
-    const detector = readFileSync("lib/scamDetector.ts", "utf8");
+    //
+    // __dirname-relative for the same reason as the roadmap check: read from the
+    // wrong cwd this throws rather than passing vacuously, so the guarantee
+    // can't quietly stop being enforced.
+    const detector = readFileSync(resolve(__dirname, "../lib/scamDetector.ts"), "utf8");
     expect(detector).not.toContain("threatRadar");
   });
 });

@@ -21,10 +21,11 @@ import {
   threatsByStatus,
   lastUpdated,
   formatRadarDate,
+  roadmapUrl,
   type ThreatEntry,
   type RadarCoverage,
 } from "@/lib/threatRadar";
-import type { RegionCode } from "@/lib/regions";
+import { resolveRegionPack, type RegionCode } from "@/lib/regions";
 
 // Matches the card styling used across Learn, About and the calendar.
 const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
@@ -62,7 +63,10 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
     <article className="rounded-xl border border-gray-700/50 bg-gray-800/40 p-4 space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h3 className="font-bold text-gray-100 text-base">{threat.title}</h3>
+          {/* h4, one level below the group heading — the cards are nested inside
+              "Circulating now", and matching its level would flatten the two in
+              a screen reader's outline. */}
+          <h4 className="font-bold text-gray-100 text-base">{threat.title}</h4>
           <p className="text-xs text-gray-500 mt-0.5">
             {t(`radar.channel.${threat.channel}` as MessageKey)} ·{" "}
             {t("radar.seen.since", { date: formatRadarDate(threat.firstSeen) })}
@@ -85,8 +89,11 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
           {t("radar.lures.heading")}
         </p>
         <ul className="space-y-1 list-none">
-          {threat.lures.map((lure) => (
-            <li key={lure} className="flex items-start gap-2 text-sm text-gray-300">
+          {/* Index-suffixed rather than keyed on the string alone: two entries
+              could legitimately quote the same lure, and nothing in the data
+              model forbids it. The list is static, so index is stable here. */}
+          {threat.lures.map((lure, i) => (
+            <li key={`${lure}-${i}`} className="flex items-start gap-2 text-sm text-gray-300">
               <span className="text-amber-400/80 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
               <span>{lure}</span>
             </li>
@@ -107,6 +114,19 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
         <p>
           {threat.detection ??
             t(threat.coverage === "n/a" ? "radar.coverage.na.body" : "radar.coverage.none.body")}
+        </p>
+        {/* The evidence link. Every claim on this card traces to the sweep that
+            recorded it — without this the provenance is asserted rather than
+            checkable, which is the whole difference from a news feed. */}
+        <p className="pt-1">
+          <a
+            href={roadmapUrl(threat)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-emerald-400 underline underline-offset-2 transition-colors"
+          >
+            {t("radar.source", { date: formatRadarDate(threat.lastSeen) })}
+          </a>
         </p>
       </div>
     </article>
@@ -168,6 +188,10 @@ export default function ThreatRadar({
   if (all.length === 0) return standalone ? <EmptyState /> : null;
 
   const reviewed = lastUpdated(region);
+  // Named rather than hardcoded: the intro renders for whichever region has an
+  // authored radar, and RADARS is shaped to hold more than one. "circulating in
+  // Australia" was correct only for as long as AU stayed the only entry.
+  const regionName = resolveRegionPack(region).name;
 
   return (
     <article className={CARD} id="threat-radar">
@@ -180,7 +204,7 @@ export default function ThreatRadar({
             </p>
           )}
         </div>
-        <p className="text-sm text-gray-400">{t("radar.intro")}</p>
+        <p className="text-sm text-gray-400">{t("radar.intro", { region: regionName })}</p>
         <p className="text-sm text-gray-500">{t("radar.neutrality")}</p>
       </section>
 
