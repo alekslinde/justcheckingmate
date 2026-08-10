@@ -44,6 +44,16 @@ export default function SiteHeader() {
           >
             {t("nav.calendar")}
           </Link>
+          {/* One breakpoint stricter than the calendar. This is the sixth item
+              and the header is already at its limit at `sm` — showing both there
+              re-creates the squeeze the line above exists to avoid. Reachable on
+              mobile via the home teaser, same as the calendar. */}
+          <Link
+            href="/radar"
+            className="hidden md:flex min-h-[44px] items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
+          >
+            {t("nav.radar")}
+          </Link>
           <Link
             href="/about"
             className="min-h-[44px] flex items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"

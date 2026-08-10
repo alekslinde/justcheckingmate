@@ -1,9 +1,7 @@
 {
   "home.title": "Got something a bit sus, mate?",
   "home.subtitle": "Chuck it in below — links, texts, emails and phone numbers — and we'll give it the once-over, without ever keeping it, passing it on, or opening its links.",
-
   "footer.tagline": "— always have a squiz before you act.",
-
   "check.ocr.working": "Having a squiz at your image — can take up to a minute the first go. Hang tight…",
   "check.ocr.timeout": "OCR is taking too long — try again or paste the text in yourself.",
   "check.ocr.failed": "Couldn't process that image — try a clearer screenshot or paste the text in yourself.",
@@ -29,7 +27,6 @@
   "check.analysing": "Checking it out…",
   "check.submit": "Just Checking, Mate!",
   "check.serverError": "Strewth, something went wrong on our end. Give it another crack.",
-
   "verdict.safe.label": "Looks Alright, Mate",
   "verdict.safe.sub": "She's apples — no red flags. Still keep your wits about ya.",
   "verdict.suspicious.label": "Something's a Bit Off",
@@ -63,15 +60,12 @@
   "verdict.breakdown.heading": "What we had a squiz at",
   "verdict.breakdown.pixel": "Tracking pixel spotted",
   "verdict.breakdown.reportEsp": "Dob the sender in to {esp}",
-
   "email.analysis.heading": "Who really sent this",
   "email.analysis.clean": "No dodgy sender tricks in the headers, far as we can tell.",
-
   "phone.lineType.voip": "Internet phone (dead easy to fake)",
   "phone.risk.veryHigh": "Almost certainly fake",
   "phone.wangiri.body": "Scammers ring once and hang up. Ring back and you cop international premium rates. **Don't call back, no matter what.**",
   "phone.spoof.body": "Yep — scammers can chuck any number they like on your caller ID. Costs them nothing and happens all the time. Only the phone company knows the real source, and only the police can trace it.",
-
   "report.valuable": "Your report's gold. Every one helps raise the alarm and keeps the next person from getting stung.",
   "report.ids.hint": "Grab any contact details so others can spot the same scam a mile off.",
   "report.error": "Strewth, something went wrong. Give it another crack.",
@@ -80,15 +74,12 @@
   "report.success.body": "Your report's been logged. Every one helps warn the next person about this scam.",
   "report.success.total": "{n} reports lodged by Aussies like you.",
   "report.success.another": "Dob in another",
-
   "subs.subtitle": "Scams dobbed in by Aussies — unverified, anonymised",
   "subs.empty.title": "No reports match these filters, mate",
   "subs.footer.cta": "Check or dob in a scam →",
-
   "bug.sent.title": "Cheers — that helps us improve",
   "bug.sent.body": "Your report's been logged. Every one helps us make Just Checking, Mate more reliable.",
   "bug.error": "Couldn't send that just now. Give it another crack in a tick.",
-
   "learn.tactics.intro": "Nearly every scam runs the same handful of mind games. Spot the trick and the spell breaks.",
   "learn.caught.intro": "Don't panic, and don't be embarrassed — this happens to switched-on people too. Move quick, based on what you shared.",
   "learn.handle.1": "**Slow down.** No legit mob minds you taking your time to check.",
@@ -99,5 +90,15 @@
   "calendar.intro": "Scammers follow the calendar, because a message only works when it looks fair dinkum. Knowing what's about makes the odd one out easier to pick.",
   "calendar.neutrality": "Background knowledge only — we give every message the same once-over, whatever the date.",
   "calendar.outro": "Out of season doesn't mean you're right. These run all year — they just work best when you're half expecting them.",
-  "calendar.empty.body": "We only put up seasonal patterns for places we've actually done the legwork on. Having a guess at another country's tax dates would be worse than saying nothing."
+  "calendar.empty.body": "We only put up seasonal patterns for places we've actually done the legwork on. Having a guess at another country's tax dates would be worse than saying nothing.",
+  "radar.intro": "What's actually going round Australia right now, pulled from our weekly look at the scam reporting. Each one tells you straight whether we catch it yet.",
+  "radar.neutrality": "Background knowledge only — being on this list doesn't change how we score a message.",
+  "radar.active.heading": "Going round right now",
+  "radar.watchlist.heading": "Gone quiet, but not gone",
+  "radar.coverage.covered": "We catch this one",
+  "radar.coverage.none.body": "No rule for this one yet, and we'd rather say so. The advice above is what's protecting you.",
+  "radar.coverage.na.body": "This one happens on a call or on paper, so there's no message for us to have a squiz at. Knowing the script is the defence.",
+  "radar.empty.body": "We only put up live campaign data for places we've actually done the legwork on. Showing you another country's scams would be worse than showing you none.",
+  "radar.method.body": "We go through scam reporting from government bodies, security researchers and Australian sources every week. What's here gets promoted by hand off the back of that — nothing's pulled in automatically, because the sources worth trusting most don't publish feeds.",
+  "home.radar.heading": "Going round right now"
 }

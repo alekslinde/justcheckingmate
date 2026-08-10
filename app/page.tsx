@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import CheckFlow from "@/components/CheckFlow";
 import HomeHero from "@/components/HomeHero";
 import SeasonTeaser from "@/components/SeasonTeaser";
+import RadarTeaser from "@/components/RadarTeaser";
 import { resolveRegion } from "@/lib/regionResolver";
 import { regionToday } from "@/lib/scamCalendar";
 
@@ -20,8 +21,11 @@ export default async function Home() {
     <main className="max-w-2xl mx-auto px-4 py-8 space-y-5">
       <HomeHero />
       <CheckFlow />
-      {/* Below the check box on purpose — see SeasonTeaser's header comment. */}
+      {/* Both below the check box on purpose — see SeasonTeaser's header
+          comment. The radar sits second: the season teaser only renders inside
+          its window, so it is the rarer and more timely of the two. */}
       <SeasonTeaser region={region} today={today} />
+      <RadarTeaser region={region} />
     </main>
   );
 }

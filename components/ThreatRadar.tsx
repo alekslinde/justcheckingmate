@@ -1,0 +1,228 @@
+"use client";
+
+// Threat radar — what's circulating now, grouped by how live it is.
+//
+// A client component for the same reason ScamCalendar is one: it reads the tone
+// preference, which lives in localStorage and is invisible to the server.
+//
+// Unlike the calendar it takes no date prop. Nothing here is computed against
+// "today" — an entry's status is authored by the sweep that reviewed it, not
+// derived from how old its lastSeen is. That is deliberate: a campaign quiet for
+// three weeks is not automatically dead, and inferring "subsided" from a date
+// would silently downgrade live threats between sweeps. A human decides, and the
+// "Reviewed <date>" line tells the reader how fresh that judgement is.
+//
+// Educational only — nothing here influences a verdict.
+
+import Link from "next/link";
+import { useLang, type MessageKey } from "@/lib/lang";
+import {
+  radarForRegion,
+  threatsByStatus,
+  lastUpdated,
+  formatRadarDate,
+  type ThreatEntry,
+  type RadarCoverage,
+} from "@/lib/threatRadar";
+import type { RegionCode } from "@/lib/regions";
+
+// Matches the card styling used across Learn, About and the calendar.
+const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
+const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
+
+/**
+ * Coverage badge styling.
+ *
+ * `none` is amber rather than red on purpose. Red reads as "this message is
+ * dangerous" everywhere else in this app — it's the verdict colour — and a
+ * detection gap is a statement about *us*, not about anything the user is
+ * holding. Amber keeps it visible without borrowing the verdict vocabulary.
+ */
+const COVERAGE_STYLE: Record<RadarCoverage, string> = {
+  covered: "text-emerald-300 bg-emerald-500/15 border-emerald-500/30",
+  partial: "text-sky-300 bg-sky-500/15 border-sky-500/30",
+  none: "text-amber-300 bg-amber-500/15 border-amber-500/30",
+  "n/a": "text-gray-400 bg-gray-500/10 border-gray-600/40",
+};
+
+// "n/a" is not a valid message-key fragment, so the lookup goes through a map
+// rather than being interpolated. Keyed by the union so a new coverage value is
+// a compile error here rather than a raw key rendered to the page.
+const COVERAGE_KEY: Record<RadarCoverage, MessageKey> = {
+  covered: "radar.coverage.covered",
+  partial: "radar.coverage.partial",
+  none: "radar.coverage.none",
+  "n/a": "radar.coverage.na",
+};
+
+function ThreatCard({ threat }: { threat: ThreatEntry }) {
+  const { t } = useLang();
+
+  return (
+    <article className="rounded-xl border border-gray-700/50 bg-gray-800/40 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className="font-bold text-gray-100 text-base">{threat.title}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {t(`radar.channel.${threat.channel}` as MessageKey)} ·{" "}
+            {t("radar.seen.since", { date: formatRadarDate(threat.firstSeen) })}
+          </p>
+        </div>
+        <span
+          className={[
+            "shrink-0 text-[11px] font-bold uppercase tracking-wider rounded-full px-2.5 py-1 border",
+            COVERAGE_STYLE[threat.coverage],
+          ].join(" ")}
+        >
+          {t(COVERAGE_KEY[threat.coverage])}
+        </span>
+      </div>
+
+      <p className="text-sm text-gray-400">{threat.summary}</p>
+
+      <div className="space-y-1.5">
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          {t("radar.lures.heading")}
+        </p>
+        <ul className="space-y-1 list-none">
+          {threat.lures.map((lure) => (
+            <li key={lure} className="flex items-start gap-2 text-sm text-gray-300">
+              <span className="text-amber-400/80 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
+              <span>{lure}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex items-start gap-2 pt-1 border-t border-gray-700/50 mt-1">
+        <span className="text-emerald-400/80 mt-2 shrink-0" aria-hidden="true">✓</span>
+        <p className="text-sm text-gray-300 pt-1.5">{threat.advice}</p>
+      </div>
+
+      {/* What we do about it. For `none` and `n/a` there is no rule to describe,
+          so a fixed line states the gap rather than leaving a silent absence the
+          reader would fill in optimistically. */}
+      <div className="text-xs text-gray-500 border-t border-gray-700/50 pt-3 space-y-1">
+        <p className="font-semibold uppercase tracking-wider">{t("radar.detection.heading")}</p>
+        <p>
+          {threat.detection ??
+            t(threat.coverage === "n/a" ? "radar.coverage.na.body" : "radar.coverage.none.body")}
+        </p>
+      </div>
+    </article>
+  );
+}
+
+function ThreatGroup({ heading, threats }: { heading: string; threats: ThreatEntry[] }) {
+  if (threats.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{heading}</h3>
+      <div className="space-y-3">
+        {threats.map((threat) => (
+          <ThreatCard key={threat.id} threat={threat} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The honest empty state, shown only on the standalone page.
+ *
+ * Same contract as the calendar's: inline, an unauthored region renders nothing
+ * because surrounding content carries the page; as a whole page that would be a
+ * dead end, so this says plainly we have no data rather than substituting
+ * another country's campaigns.
+ */
+function EmptyState() {
+  const { t } = useLang();
+  return (
+    <article className={CARD}>
+      <section className="space-y-2">
+        <h2 className={H2}>{t("radar.empty.heading")}</h2>
+        <p className="text-sm text-gray-400">{t("radar.empty.body")}</p>
+      </section>
+      <Link
+        href="/learn"
+        className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
+      >
+        {t("radar.learnCta")}
+      </Link>
+    </article>
+  );
+}
+
+export default function ThreatRadar({
+  region,
+  standalone = false,
+}: {
+  region: RegionCode;
+  /** Renders an explanatory empty state instead of nothing when true. */
+  standalone?: boolean;
+}) {
+  const { t } = useLang();
+  const all = radarForRegion(region);
+
+  if (all.length === 0) return standalone ? <EmptyState /> : null;
+
+  const reviewed = lastUpdated(region);
+
+  return (
+    <article className={CARD} id="threat-radar">
+      <section className="space-y-2">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <h2 className={H2}>{t("radar.title")}</h2>
+          {reviewed && (
+            <p className="text-xs text-gray-500">
+              {t("radar.updated", { date: formatRadarDate(reviewed) })}
+            </p>
+          )}
+        </div>
+        <p className="text-sm text-gray-400">{t("radar.intro")}</p>
+        <p className="text-sm text-gray-500">{t("radar.neutrality")}</p>
+      </section>
+
+      <ThreatGroup
+        heading={t("radar.active.heading")}
+        threats={threatsByStatus(region, "active")}
+      />
+      <ThreatGroup
+        heading={t("radar.watchlist.heading")}
+        threats={threatsByStatus(region, "watchlist")}
+      />
+      <ThreatGroup
+        heading={t("radar.subsided.heading")}
+        threats={threatsByStatus(region, "subsided")}
+      />
+
+      <div className="border-t border-gray-800 pt-4 space-y-3">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+            {t("radar.method.heading")}
+          </p>
+          <p className="text-xs text-gray-500">{t("radar.method.body")}</p>
+        </div>
+        {/* Only on the standalone page — inline, the surrounding page carries
+            its own navigation and one of these would link to itself. */}
+        {standalone && (
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/calendar"
+              className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
+            >
+              {t("radar.calendarCta")}
+            </Link>
+            <Link
+              href="/learn"
+              className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
+            >
+              {t("radar.learnCta")}
+            </Link>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
