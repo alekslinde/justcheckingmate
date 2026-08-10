@@ -54,7 +54,11 @@ const TOC = [
 // (what scams are / how to identify them) and "Getting the most from this tool"
 // (how to capture a scam so we can read it). Larger and divider-led so the two
 // halves read as separate sections, not just more cards.
-function PartHeader({ id, heading, intro }: { id: string; heading: string; intro: string }) {
+//
+// The id is optional: Part 2 carries its anchor on a wrapping <section> instead,
+// so that a deep link to #using-this-tool can open the capture guides nested
+// inside it (see the hash-open effect) rather than just scrolling to a header.
+function PartHeader({ id, heading, intro }: { id?: string; heading: string; intro: string }) {
   return (
     <div id={id} className="scroll-mt-20 pt-2">
       <div className="h-px bg-gray-800 mb-6" />
@@ -72,17 +76,24 @@ export default function LearnContent({
 }) {
   const { t } = useLang();
 
-  // Reveal a collapsed section when its table-of-contents link is followed.
-  // A jump link to a closed <details> would otherwise scroll to a bare header
-  // and hide the content it promised; this opens the target on load and on every
-  // in-page hash change. Anchors that aren't collapsibles (the emergency block,
-  // the core teaching, the part headers) are left untouched.
+  // Reveal collapsed content when its anchor is navigated to. A jump link to a
+  // closed <details> would otherwise scroll to a bare header and hide the content
+  // it promised. Two cases: the target itself is a collapsible (a table-of-
+  // contents link), or the target is a container whose collapsibles should open
+  // (the check flow deep-links to #using-this-tool for the capture guide, which
+  // is a <section> wrapping three disclosures). Runs on load and on every in-page
+  // hash change; anchors with no collapsibles (the emergency block, the calendar
+  // pointer) are left untouched.
   useEffect(() => {
     const openTarget = () => {
       const id = decodeURIComponent(window.location.hash.slice(1));
       if (!id) return;
       const el = document.getElementById(id);
+      if (!el) return;
       if (el instanceof HTMLDetailsElement) el.open = true;
+      el.querySelectorAll("details").forEach((d) => {
+        d.open = true;
+      });
     };
     openTarget();
     window.addEventListener("hashchange", openTarget);
@@ -293,29 +304,36 @@ export default function LearnContent({
         </div>
       </section>
 
-      {/* ── Part 2: Getting the most from this tool ────────────────────────── */}
-      <PartHeader
-        id="using-this-tool"
-        heading={t("learn.part.using.heading")}
-        intro={t("learn.part.using.intro")}
-      />
+      {/* ── Part 2: Getting the most from this tool ────────────────────────────
+          A deliberately separate appendix: this is how-to reference for capturing
+          a scam, not part of learning to spot one. It lives here rather than in
+          the check flow on purpose — the flow keeps a quiet "See the guide →"
+          pointer to #using-this-tool instead of re-crowding itself with inline
+          expandables (see CheckFlow). The anchor sits on this <section> so that
+          arriving from that pointer opens the guides inside it, rather than
+          landing on three closed toggles. */}
+      <section id="using-this-tool" className="scroll-mt-20 space-y-6">
+        <PartHeader
+          heading={t("learn.part.using.heading")}
+          intro={t("learn.part.using.intro")}
+        />
 
-      {/* Task guides, one collapsible each. This is how-to reference reached for
-          when you're about to capture a scam, not part of the read — so each
-          opens on demand rather than stacking three open sections at the foot of
-          an already-long page. The email guide renders open inside its own
-          disclosure (the outer Collapsible is the toggle). */}
-      <Collapsible title={t("learn.using.photo.heading")}>
-        <p className="text-sm text-gray-400">{t("check.help.photo.body")}</p>
-      </Collapsible>
+        {/* One collapsible each — reached for when you're about to capture a
+            scam, so each opens on demand rather than stacking three open sections
+            at the foot of an already-long page. The email guide renders open
+            inside its own disclosure (the outer Collapsible is the toggle). */}
+        <Collapsible title={t("learn.using.photo.heading")}>
+          <p className="text-sm text-gray-400">{t("check.help.photo.body")}</p>
+        </Collapsible>
 
-      <Collapsible title={t("learn.using.image.heading")}>
-        <p className="text-sm text-gray-400">{t("check.help.image.body")}</p>
-      </Collapsible>
+        <Collapsible title={t("learn.using.image.heading")}>
+          <p className="text-sm text-gray-400">{t("check.help.image.body")}</p>
+        </Collapsible>
 
-      <Collapsible title={t("learn.using.email.heading")}>
-        <EmailExportGuide expandable={false} />
-      </Collapsible>
+        <Collapsible title={t("learn.using.email.heading")}>
+          <EmailExportGuide expandable={false} />
+        </Collapsible>
+      </section>
 
       <p className="text-center text-sm text-gray-400 pb-4">
         <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium">
