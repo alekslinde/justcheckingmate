@@ -7,7 +7,7 @@ import { regionToday } from "@/lib/scamCalendar";
 export const metadata: Metadata = {
   title: "Scam calendar — Just Checking, Mate",
   description:
-    "When scams peak in Australia — tax season, Black Friday, the Christmas parcel rush — and the lures to expect in each window.",
+    "When scams peak through the year — tax season, Black Friday, the Christmas parcel rush — and the lures to expect in each window, for your region.",
 };
 
 // Reads today's date, so it can't be prerendered at build time: a statically

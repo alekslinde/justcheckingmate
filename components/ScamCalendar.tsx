@@ -25,6 +25,8 @@ import {
   daysUntilStart,
   daysUntilEnd,
   formatWindow,
+  lastReviewed,
+  formatReviewedDate,
   type ScamSeason,
   type CivilDate,
 } from "@/lib/scamCalendar";
@@ -113,6 +115,28 @@ function SeasonBody({ season }: { season: ScamSeason }) {
         <span className="text-emerald-400/80 mt-2 shrink-0" aria-hidden="true">✓</span>
         <p className="text-sm text-gray-300 pt-1.5">{season.advice}</p>
       </div>
+
+      {/* Provenance, mirroring the radar's evidence link. Every season traces to
+          a named authority — without this the "expect this now" claim is asserted
+          rather than checkable, which is the whole difference from a horoscope.
+          Links open in a new tab; the leading "·" separates entries without a
+          list element for a one-line footer. */}
+      <p className="text-xs text-gray-500 pt-1">
+        <span className="font-semibold uppercase tracking-wider">{t("calendar.sources")}</span>{" "}
+        {season.sources.map((source, i) => (
+          <span key={source.url}>
+            {i > 0 ? " · " : " "}
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-emerald-400 underline underline-offset-2 transition-colors"
+            >
+              {source.label}
+            </a>
+          </span>
+        ))}
+      </p>
     </>
   );
 }
@@ -258,6 +282,9 @@ export default function ScamCalendar({
   // it renders nothing; as a page it explains itself.
   if (all.length === 0) return standalone ? <EmptyState /> : null;
 
+  // Freshness signal, derived from the seasons' own review dates so it can't
+  // drift — the same contract as the radar's "as at" line.
+  const reviewed = lastReviewed(region);
   const active = activeSeasons(region, today);
   const upcoming = upcomingSeasons(region, today, UPCOMING_LIMIT);
   const rest = remainingSeasons(region, today, UPCOMING_LIMIT);
@@ -268,7 +295,14 @@ export default function ScamCalendar({
           about how we score, and standing it between the reader and the season
           they came for spent the top of the page on a caveat. */}
       <section className="space-y-2">
-        <h2 className={H2}>{t("calendar.title")}</h2>
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <h2 className={H2}>{t("calendar.title")}</h2>
+          {reviewed && (
+            <p className="text-xs text-gray-500">
+              {t("calendar.reviewed", { date: formatReviewedDate(reviewed) })}
+            </p>
+          )}
+        </div>
         <p className="text-sm text-gray-400">{t("calendar.intro")}</p>
       </section>
 

@@ -1,0 +1,65 @@
+name: Scam calendar source check
+
+# Checks that every source cited by the scam calendar (lib/scamCalendar.ts) still
+# resolves. The calendar's companion to source-check.yml: each ScamSeason carries
+# `sources` that back its "expect this scam now" claim, and a rotted citation
+# leaves the claim asserted rather than checkable — the difference between the
+# calendar and a horoscope.
+#
+# It FLAGS, it does not edit the data — same philosophy as source-check.yml.
+# Reachability only: whether a body has published anything NEW is research, not a
+# cron job. Structure (https, parseable URL) is additionally enforced by the
+# Vitest provenance test on every push, so this focuses on link rot.
+
+on:
+  schedule:
+    # Mondays 21:30 UTC ≈ 07:30 Tuesday Australia/Sydney — just after the
+    # threat-intel source check, so the week's link-rot lands together.
+    - cron: "30 21 * * 1"
+  pull_request:
+    paths:
+      - "lib/scamCalendar.ts"
+      - "scripts/check-calendar-sources.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calendar-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # On a PR touching the calendar, validate structure only. Firing thirty
+      # requests at government sites on every push is rude and slow, and the
+      # thing a PR can actually break is the shape of the source list.
+      - name: Validate calendar sources
+        if: github.event_name == 'pull_request'
+        run: npx tsx scripts/check-calendar-sources.ts --validate
+
+      # Exit 1 (a source rotted) is a maintenance signal, not a broken build, so
+      # it warns rather than failing. Exit 2 means the job itself broke — invalid
+      # structure — and must go red. The markdown report goes to the run summary.
+      - name: Check calendar source reachability
+        if: github.event_name != 'pull_request'
+        run: |
+          set +e
+          npx tsx scripts/check-calendar-sources.ts --markdown >> "$GITHUB_STEP_SUMMARY"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "All calendar sources reachable."
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::Some scam-calendar sources have rotted — see the run summary."
+          else
+            echo "::error::check-calendar-sources failed (exit $code)."
+            exit "$code"
+          fi

@@ -14,6 +14,10 @@ import {
   formatWindow,
   regionToday,
   isWellFormedWindow,
+  isWellFormedDate,
+  lastReviewed,
+  formatReviewedDate,
+  authoredCalendarRegions,
   type ScamSeason,
 } from "@/lib/scamCalendar";
 import { supportedRegions } from "@/lib/regions";
@@ -30,6 +34,8 @@ const season = (window: ScamSeason["window"], id = "test"): ScamSeason => ({
   why: "why",
   lures: ["lure"],
   advice: "advice",
+  sources: [{ label: "Test", url: "https://example.gov" }],
+  reviewed: "2026-08-10",
 });
 
 describe("calendarForRegion", () => {
@@ -39,15 +45,22 @@ describe("calendarForRegion", () => {
 
   it("returns an empty list for regions with no authored calendar", () => {
     // Deliberate: an unauthored region must render nothing rather than
-    // inheriting Australia's tax dates.
-    for (const code of supportedRegions().filter((c) => c !== "AU")) {
+    // inheriting another country's tax dates.
+    const authored = new Set<string>(authoredCalendarRegions());
+    const unauthored = supportedRegions().filter((c) => !authored.has(c));
+    // ZZ (rest-of-world) is the standing example; assert there is at least one
+    // so this test can't silently pass by iterating nothing.
+    expect(unauthored.length).toBeGreaterThan(0);
+    for (const code of unauthored) {
       expect(calendarForRegion(code)).toEqual([]);
       expect(hasCalendar(code)).toBe(false);
     }
   });
 
-  it("reports AU as having a calendar", () => {
-    expect(hasCalendar("AU")).toBe(true);
+  it("reports every authored region as having a calendar", () => {
+    for (const code of authoredCalendarRegions()) {
+      expect(hasCalendar(code)).toBe(true);
+    }
   });
 
   it("gives every season a unique id", () => {
@@ -70,6 +83,118 @@ describe("calendarForRegion", () => {
       expect(s.advice.length).toBeGreaterThan(0);
       expect(s.lures.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// Every authored region, not just AU. Adding a region means it inherits all of
+// these invariants automatically, which is what keeps a second-region calendar
+// held to the same bar as the first.
+describe("every authored region", () => {
+  const regions = authoredCalendarRegions();
+
+  it("authors at least one region", () => {
+    expect(regions.length).toBeGreaterThan(0);
+  });
+
+  // The whole point of this task: "too few entries" should fail CI, not linger.
+  // A floor rather than an exact count so seasons can be added freely; the floor
+  // is what stops a region regressing to a token entry or two.
+  it.each(regions)("has a substantive calendar for %s", (code) => {
+    expect(calendarForRegion(code).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it.each(regions)("gives %s seasons unique ids", (code) => {
+    const ids = calendarForRegion(code).map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it.each(regions)("authors every %s season as a real calendar date", (code) => {
+    for (const s of calendarForRegion(code)) {
+      expect(isWellFormedWindow(s.window), `${code}/${s.id} has an impossible date`).toBe(true);
+    }
+  });
+
+  it.each(regions)("gives every %s season non-empty teaching content", (code) => {
+    for (const s of calendarForRegion(code)) {
+      expect(s.title.length, `${code}/${s.id} title`).toBeGreaterThan(0);
+      expect(s.why.length, `${code}/${s.id} why`).toBeGreaterThan(0);
+      expect(s.advice.length, `${code}/${s.id} advice`).toBeGreaterThan(0);
+      expect(s.lures.length, `${code}/${s.id} lures`).toBeGreaterThan(0);
+    }
+  });
+
+  // Provenance is the maintenance guarantee: an unsourced or badly-sourced season
+  // is the magic-number decay this field exists to prevent. https-only and a
+  // parseable host so a typo fails here rather than shipping a dead citation.
+  it.each(regions)("backs every %s season with a well-formed source", (code) => {
+    for (const s of calendarForRegion(code)) {
+      expect(s.sources.length, `${code}/${s.id} has no sources`).toBeGreaterThan(0);
+      for (const source of s.sources) {
+        expect(source.label.length, `${code}/${s.id} source label`).toBeGreaterThan(0);
+        expect(source.url, `${code}/${s.id} source url must be https`).toMatch(/^https:\/\//);
+        expect(() => new URL(source.url), `${code}/${s.id} source url unparseable`).not.toThrow();
+      }
+    }
+  });
+
+  // The freshness signal only sorts correctly on zero-padded ISO dates; a
+  // malformed one silently mis-reports the "as at" line.
+  it.each(regions)("stamps every %s season with a well-formed review date", (code) => {
+    for (const s of calendarForRegion(code)) {
+      expect(isWellFormedDate(s.reviewed), `${code}/${s.id} reviewed=${s.reviewed}`).toBe(true);
+    }
+  });
+
+  // regionToday reads REGION_TIMEZONE, which is keyed by the authored regions —
+  // this is the runtime companion to the type coupling: a region added to the
+  // calendar without a timezone would fall back to the server clock silently.
+  it.each(regions)("resolves a civil date for %s", (code) => {
+    const today = regionToday(code);
+    expect(today.month).toBeGreaterThanOrEqual(1);
+    expect(today.month).toBeLessThanOrEqual(12);
+    expect(today.day).toBeGreaterThanOrEqual(1);
+    expect(today.day).toBeLessThanOrEqual(31);
+  });
+});
+
+describe("lastReviewed", () => {
+  it("returns the most recent review date across a region's seasons", () => {
+    const reviewed = lastReviewed("AU");
+    expect(reviewed).not.toBeNull();
+    expect(isWellFormedDate(reviewed as string)).toBe(true);
+    // It must be the maximum, not just any season's date.
+    const max = calendarForRegion("AU").reduce(
+      (acc, s) => (s.reviewed > acc ? s.reviewed : acc),
+      "",
+    );
+    expect(reviewed).toBe(max);
+  });
+
+  it("returns null for a region with no calendar", () => {
+    expect(lastReviewed("ZZ")).toBeNull();
+  });
+});
+
+describe("isWellFormedDate", () => {
+  it("accepts a real zero-padded date", () => {
+    expect(isWellFormedDate("2026-08-10")).toBe(true);
+  });
+
+  it("rejects non-padded, impossible, or malformed dates", () => {
+    expect(isWellFormedDate("2026-8-9")).toBe(false);
+    expect(isWellFormedDate("2026-02-30")).toBe(false);
+    expect(isWellFormedDate("2026-13-01")).toBe(false);
+    expect(isWellFormedDate("not-a-date")).toBe(false);
+  });
+});
+
+describe("formatReviewedDate", () => {
+  it("renders a human-readable date", () => {
+    expect(formatReviewedDate("2026-08-10")).toBe("10 August 2026");
+  });
+
+  it("returns a malformed value unchanged rather than 'NaN undefined'", () => {
+    expect(formatReviewedDate("2026-8-9")).toBe("2026-8-9");
   });
 });
 
@@ -130,7 +255,7 @@ describe("activeSeasons", () => {
   });
 
   it("returns nothing for a region with no calendar", () => {
-    expect(activeSeasons("GB", on(8, 10))).toEqual([]);
+    expect(activeSeasons("ZZ", on(8, 10))).toEqual([]);
   });
 
   it("never returns an inactive season", () => {
@@ -216,7 +341,7 @@ describe("remainingSeasons", () => {
   });
 
   it("returns nothing for a region with no calendar", () => {
-    expect(remainingSeasons("US", on(8, 10), 2)).toEqual([]);
+    expect(remainingSeasons("ZZ", on(8, 10), 2)).toEqual([]);
   });
 });
 
@@ -323,7 +448,7 @@ describe("seasonBands", () => {
   });
 
   it("returns nothing for a region with no calendar", () => {
-    expect(seasonBands("US")).toEqual([]);
+    expect(seasonBands("ZZ")).toEqual([]);
   });
 });
 
@@ -360,7 +485,7 @@ describe("upcomingSeasons", () => {
   });
 
   it("returns nothing for a region with no calendar", () => {
-    expect(upcomingSeasons("US", on(8, 10))).toEqual([]);
+    expect(upcomingSeasons("ZZ", on(8, 10))).toEqual([]);
   });
 });
 
@@ -390,7 +515,7 @@ describe("regionToday", () => {
 
   it("falls back to the server's civil date for a region with no calendar", () => {
     const d = new Date(Date.UTC(2026, 5, 30, 23, 0));
-    expect(regionToday("GB", d)).toEqual({ month: d.getMonth() + 1, day: d.getDate() });
+    expect(regionToday("ZZ", d)).toEqual({ month: d.getMonth() + 1, day: d.getDate() });
   });
 
   // The reason regionToday returns month/day rather than a Date: the value is
@@ -506,24 +631,46 @@ describe("calendar/timezone coupling", () => {
   // Belt-and-braces alongside the compile-time guarantee: REGION_TIMEZONE is
   // keyed by `keyof typeof CALENDARS`, so a region with seasons but no timezone
   // fails to build. This asserts the observable consequence — that every region
-  // with a calendar actually resolves a date away from the raw server clock.
-  it("resolves a region-local date for every region that has a calendar", () => {
-    // 30 June 23:00 UTC — a boundary instant where every region we author a
-    // calendar for is already on the following civil day.
-    //
-    // Compared against UTC rather than the *runner's* local date: production
-    // runs UTC, and comparing to local would make this pass or fail depending on
-    // where the test happens to run (it read as a false failure under TZ=Sydney,
-    // where the server clock legitimately agrees with the region).
-    const instant = new Date(Date.UTC(2026, 5, 30, 23, 0));
-    const utcCivil = { month: instant.getUTCMonth() + 1, day: instant.getUTCDate() };
+  // with a calendar resolves its date through its OWN timezone rather than the
+  // raw server clock.
+  //
+  // The check is against an independent Intl computation per region rather than
+  // "differs from UTC": that shortcut only held while AU (UTC+10) was the sole
+  // region and always ran ahead of the server clock. With regions behind UTC
+  // (US/CA) and near it (GB/IE) now authored, no single instant makes them all
+  // differ from UTC — so we verify the zone is applied correctly instead, which
+  // is the property that actually matters and holds at any offset.
+  it("resolves a region-local date through each region's own timezone", () => {
+    // Mirror of the internal REGION_TIMEZONE. Duplicated on purpose: the test's
+    // job is to pin the mapping, so reading it from the module under test would
+    // let a wrong zone pass by agreeing with itself.
+    const ZONES: Partial<Record<ReturnType<typeof authoredCalendarRegions>[number], string>> = {
+      AU: "Australia/Sydney",
+      GB: "Europe/London",
+      US: "America/New_York",
+      CA: "America/Toronto",
+      IE: "Europe/Dublin",
+      NZ: "Pacific/Auckland",
+    };
 
-    for (const code of supportedRegions()) {
-      if (calendarForRegion(code).length === 0) continue;
+    // 30 June 23:00 UTC: a boundary instant that lands AU/NZ on 1 July and
+    // GB/IE on the stroke of it, so the timezone application is observable rather
+    // than incidentally agreeing with UTC.
+    const instant = new Date(Date.UTC(2026, 5, 30, 23, 0));
+
+    for (const code of authoredCalendarRegions()) {
+      const zone = ZONES[code];
+      expect(zone, `${code} is missing from the test's zone map`).toBeDefined();
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: zone,
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(instant);
+      const field = (t: string) => Number(parts.find((p) => p.type === t)?.value);
       expect(
         regionToday(code, instant),
-        `${code} has a calendar but resolved to the UTC date`,
-      ).not.toEqual(utcCivil);
+        `${code} did not resolve through ${zone}`,
+      ).toEqual({ month: field("month"), day: field("day") });
     }
   });
 });
@@ -544,7 +691,6 @@ describe("surfacing (home teaser / learn card / calendar page)", () => {
   // so an empty result must be reachable rather than theoretical — otherwise the
   // hidden branch is dead code that never gets exercised.
   it("returns nothing for a region without a calendar, so teasers stay hidden", () => {
-    expect(activeSeasons("GB", on(8, 10))).toEqual([]);
     expect(activeSeasons("ZZ", on(8, 10))).toEqual([]);
   });
 
@@ -555,13 +701,16 @@ describe("surfacing (home teaser / learn card / calendar page)", () => {
     }
   });
 
-  // The AU calendar has real quiet stretches — roughly March–May and the first
-  // half of November. The teaser and Learn card correctly hide themselves then,
-  // which is the honest behaviour: inventing a season to keep a banner on screen
-  // would be filling space rather than warning anyone.
+  // The AU calendar still has genuine quiet stretches — April and May, once the
+  // summer/autumn disaster window has closed and before EOFY and tax season open.
+  // The teaser and Learn card correctly hide themselves then, which is the honest
+  // behaviour: inventing a season to keep a banner on screen would be filling
+  // space rather than warning anyone.
   //
   // This documents the quiet months rather than forbidding them, so that adding
-  // or removing a season shows up here as a deliberate change in coverage.
+  // or removing a season shows up here as a deliberate change in coverage. The
+  // set shrank from [3, 4, 5, 11] when the disaster-recovery (Oct–Mar) and
+  // spring-racing (Oct–Nov) seasons were added, covering March and November.
   it("has quiet months, and hides the teaser rather than inventing a season", () => {
     const quietMonths = new Set<number>();
     for (let month = 1; month <= 12; month++) {
@@ -569,7 +718,7 @@ describe("surfacing (home teaser / learn card / calendar page)", () => {
         if (activeSeasons("AU", on(month, day)).length === 0) quietMonths.add(month);
       }
     }
-    expect([...quietMonths].sort((a, b) => a - b)).toEqual([3, 4, 5, 11]);
+    expect([...quietMonths].sort((a, b) => a - b)).toEqual([4, 5]);
   });
 
   it("covers the months that matter most for AU scams", () => {
