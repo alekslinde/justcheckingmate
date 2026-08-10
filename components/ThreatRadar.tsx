@@ -72,18 +72,18 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
 
   return (
     <article className="rounded-xl border border-gray-700/50 bg-gray-800/40">
-      <details>
-        {/* Keeps the browser's native disclosure triangle rather than drawing a
-            chevron. Both existing <details> in the app (EmailExportGuide,
-            BugReportProvider) leave the marker alone, so suppressing it here
-            with list-none was the odd one out — and the "›" the custom arrow
-            used is already spoken for as a static list bullet in LearnContent,
-            where it never rotates or responds to anything. Reusing an inert
-            bullet as the interactive control taught two meanings for one glyph.
-            The native marker also comes with the platform's own open/closed
-            states and high-contrast handling for free. */}
-        <summary className="cursor-pointer p-4 min-h-[44px] rounded-xl hover:bg-gray-800/60 transition-colors marker:text-gray-500">
-          <div className="inline-flex items-start gap-3 w-[calc(100%-1.5rem)] align-top">
+      <details className="group">
+        {/* Matches the filter dropdowns on the reports page, which are the app's
+            existing "open this to see more" affordance: a right-aligned chevron
+            at the same weight and near-white tint the native <select> indicator
+            inherits from `text-gray-200`.
+            The default <details> marker is suppressed because it can't be sized
+            or coloured to match — it renders as a small dim triangle on the
+            left, far weaker than the control it sits beside. Drawn as an inline
+            SVG rather than a text glyph so stroke weight is explicit and the
+            rotation is smooth. */}
+        <summary className="cursor-pointer list-none p-4 min-h-[44px] rounded-xl hover:bg-gray-800/60 transition-colors">
+          <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               {/* h4, one level below the group heading — the cards nest inside
                   "Circulating now", and matching its level would flatten the
@@ -110,6 +110,22 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
                 )}
               </p>
             </div>
+            {/* Same geometry as the <select> chevrons on /submissions: a
+                downward V that rotates 180° on open. `text-gray-200` is the
+                colour those inherit; stroke-width 2.5 matches their visual
+                weight, which a 1.5 stroke at this size does not. */}
+            <svg
+              className="shrink-0 w-5 h-5 mt-0.5 text-gray-200 transition-transform duration-200 group-open:rotate-180"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
           </div>
           {/* Visible only to assistive tech: the chevron alone doesn't say what
               opening the row would reveal. */}
