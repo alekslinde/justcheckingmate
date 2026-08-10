@@ -14,7 +14,7 @@
 
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { activeSeasons } from "@/lib/scamCalendar";
+import { activeSeasons, type CivilDate } from "@/lib/scamCalendar";
 import type { RegionCode } from "@/lib/regions";
 
 export default function SeasonTeaser({
@@ -23,7 +23,7 @@ export default function SeasonTeaser({
 }: {
   region: RegionCode;
   /** The region's civil date, resolved server-side via regionToday(). */
-  today: Date;
+  today: CivilDate;
 }) {
   const { t } = useLang();
   const active = activeSeasons(region, today);

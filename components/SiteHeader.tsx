@@ -34,6 +34,16 @@ export default function SiteHeader() {
           >
             {t("nav.learn")}
           </Link>
+          {/* Hidden on the narrowest screens: the header abbreviates the brand
+              to "JCM" below `xs` precisely because space is tight, and a fifth
+              item there would squeeze the rest. The calendar is still reachable
+              on mobile via the home teaser and the Learn card. */}
+          <Link
+            href="/calendar"
+            className="hidden sm:flex min-h-[44px] items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"
+          >
+            {t("nav.calendar")}
+          </Link>
           <Link
             href="/about"
             className="min-h-[44px] flex items-center px-2 sm:px-3 text-sm text-gray-400 hover:text-emerald-400 transition-colors rounded-lg"

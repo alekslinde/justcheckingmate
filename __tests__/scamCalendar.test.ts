@@ -185,9 +185,7 @@ describe("regionToday", () => {
     // 30 June 23:00 UTC === 1 July 09:00 AEST.
     const utcInstant = new Date(Date.UTC(2026, 5, 30, 23, 0));
     expect(utcInstant.getUTCMonth() + 1).toBe(6); // server sees June
-    const au = regionToday("AU", utcInstant);
-    expect(au.getMonth() + 1).toBe(7); // user is already in July
-    expect(au.getDate()).toBe(1);
+    expect(regionToday("AU", utcInstant)).toEqual({ month: 7, day: 1 });
   });
 
   it("puts tax season live on the AU morning lodgement opens", () => {
@@ -203,19 +201,48 @@ describe("regionToday", () => {
     expect(ids).toContain("eofy-business");
   });
 
-  it("returns the given date unchanged for a region with no timezone mapped", () => {
+  it("falls back to the server's civil date for a region with no calendar", () => {
     const d = new Date(Date.UTC(2026, 5, 30, 23, 0));
-    expect(regionToday("GB", d).getTime()).toBe(d.getTime());
+    expect(regionToday("GB", d)).toEqual({ month: d.getMonth() + 1, day: d.getDate() });
+  });
+
+  // The reason regionToday returns month/day rather than a Date: the value is
+  // resolved on the server and then read again inside a client component, where
+  // a Date would be interpreted in the *browser's* timezone. A device set to
+  // UTC+13 would shift it a day and show a season active before it starts.
+  it("returns a timezone-free value that survives the client boundary", () => {
+    const civil = regionToday("AU", new Date(Date.UTC(2026, 5, 30, 23, 0)));
+    // Structurally cloneable and meaningful without a timezone — what crosses
+    // the RSC wire is exactly what the client reads back.
+    expect(JSON.parse(JSON.stringify(civil))).toEqual(civil);
+    expect(civil).not.toBeInstanceOf(Date);
+  });
+
+  // The concrete defect: a Date carries an instant, so a browser in an extreme
+  // offset re-reads it as a different day. Here the server resolves 30 June in
+  // Sydney; a device at UTC+14 reading the same instant as a Date sees 1 July
+  // and would show tax season a day early. The CivilDate does not move.
+  it("does not shift a day on a device in an extreme-offset timezone", () => {
+    // 30 June 13:00 UTC === 30 June 23:00 AEST — EOFY, tax season not yet open.
+    const instant = new Date(Date.UTC(2026, 5, 30, 13, 0));
+    const civil = regionToday("AU", instant);
+    expect(civil).toEqual({ month: 6, day: 30 });
+
+    // What a UTC+14 client would have computed from the old noon-anchored Date.
+    const asSeenAtPlus14 = new Date(instant.getTime() + 14 * 60 * 60 * 1000);
+    expect(asSeenAtPlus14.getUTCDate()).toBe(1); // the day it would have jumped to
+
+    // The season set is driven by the civil date, so it stays correct regardless.
+    const ids = activeSeasons("AU", civil).map((s) => s.id);
+    expect(ids).toContain("eofy-business");
+    expect(ids).not.toContain("tax-time");
   });
 
   it("applies the summer DST offset, not a fixed one", () => {
     // Sydney is UTC+11 in January (AEDT), not UTC+10, so 1 Jan 13:30 UTC is
     // already 2 Jan locally. Intl handles the transition; a hardcoded offset
     // would get this wrong for half the year.
-    const au = regionToday("AU", new Date(Date.UTC(2026, 0, 1, 13, 30)));
-    expect(Number.isNaN(au.getTime())).toBe(false);
-    expect(au.getMonth() + 1).toBe(1);
-    expect(au.getDate()).toBe(2);
+    expect(regionToday("AU", new Date(Date.UTC(2026, 0, 1, 13, 30)))).toEqual({ month: 1, day: 2 });
   });
 });
 
@@ -294,16 +321,22 @@ describe("calendar/timezone coupling", () => {
   // fails to build. This asserts the observable consequence — that every region
   // with a calendar actually resolves a date away from the raw server clock.
   it("resolves a region-local date for every region that has a calendar", () => {
-    // 30 June 23:00 UTC — a boundary instant where any timezone-aware region
-    // must land on a different civil date than the UTC server does.
+    // 30 June 23:00 UTC — a boundary instant where every region we author a
+    // calendar for is already on the following civil day.
+    //
+    // Compared against UTC rather than the *runner's* local date: production
+    // runs UTC, and comparing to local would make this pass or fail depending on
+    // where the test happens to run (it read as a false failure under TZ=Sydney,
+    // where the server clock legitimately agrees with the region).
     const instant = new Date(Date.UTC(2026, 5, 30, 23, 0));
+    const utcCivil = { month: instant.getUTCMonth() + 1, day: instant.getUTCDate() };
+
     for (const code of supportedRegions()) {
       if (calendarForRegion(code).length === 0) continue;
-      const resolved = regionToday(code, instant);
       expect(
-        resolved.getTime(),
-        `${code} has a calendar but fell back to the server clock`,
-      ).not.toBe(instant.getTime());
+        regionToday(code, instant),
+        `${code} has a calendar but resolved to the UTC date`,
+      ).not.toEqual(utcCivil);
     }
   });
 });

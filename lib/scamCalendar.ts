@@ -214,18 +214,49 @@ const REGION_TIMEZONE: Record<CalendarRegion, string> = {
 };
 
 /**
- * Today's civil date in a region's local timezone, as a Date whose local-time
- * fields (getMonth/getDate) read as that region's date.
+ * A civil date with no instant and no timezone attached — just "what day is it
+ * where the user is". Month is 1-12, matching how the windows are authored.
+ *
+ * Deliberately not a Date. The value is resolved on the server and then crosses
+ * the RSC boundary into client components, and a Date carries an *instant*: the
+ * browser re-reads it through getMonth()/getDate() in the device's timezone, so
+ * a device set to UTC+13 shifts the day forward and can show a season as active
+ * a day early. A plain {month, day} means the same thing on both sides of the
+ * wire, which is the only property that matters here.
+ */
+export interface CivilDate {
+  /** 1-12. */
+  month: number;
+  day: number;
+}
+
+/** Reads a Date's local-time fields as a CivilDate. */
+export function toCivilDate(date: Date): CivilDate {
+  return { month: date.getMonth() + 1, day: date.getDate() };
+}
+
+/**
+ * What the windowing functions accept. A Date is convenient at a call site that
+ * already has one (tests, and any server-side caller); a CivilDate is what
+ * survives the trip to a client component.
+ */
+export type DateLike = Date | CivilDate;
+
+function asCivilDate(date: DateLike): CivilDate {
+  return date instanceof Date ? toCivilDate(date) : date;
+}
+
+/**
+ * Today's civil date in a region's local timezone.
  *
  * Intl gives the correct civil date without a timezone library and handles DST
- * itself. The result is only ever consumed through getMonth()/getDate() by the
- * windowing functions below, so re-anchoring those fields is sufficient — the
- * returned value is not a true instant and must not be treated as one.
+ * itself. Returning month/day rather than a Date is what makes the result safe
+ * to hand to a client component (see CivilDate).
  */
-export function regionToday(code: RegionCode, now: Date = new Date()): Date {
+export function regionToday(code: RegionCode, now: Date = new Date()): CivilDate {
   // A region with no calendar has no seasons to place, so the server date is
   // harmless there — the lookup is total over the regions that do have one.
-  if (!isCalendarRegion(code)) return now;
+  if (!isCalendarRegion(code)) return toCivilDate(now);
   const timeZone = REGION_TIMEZONE[code];
 
   // en-CA formats as YYYY-MM-DD, so the parts are unambiguous by type.
@@ -243,10 +274,9 @@ export function regionToday(code: RegionCode, now: Date = new Date()): Date {
 
   // Intl should always supply all three; if a runtime somehow doesn't, fall back
   // to the server date rather than constructing an invalid one.
-  if (!year || !month || !day) return now;
+  if (!year || !month || !day) return toCivilDate(now);
 
-  // Anchored at midday so no local DST shift can move the date field.
-  return new Date(year, month - 1, day, 12);
+  return { month, day };
 }
 
 /**
@@ -280,8 +310,9 @@ function ordinal(month: number, day: number): number {
  * and "before the end" rather than the empty intersection a naive range check
  * would produce.
  */
-export function isActiveOn(season: ScamSeason, date: Date): boolean {
-  const now = ordinal(date.getMonth() + 1, date.getDate());
+export function isActiveOn(season: ScamSeason, date: DateLike): boolean {
+  const { month, day } = asCivilDate(date);
+  const now = ordinal(month, day);
   const start = ordinal(season.window.startMonth, season.window.startDay);
   const end = ordinal(season.window.endMonth, season.window.endDay);
 
@@ -291,7 +322,7 @@ export function isActiveOn(season: ScamSeason, date: Date): boolean {
 }
 
 /** Seasons active on `date`, in authored order. */
-export function activeSeasons(code: RegionCode, date: Date): ScamSeason[] {
+export function activeSeasons(code: RegionCode, date: DateLike): ScamSeason[] {
   return calendarForRegion(code).filter((s) => isActiveOn(s, date));
 }
 
@@ -343,8 +374,9 @@ export function isWellFormedWindow(window: SeasonWindow): boolean {
   );
 }
 
-export function daysUntilStart(season: ScamSeason, date: Date): number {
-  const today = dayOfYear(date.getMonth() + 1, date.getDate());
+export function daysUntilStart(season: ScamSeason, date: DateLike): number {
+  const { month, day } = asCivilDate(date);
+  const today = dayOfYear(month, day);
   const start = dayOfYear(season.window.startMonth, season.window.startDay);
   const diff = start - today;
   return diff >= 0 ? diff : diff + 365;
@@ -356,7 +388,7 @@ export function daysUntilStart(season: ScamSeason, date: Date): number {
  * `limit` defaults to 3 — the calendar's "coming up" strip is a glance, not an
  * index; the full year is listed separately below it.
  */
-export function upcomingSeasons(code: RegionCode, date: Date, limit = 3): ScamSeason[] {
+export function upcomingSeasons(code: RegionCode, date: DateLike, limit = 3): ScamSeason[] {
   // Decorate-sort-undecorate: the distance is computed once per season rather
   // than on every comparison, so the comparator is a plain numeric compare over
   // fixed values and cannot go non-transitive if daysUntilStart ever changes.

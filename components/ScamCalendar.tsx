@@ -23,6 +23,7 @@ import {
   daysUntilStart,
   formatWindow,
   type ScamSeason,
+  type CivilDate,
 } from "@/lib/scamCalendar";
 import type { RegionCode } from "@/lib/regions";
 
@@ -129,11 +130,11 @@ export default function ScamCalendar({
 }: {
   region: RegionCode;
   /**
-   * The region's civil date, resolved server-side via regionToday(). Passed in
-   * rather than computed here so the calendar tracks the user's region, not
-   * their device clock.
+   * The region's civil date, resolved server-side via regionToday(). A plain
+   * month/day pair rather than a Date so it means the same thing after crossing
+   * the RSC boundary — a Date would be re-read in the *browser's* timezone.
    */
-  today: Date;
+  today: CivilDate;
   /** Renders an explanatory empty state instead of nothing when true. */
   standalone?: boolean;
 }) {
