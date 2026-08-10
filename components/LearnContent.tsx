@@ -23,12 +23,17 @@ const AGENCIES = [
   { name: "ACSC", abbr: "Australian Cyber Security Centre", site: "cyber.gov.au", href: "https://www.cyber.gov.au" },
 ];
 
-// Part 1's explanatory content is split across three cards rather than one long
-// one, grouped by how each is read: what scams look like (orientation), how to
-// spot one (the actual teaching), and the technical signals (reference, consulted
-// rather than read). The coloured callouts — "if you've been caught" (red) and
-// "where to report" (emerald) — stay standalone: their colour carries meaning.
-const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-8";
+// The explanatory content is now a sequence of <Collapsible> cards, each grouped
+// by how it's read: orientation (what scams look like, where they come from),
+// the core teaching (how scammers operate, red flags, what to do), and technical
+// reference (email auth). Reference and secondary sections collapse by default;
+// the core teaching stays open but is split so any part can be collapsed. The
+// coloured callouts — "if you've been caught" (red) and "where to report"
+// (emerald) — stay standalone open cards: their colour carries meaning.
+//
+// H2 matches the heading style Collapsible renders in its summary, so the two
+// remaining plain cards (calendar pointer, and the callouts' headings) sit at
+// the same visual level as the disclosures around them.
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 const key = (k: string) => k as MessageKey;
@@ -175,11 +180,16 @@ export default function LearnContent({
         </div>
       </Collapsible>
 
-      {/* Card 2 — the actual teaching: recognising a scam in front of you. */}
-      <article className={`${CARD} scroll-mt-20`} id="how-to-spot">
-        {/* How scammers operate */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.tactics.heading")}</h2>
+      {/* The core teaching — recognising a scam in front of you. Phase 1 kept
+          this open; Phase 2 splits what was one 20-item card into three focused
+          disclosures so the reader can collapse whatever they've read and jump
+          to the part they want. All open by default: this is the point of the
+          page and safety advice, so it is separated for scanning, never hidden. */}
+
+      {/* How scammers operate — the conceptual half: name the tactic, break the
+          spell. Carries the how-to-spot anchor the table of contents points at. */}
+      <Collapsible id="how-to-spot" title={t("learn.tactics.heading")} defaultOpen>
+        <div className="space-y-3">
           <p className="text-sm text-gray-400">{t("learn.tactics.intro")}</p>
           <div className="space-y-2">
             {Array.from({ length: TACTIC_COUNT }, (_, i) => (
@@ -192,34 +202,32 @@ export default function LearnContent({
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </Collapsible>
 
-        {/* Red flags */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.flags.heading")}</h2>
-          <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-300 list-none">
-            {Array.from({ length: FLAG_COUNT }, (_, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-amber-400 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
-                <span>{t(key(`learn.flags.${i + 1}`))}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* Red flags — the surface half: the quick two-column checklist. */}
+      <Collapsible title={t("learn.flags.heading")} defaultOpen>
+        <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-300 list-none">
+          {Array.from({ length: FLAG_COUNT }, (_, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className="text-amber-400 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
+              <span>{t(key(`learn.flags.${i + 1}`))}</span>
+            </li>
+          ))}
+        </ul>
+      </Collapsible>
 
-        {/* How to handle it */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.handle.heading")}</h2>
-          <ul className="space-y-2 text-sm text-gray-300 list-none">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-emerald-400 mt-0.5 shrink-0" aria-hidden="true">✓</span>
-                <span>{bold(t(key(`learn.handle.${i}`)))}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </article>
+      {/* What to do when something seems off — the action checklist. */}
+      <Collapsible title={t("learn.handle.heading")} defaultOpen>
+        <ul className="space-y-2 text-sm text-gray-300 list-none">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className="text-emerald-400 mt-0.5 shrink-0" aria-hidden="true">✓</span>
+              <span>{bold(t(key(`learn.handle.${i}`)))}</span>
+            </li>
+          ))}
+        </ul>
+      </Collapsible>
 
       {/* Scam calendar — a pointer, not the calendar itself. The full thing has
           its own page; reproducing it here would duplicate content and make an
