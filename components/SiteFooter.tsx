@@ -24,6 +24,14 @@ export default function SiteFooter() {
           </a>
           {" "}{t("footer.tagline")}
         </p>
+        {/* Carries the calendar link on mobile, where the header hides it for
+            space. Every page has a footer, so this is the one persistent route
+            to it on a phone. */}
+        <p className="text-xs text-gray-500 sm:hidden">
+          <Link href="/calendar" className="underline underline-offset-2 hover:text-gray-300">
+            {t("nav.calendar")}
+          </Link>
+        </p>
         <p className="text-xs text-gray-500">
           <Link href="/about" className="underline underline-offset-2 hover:text-gray-300">
             {t("footer.about")}
