@@ -417,5 +417,17 @@
   "home.radar.heading": "Circulating right now",
   "home.radar.cta": "See the full threat radar →",
   "home.radar.more": "and {count} more",
-  "radar.source": "Source: weekly sweep, {date}"
+  "radar.source": "Source: weekly sweep, {date}",
+  "radar.summary.heading": "At a glance",
+  "radar.summary.body": "{active} circulating now, {watchlist} quieter. We catch {covered} of the {total} — the rest are listed too, because a gap you know about is one you can work around.",
+  "radar.gaps.heading": "Worth knowing we don't catch",
+  "radar.expand": "What it looks like, and what to do",
+  "radar.collapse": "Hide details",
+  "radar.filter.all": "All",
+  "radar.filter.sms": "Texts",
+  "radar.filter.email": "Email",
+  "radar.filter.phone": "Calls",
+  "radar.filter.gaps": "Gaps",
+  "radar.filter.none": "Nothing matches that filter.",
+  "radar.count": "{n} of {total}"
 }

@@ -723,6 +723,42 @@ export function activeThreats(code: RegionCode): ThreatEntry[] {
 }
 
 /**
+ * Entries the detector does not fully catch — `partial` and `none`.
+ *
+ * Surfaced as its own group because it is the part of the radar a reader can
+ * act on. Twenty of twenty-five entries are `covered`, so the badge is near-
+ * constant and carries almost no information scanning down the page; the five
+ * exceptions are the ones worth pulling out. `n/a` is deliberately excluded —
+ * a voice call is not a gap in our coverage, it is outside what a text checker
+ * can ever see, and mixing the two would overstate the shortfall.
+ */
+export function uncoveredThreats(code: RegionCode): ThreatEntry[] {
+  return radarForRegion(code).filter(
+    (t) => t.coverage === "partial" || t.coverage === "none",
+  );
+}
+
+/** Counts behind the at-a-glance line. Derived so they cannot drift. */
+export interface RadarSummary {
+  total: number;
+  active: number;
+  watchlist: number;
+  covered: number;
+  uncovered: number;
+}
+
+export function radarSummary(code: RegionCode): RadarSummary {
+  const entries = radarForRegion(code);
+  return {
+    total: entries.length,
+    active: entries.filter((t) => t.status === "active").length,
+    watchlist: entries.filter((t) => t.status === "watchlist").length,
+    covered: entries.filter((t) => t.coverage === "covered").length,
+    uncovered: uncoveredThreats(code).length,
+  };
+}
+
+/**
  * The most recent `lastSeen` across a region's entries — the radar's "as at"
  * date.
  *

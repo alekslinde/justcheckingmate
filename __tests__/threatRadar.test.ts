@@ -10,6 +10,8 @@ import {
   isWellFormedDate,
   formatRadarDate,
   roadmapUrl,
+  uncoveredThreats,
+  radarSummary,
   type ThreatEntry,
 } from "@/lib/threatRadar";
 import { supportedRegions } from "@/lib/regions";
@@ -195,6 +197,66 @@ describe("threatsByStatus", () => {
   it("returns an empty list for an unauthored region", () => {
     expect(threatsByStatus("GB", "active")).toEqual([]);
     expect(activeThreats("GB")).toEqual([]);
+  });
+});
+
+describe("uncoveredThreats", () => {
+  it("returns partial and none, excluding n/a", () => {
+    // `n/a` is not a coverage gap — a voice call is outside what a text checker
+    // can ever see. Counting it as a shortfall would overstate the gap and make
+    // the "worth knowing we don't catch" group misleading.
+    const gaps = uncoveredThreats("AU");
+    expect(gaps.length).toBeGreaterThan(0);
+    for (const g of gaps) expect(["partial", "none"]).toContain(g.coverage);
+    expect(gaps.some((g) => g.coverage === "n/a")).toBe(false);
+  });
+
+  it("stays a minority — the gap section is an exception list, not the board", () => {
+    // If most entries were uncovered, promoting them above the full list would
+    // be duplicating the page rather than highlighting anything.
+    expect(uncoveredThreats("AU").length).toBeLessThan(AU.length / 2);
+  });
+
+  it("is empty for an unauthored region", () => {
+    expect(uncoveredThreats("GB")).toEqual([]);
+  });
+});
+
+describe("radarSummary", () => {
+  it("counts match the underlying partitions", () => {
+    const s = radarSummary("AU");
+    expect(s.total).toBe(AU.length);
+    expect(s.active).toBe(threatsByStatus("AU", "active").length);
+    expect(s.watchlist).toBe(threatsByStatus("AU", "watchlist").length);
+    expect(s.covered).toBe(AU.filter((t) => t.coverage === "covered").length);
+    expect(s.uncovered).toBe(uncoveredThreats("AU").length);
+  });
+
+  it("never claims more covered than exist", () => {
+    // The summary line states these to the user as fact; a count drifting from
+    // the cards below it would be a visible lie about our own coverage.
+    const s = radarSummary("AU");
+    expect(s.covered).toBeLessThanOrEqual(s.total);
+    expect(s.active + s.watchlist).toBeLessThanOrEqual(s.total);
+  });
+
+  it("zeroes out for an unauthored region", () => {
+    expect(radarSummary("GB")).toEqual({
+      total: 0,
+      active: 0,
+      watchlist: 0,
+      covered: 0,
+      uncovered: 0,
+    });
+  });
+
+  it("keeps `covered` the dominant case the collapsed row relies on", () => {
+    // The UI names coverage in the collapsed row ONLY for gaps, so silence has
+    // to mean "covered". That convention is only safe while covered is the
+    // clear majority — if it stopped being so, the absence of a label would
+    // become ambiguous and the rows would need an explicit badge again.
+    const s = radarSummary("AU");
+    expect(s.covered).toBeGreaterThan(s.total / 2);
   });
 });
 
