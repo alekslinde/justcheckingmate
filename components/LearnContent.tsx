@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
@@ -49,6 +49,14 @@ const TOC = [
   { id: "where-to-report", labelKey: "learn.report.heading" },
   { id: "using-this-tool", labelKey: "learn.part.using.heading" },
 ] as const;
+
+// Rendered height of the sticky TOC bar, in px. Used to decide which section is
+// "current" — the last one whose top has scrolled up past the bar — and kept
+// roughly in sync with the bar's own height (py-2 around a single chip row). It
+// only needs to be close: an off-by-a-few-px value shifts the active-link
+// hand-off by a few pixels of scroll, nothing more. The anchored sections clear
+// the bar via their own scroll-mt-20 (80px), comfortably more than this.
+const TOC_BAR_HEIGHT = 52;
 
 // Part header — the page is split into two distinct halves: "Spotting scams"
 // (what scams are / how to identify them) and "Getting the most from this tool"
@@ -100,6 +108,56 @@ export default function LearnContent({
     return () => window.removeEventListener("hashchange", openTarget);
   }, []);
 
+  // Which section the reader is currently in, so the sticky TOC can highlight it
+  // — turning the index from a one-shot list into a "you are here" that tracks
+  // as you scroll. Computed from scroll position rather than IntersectionObserver
+  // because the answer we want ("the last heading scrolled up past the bar") is
+  // exactly a top-edge comparison, and the sections are collapsible, so their
+  // heights change under the observer's feet.
+  const [activeId, setActiveId] = useState<string>(TOC[0].id);
+  const tocRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const sections = TOC.map(({ id }) => document.getElementById(id)).filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    if (sections.length === 0) return;
+
+    const computeActive = () => {
+      // The current section is the last one whose top has reached the bar. The
+      // list is in document order, so the first one still below the bar ends it.
+      let current = sections[0].id;
+      for (const el of sections) {
+        if (el.getBoundingClientRect().top <= TOC_BAR_HEIGHT + 8) current = el.id;
+        else break;
+      }
+      // At the very bottom the final section may be too short to ever reach the
+      // bar; once the page is scrolled to the end, prefer it so the last link
+      // doesn't stay dark while the reader is plainly looking at it.
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+        current = sections[sections.length - 1].id;
+      }
+      setActiveId(current);
+    };
+
+    computeActive();
+    window.addEventListener("scroll", computeActive, { passive: true });
+    window.addEventListener("resize", computeActive);
+    return () => {
+      window.removeEventListener("scroll", computeActive);
+      window.removeEventListener("resize", computeActive);
+    };
+  }, []);
+
+  // Keep the active chip in view within the horizontally-scrolling bar, so on a
+  // narrow screen the highlighted link never sits off-screen. block:"nearest"
+  // holds the page still (the bar is always fully visible); only the bar's own
+  // horizontal scroll moves.
+  useEffect(() => {
+    const chip = tocRef.current?.querySelector<HTMLElement>(`[data-toc="${activeId}"]`);
+    chip?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
   return (
     <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       <div>
@@ -107,23 +165,40 @@ export default function LearnContent({
         <p className="text-sm text-gray-400">{t("learn.intro")}</p>
       </div>
 
-      {/* Jump links. The page is long and covers several distinct needs, so the
-          fastest route to any one of them is an index rather than a scroll. */}
-      <nav aria-label={t("learn.toc.heading")} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2.5">
-          {t("learn.toc.heading")}
-        </h2>
-        <ul className="flex flex-wrap gap-x-2 gap-y-1.5 list-none">
-          {TOC.map(({ id, labelKey }) => (
-            <li key={id}>
-              <a
-                href={`#${id}`}
-                className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
-              >
-                {t(key(labelKey))}
-              </a>
-            </li>
-          ))}
+      {/* Table of contents — a sticky, horizontally-scrollable index. The page is
+          long and covers several distinct needs, so the fastest route to any one
+          is a persistent bar that also shows where you are, not a one-shot list
+          scrolled past once. It pins to the top as the (non-sticky) site header
+          scrolls away; -mx-4 lets the divider span the column while the inner
+          padding keeps the chips aligned with the content. The active chip is
+          highlighted and scrolled into view as you move through the page. */}
+      <nav
+        aria-label={t("learn.toc.heading")}
+        className="sticky top-0 z-20 -mx-4 border-b border-gray-800 bg-gray-950/80 backdrop-blur"
+      >
+        <ul
+          ref={tocRef}
+          className="flex gap-2 overflow-x-auto px-4 py-2 list-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {TOC.map(({ id, labelKey }) => {
+            const active = id === activeId;
+            return (
+              <li key={id}>
+                <a
+                  href={`#${id}`}
+                  data-toc={id}
+                  aria-current={active ? "location" : undefined}
+                  className={`block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/60"
+                  }`}
+                >
+                  {t(key(labelKey))}
+                </a>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
