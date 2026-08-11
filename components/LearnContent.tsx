@@ -47,8 +47,15 @@ const TOC = [
   { id: "scam-calendar", labelKey: "learn.calendar.heading" },
   { id: "technical-signals", labelKey: "learn.auth.heading" },
   { id: "where-to-report", labelKey: "learn.report.heading" },
+  { id: "block-email", labelKey: "learn.block.email.heading" },
+  { id: "block-phone", labelKey: "learn.block.phone.heading" },
   { id: "using-this-tool", labelKey: "learn.part.using.heading" },
 ] as const;
+
+// The mail clients and phone platforms the block/report guides cover. Slugs, not
+// indices, so each maps to a readable message key (learn.block.email.<slug>.*).
+const BLOCK_EMAIL = ["gmail", "outlook", "apple", "yahoo", "any"] as const;
+const BLOCK_PHONE = ["ios", "android", "authorities", "apps"] as const;
 
 // Rendered height of the sticky TOC bar, in px. Used to decide which section is
 // "current" — the last one whose top has scrolled up past the bar — and kept
@@ -378,6 +385,39 @@ export default function LearnContent({
           </div>
         </div>
       </section>
+
+      {/* Blocking & reporting spam — how to stop a sender and report them, in the
+          common mail clients, phones and messaging apps. Moved here from the
+          About page: it's how-to guidance, which is Learn's job, whereas About is
+          the canonical record of privacy behaviour. Collapsed by default and
+          grouped with "where to report" as the "act on it" cluster. */}
+      <Collapsible id="block-email" title={t("learn.block.email.heading")}>
+        <div className="space-y-3">
+          <p className="text-sm text-gray-400">{t("learn.block.email.intro")}</p>
+          <div className="space-y-3">
+            {BLOCK_EMAIL.map((slug) => (
+              <div key={slug} className="space-y-1">
+                <h3 className="font-semibold text-gray-100 text-sm">{t(key(`learn.block.email.${slug}.title`))}</h3>
+                <p className="text-sm text-gray-300">{bold(t(key(`learn.block.email.${slug}.body`)))}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Collapsible>
+
+      <Collapsible id="block-phone" title={t("learn.block.phone.heading")}>
+        <div className="space-y-3">
+          <p className="text-sm text-gray-400">{t("learn.block.phone.intro")}</p>
+          <div className="space-y-3">
+            {BLOCK_PHONE.map((slug) => (
+              <div key={slug} className="space-y-1">
+                <h3 className="font-semibold text-gray-100 text-sm">{t(key(`learn.block.phone.${slug}.title`))}</h3>
+                <p className="text-sm text-gray-300">{bold(t(key(`learn.block.phone.${slug}.body`)))}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Collapsible>
 
       {/* ── Part 2: Getting the most from this tool ────────────────────────────
           A deliberately separate appendix: this is how-to reference for capturing
