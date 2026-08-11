@@ -7,6 +7,7 @@ import { bold } from "@/lib/richText";
 import { AUTH_LEGEND, StaticAuthPill } from "@/components/AuthBadges";
 import EmailExportGuide from "@/components/EmailExportGuide";
 import Collapsible from "@/components/Collapsible";
+import { activeSectionId } from "@/lib/toc";
 
 // Type icons mirror the input/report type pickers used across the app, so they
 // stay as a consistent scanning aid. The tactic/source/flag lists used purely
@@ -124,20 +125,12 @@ export default function LearnContent({
     if (sections.length === 0) return;
 
     const computeActive = () => {
-      // The current section is the last one whose top has reached the bar. The
-      // list is in document order, so the first one still below the bar ends it.
-      let current = sections[0].id;
-      for (const el of sections) {
-        if (el.getBoundingClientRect().top <= TOC_BAR_HEIGHT + 8) current = el.id;
-        else break;
-      }
-      // At the very bottom the final section may be too short to ever reach the
-      // bar; once the page is scrolled to the end, prefer it so the last link
-      // doesn't stay dark while the reader is plainly looking at it.
-      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
-        current = sections[sections.length - 1].id;
-      }
-      setActiveId(current);
+      // Read the DOM here; the selection itself is pure and lives in lib/toc so
+      // it can be tested without a browser.
+      const tops = sections.map((el) => ({ id: el.id, top: el.getBoundingClientRect().top }));
+      const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 2;
+      const id = activeSectionId(tops, { barHeight: TOC_BAR_HEIGHT, atBottom });
+      if (id) setActiveId(id);
     };
 
     computeActive();
