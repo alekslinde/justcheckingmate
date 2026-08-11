@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 import { AUTH_LEGEND, StaticAuthPill } from "@/components/AuthBadges";
 import EmailExportGuide from "@/components/EmailExportGuide";
+import Collapsible from "@/components/Collapsible";
 
 // Type icons mirror the input/report type pickers used across the app, so they
 // stay as a consistent scanning aid. The tactic/source/flag lists used purely
@@ -21,12 +23,17 @@ const AGENCIES = [
   { name: "ACSC", abbr: "Australian Cyber Security Centre", site: "cyber.gov.au", href: "https://www.cyber.gov.au" },
 ];
 
-// Part 1's explanatory content is split across three cards rather than one long
-// one, grouped by how each is read: what scams look like (orientation), how to
-// spot one (the actual teaching), and the technical signals (reference, consulted
-// rather than read). The coloured callouts — "if you've been caught" (red) and
-// "where to report" (emerald) — stay standalone: their colour carries meaning.
-const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-8";
+// The explanatory content is now a sequence of <Collapsible> cards, each grouped
+// by how it's read: orientation (what scams look like, where they come from),
+// the core teaching (how scammers operate, red flags, what to do), and technical
+// reference (email auth). Reference and secondary sections collapse by default;
+// the core teaching stays open but is split so any part can be collapsed. The
+// coloured callouts — "if you've been caught" (red) and "where to report"
+// (emerald) — stay standalone open cards: their colour carries meaning.
+//
+// H2 matches the heading style Collapsible renders in its summary, so the two
+// remaining plain cards (calendar pointer, and the callouts' headings) sit at
+// the same visual level as the disclosures around them.
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 const key = (k: string) => k as MessageKey;
@@ -43,11 +50,23 @@ const TOC = [
   { id: "using-this-tool", labelKey: "learn.part.using.heading" },
 ] as const;
 
+// Rendered height of the sticky TOC bar, in px. Used to decide which section is
+// "current" — the last one whose top has scrolled up past the bar — and kept
+// roughly in sync with the bar's own height (py-2 around a single chip row). It
+// only needs to be close: an off-by-a-few-px value shifts the active-link
+// hand-off by a few pixels of scroll, nothing more. The anchored sections clear
+// the bar via their own scroll-mt-20 (80px), comfortably more than this.
+const TOC_BAR_HEIGHT = 52;
+
 // Part header — the page is split into two distinct halves: "Spotting scams"
 // (what scams are / how to identify them) and "Getting the most from this tool"
 // (how to capture a scam so we can read it). Larger and divider-led so the two
 // halves read as separate sections, not just more cards.
-function PartHeader({ id, heading, intro }: { id: string; heading: string; intro: string }) {
+//
+// The id is optional: Part 2 carries its anchor on a wrapping <section> instead,
+// so that a deep link to #using-this-tool can open the capture guides nested
+// inside it (see the hash-open effect) rather than just scrolling to a header.
+function PartHeader({ id, heading, intro }: { id?: string; heading: string; intro: string }) {
   return (
     <div id={id} className="scroll-mt-20 pt-2">
       <div className="h-px bg-gray-800 mb-6" />
@@ -65,6 +84,80 @@ export default function LearnContent({
 }) {
   const { t } = useLang();
 
+  // Reveal collapsed content when its anchor is navigated to. A jump link to a
+  // closed <details> would otherwise scroll to a bare header and hide the content
+  // it promised. Two cases: the target itself is a collapsible (a table-of-
+  // contents link), or the target is a container whose collapsibles should open
+  // (the check flow deep-links to #using-this-tool for the capture guide, which
+  // is a <section> wrapping three disclosures). Runs on load and on every in-page
+  // hash change; anchors with no collapsibles (the emergency block, the calendar
+  // pointer) are left untouched.
+  useEffect(() => {
+    const openTarget = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el instanceof HTMLDetailsElement) el.open = true;
+      el.querySelectorAll("details").forEach((d) => {
+        d.open = true;
+      });
+    };
+    openTarget();
+    window.addEventListener("hashchange", openTarget);
+    return () => window.removeEventListener("hashchange", openTarget);
+  }, []);
+
+  // Which section the reader is currently in, so the sticky TOC can highlight it
+  // — turning the index from a one-shot list into a "you are here" that tracks
+  // as you scroll. Computed from scroll position rather than IntersectionObserver
+  // because the answer we want ("the last heading scrolled up past the bar") is
+  // exactly a top-edge comparison, and the sections are collapsible, so their
+  // heights change under the observer's feet.
+  const [activeId, setActiveId] = useState<string>(TOC[0].id);
+  const tocRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    const sections = TOC.map(({ id }) => document.getElementById(id)).filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    if (sections.length === 0) return;
+
+    const computeActive = () => {
+      // The current section is the last one whose top has reached the bar. The
+      // list is in document order, so the first one still below the bar ends it.
+      let current = sections[0].id;
+      for (const el of sections) {
+        if (el.getBoundingClientRect().top <= TOC_BAR_HEIGHT + 8) current = el.id;
+        else break;
+      }
+      // At the very bottom the final section may be too short to ever reach the
+      // bar; once the page is scrolled to the end, prefer it so the last link
+      // doesn't stay dark while the reader is plainly looking at it.
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+        current = sections[sections.length - 1].id;
+      }
+      setActiveId(current);
+    };
+
+    computeActive();
+    window.addEventListener("scroll", computeActive, { passive: true });
+    window.addEventListener("resize", computeActive);
+    return () => {
+      window.removeEventListener("scroll", computeActive);
+      window.removeEventListener("resize", computeActive);
+    };
+  }, []);
+
+  // Keep the active chip in view within the horizontally-scrolling bar, so on a
+  // narrow screen the highlighted link never sits off-screen. block:"nearest"
+  // holds the page still (the bar is always fully visible); only the bar's own
+  // horizontal scroll moves.
+  useEffect(() => {
+    const chip = tocRef.current?.querySelector<HTMLElement>(`[data-toc="${activeId}"]`);
+    chip?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
   return (
     <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       <div>
@@ -72,23 +165,40 @@ export default function LearnContent({
         <p className="text-sm text-gray-400">{t("learn.intro")}</p>
       </div>
 
-      {/* Jump links. The page is long and covers several distinct needs, so the
-          fastest route to any one of them is an index rather than a scroll. */}
-      <nav aria-label={t("learn.toc.heading")} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2.5">
-          {t("learn.toc.heading")}
-        </h2>
-        <ul className="flex flex-wrap gap-x-2 gap-y-1.5 list-none">
-          {TOC.map(({ id, labelKey }) => (
-            <li key={id}>
-              <a
-                href={`#${id}`}
-                className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
-              >
-                {t(key(labelKey))}
-              </a>
-            </li>
-          ))}
+      {/* Table of contents — a sticky, horizontally-scrollable index. The page is
+          long and covers several distinct needs, so the fastest route to any one
+          is a persistent bar that also shows where you are, not a one-shot list
+          scrolled past once. It pins to the top as the (non-sticky) site header
+          scrolls away; -mx-4 lets the divider span the column while the inner
+          padding keeps the chips aligned with the content. The active chip is
+          highlighted and scrolled into view as you move through the page. */}
+      <nav
+        aria-label={t("learn.toc.heading")}
+        className="sticky top-0 z-20 -mx-4 border-b border-gray-800 bg-gray-950/80 backdrop-blur"
+      >
+        <ul
+          ref={tocRef}
+          className="flex gap-2 overflow-x-auto px-4 py-2 list-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {TOC.map(({ id, labelKey }) => {
+            const active = id === activeId;
+            return (
+              <li key={id}>
+                <a
+                  href={`#${id}`}
+                  data-toc={id}
+                  aria-current={active ? "location" : undefined}
+                  className={`block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/60"
+                  }`}
+                >
+                  {t(key(labelKey))}
+                </a>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
@@ -124,46 +234,48 @@ export default function LearnContent({
         intro={t("learn.part.spot.intro")}
       />
 
-      {/* Card 1 — orientation: what scams look like and where they arrive. */}
-      <article className={`${CARD} scroll-mt-20`} id="what-scams-look-like">
-        {/* What this tool checks */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.types.heading")}</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {SCAM_TYPE_ICONS.map((icon, i) => (
-              <div key={i} className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2.5">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span aria-hidden="true">{icon}</span>
-                  <span className="text-sm font-medium text-gray-200">{t(key(`learn.types.${i + 1}.label`))}</span>
-                </div>
-                <p className="text-xs text-gray-500">{t(key(`learn.types.${i + 1}.desc`))}</p>
+      {/* Card 1 — orientation. Collapsed by default: it's read once to get your
+          bearings, not on every visit, so it opens on demand rather than pushing
+          the core teaching below it down the page. Split into two disclosures,
+          one per heading, so each opens to a single focused topic. */}
+      <Collapsible id="what-scams-look-like" title={t("learn.types.heading")}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {SCAM_TYPE_ICONS.map((icon, i) => (
+            <div key={i} className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-2.5">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span aria-hidden="true">{icon}</span>
+                <span className="text-sm font-medium text-gray-200">{t(key(`learn.types.${i + 1}.label`))}</span>
               </div>
-            ))}
-          </div>
-        </section>
+              <p className="text-xs text-gray-500">{t(key(`learn.types.${i + 1}.desc`))}</p>
+            </div>
+          ))}
+        </div>
+      </Collapsible>
 
-        {/* Where scams come from */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.sources.heading")}</h2>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {Array.from({ length: SOURCE_COUNT }, (_, i) => (
-              <div key={i} className="flex items-start gap-2.5">
-                <span className="text-emerald-400/70 mt-0.5 shrink-0" aria-hidden="true">›</span>
-                <p className="text-sm text-gray-300">
-                  <span className="font-medium text-gray-100">{t(key(`learn.sources.${i + 1}.title`))}.</span>{" "}
-                  <span className="text-gray-400">{t(key(`learn.sources.${i + 1}.desc`))}</span>
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </article>
+      <Collapsible title={t("learn.sources.heading")}>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {Array.from({ length: SOURCE_COUNT }, (_, i) => (
+            <div key={i} className="flex items-start gap-2.5">
+              <span className="text-emerald-400/70 mt-0.5 shrink-0" aria-hidden="true">›</span>
+              <p className="text-sm text-gray-300">
+                <span className="font-medium text-gray-100">{t(key(`learn.sources.${i + 1}.title`))}.</span>{" "}
+                <span className="text-gray-400">{t(key(`learn.sources.${i + 1}.desc`))}</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      </Collapsible>
 
-      {/* Card 2 — the actual teaching: recognising a scam in front of you. */}
-      <article className={`${CARD} scroll-mt-20`} id="how-to-spot">
-        {/* How scammers operate */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.tactics.heading")}</h2>
+      {/* The core teaching — recognising a scam in front of you. Phase 1 kept
+          this open; Phase 2 splits what was one 20-item card into three focused
+          disclosures so the reader can collapse whatever they've read and jump
+          to the part they want. All open by default: this is the point of the
+          page and safety advice, so it is separated for scanning, never hidden. */}
+
+      {/* How scammers operate — the conceptual half: name the tactic, break the
+          spell. Carries the how-to-spot anchor the table of contents points at. */}
+      <Collapsible id="how-to-spot" title={t("learn.tactics.heading")} defaultOpen>
+        <div className="space-y-3">
           <p className="text-sm text-gray-400">{t("learn.tactics.intro")}</p>
           <div className="space-y-2">
             {Array.from({ length: TACTIC_COUNT }, (_, i) => (
@@ -176,34 +288,32 @@ export default function LearnContent({
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </Collapsible>
 
-        {/* Red flags */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.flags.heading")}</h2>
-          <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-300 list-none">
-            {Array.from({ length: FLAG_COUNT }, (_, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-amber-400 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
-                <span>{t(key(`learn.flags.${i + 1}`))}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* Red flags — the surface half: the quick two-column checklist. */}
+      <Collapsible title={t("learn.flags.heading")} defaultOpen>
+        <ul className="grid sm:grid-cols-2 gap-2 text-sm text-gray-300 list-none">
+          {Array.from({ length: FLAG_COUNT }, (_, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className="text-amber-400 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
+              <span>{t(key(`learn.flags.${i + 1}`))}</span>
+            </li>
+          ))}
+        </ul>
+      </Collapsible>
 
-        {/* How to handle it */}
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.handle.heading")}</h2>
-          <ul className="space-y-2 text-sm text-gray-300 list-none">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-emerald-400 mt-0.5 shrink-0" aria-hidden="true">✓</span>
-                <span>{bold(t(key(`learn.handle.${i}`)))}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </article>
+      {/* What to do when something seems off — the action checklist. */}
+      <Collapsible title={t("learn.handle.heading")} defaultOpen>
+        <ul className="space-y-2 text-sm text-gray-300 list-none">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className="text-emerald-400 mt-0.5 shrink-0" aria-hidden="true">✓</span>
+              <span>{bold(t(key(`learn.handle.${i}`)))}</span>
+            </li>
+          ))}
+        </ul>
+      </Collapsible>
 
       {/* Scam calendar — a pointer, not the calendar itself. The full thing has
           its own page; reproducing it here would duplicate content and make an
@@ -225,11 +335,11 @@ export default function LearnContent({
         </Link>
       </article>
 
-      {/* Card 3 — reference material. Last because it's consulted when a result
-          mentions SPF or DMARC, not read start to finish like the cards above. */}
-      <article className={`${CARD} scroll-mt-20`} id="technical-signals">
-        <section className="space-y-3">
-          <h2 className={H2}>{t("learn.auth.heading")}</h2>
+      {/* Card 3 — reference material. Collapsed by default: it's consulted when a
+          result mentions SPF or DMARC, not read start to finish, so it no longer
+          spends a screen of the page on a legend most readers never need. */}
+      <Collapsible id="technical-signals" title={t("learn.auth.heading")}>
+        <div className="space-y-3">
           <p className="text-sm text-gray-400">{t("learn.auth.intro")}</p>
           <div className="space-y-4 pt-1">
             {AUTH_LEGEND.map((entry) => (
@@ -246,8 +356,8 @@ export default function LearnContent({
               </div>
             ))}
           </div>
-        </section>
-      </article>
+        </div>
+      </Collapsible>
 
       {/* Where to report + disclaimer */}
       <section id="where-to-report" className="scroll-mt-20 bg-emerald-950/30 border border-emerald-900/50 rounded-2xl p-5">
@@ -269,32 +379,36 @@ export default function LearnContent({
         </div>
       </section>
 
-      {/* ── Part 2: Getting the most from this tool ────────────────────────── */}
-      <PartHeader
-        id="using-this-tool"
-        heading={t("learn.part.using.heading")}
-        intro={t("learn.part.using.intro")}
-      />
+      {/* ── Part 2: Getting the most from this tool ────────────────────────────
+          A deliberately separate appendix: this is how-to reference for capturing
+          a scam, not part of learning to spot one. It lives here rather than in
+          the check flow on purpose — the flow keeps a quiet "See the guide →"
+          pointer to #using-this-tool instead of re-crowding itself with inline
+          expandables (see CheckFlow). The anchor sits on this <section> so that
+          arriving from that pointer opens the guides inside it, rather than
+          landing on three closed toggles. */}
+      <section id="using-this-tool" className="scroll-mt-20 space-y-6">
+        <PartHeader
+          heading={t("learn.part.using.heading")}
+          intro={t("learn.part.using.intro")}
+        />
 
-      <article className={CARD}>
-        {/* Taking a photo */}
-        <section className="space-y-2">
-          <h2 className={H2}>{t("learn.using.photo.heading")}</h2>
+        {/* One collapsible each — reached for when you're about to capture a
+            scam, so each opens on demand rather than stacking three open sections
+            at the foot of an already-long page. The email guide renders open
+            inside its own disclosure (the outer Collapsible is the toggle). */}
+        <Collapsible title={t("learn.using.photo.heading")}>
           <p className="text-sm text-gray-400">{t("check.help.photo.body")}</p>
-        </section>
+        </Collapsible>
 
-        {/* Uploading an image */}
-        <section className="space-y-2">
-          <h2 className={H2}>{t("learn.using.image.heading")}</h2>
+        <Collapsible title={t("learn.using.image.heading")}>
           <p className="text-sm text-gray-400">{t("check.help.image.body")}</p>
-        </section>
+        </Collapsible>
 
-        {/* Getting the email source — reuses the per-mail-client export guide. */}
-        <section className="space-y-2">
-          <h2 className={H2}>{t("learn.using.email.heading")}</h2>
+        <Collapsible title={t("learn.using.email.heading")}>
           <EmailExportGuide expandable={false} />
-        </section>
-      </article>
+        </Collapsible>
+      </section>
 
       <p className="text-center text-sm text-gray-400 pb-4">
         <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium">
