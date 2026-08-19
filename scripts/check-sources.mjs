@@ -56,6 +56,41 @@ const USER_AGENT =
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+// Cross-host liveness fallback (LIVE_FALLBACK).
+//
+// The 403-to-any-agent case is dominated by IP-reputation blocks: an enterprise
+// WAF (Cloudflare, Akamai) challenges every request from a datacenter IP before
+// headers or UA matter, so no on-host probe from CI can get through — and, being
+// IP-wide, neither can the site's own feed or sitemap. The one signal left is
+// OFF-host: the Internet Archive, which does answer CI IPs. A recent snapshot
+// proves the citation existed lately and the host is a real publisher, not rot.
+//
+// This is corroboration, not proof of a live 200 today — hence its own state,
+// never OK. A human still confirms before leaning on a *fresh* claim. But it is
+// strictly better than DEAD: it stops the checker crying rot over sources that
+// are demonstrably alive and merely bot-walled from the runner.
+//
+// The window bounds the honesty gap: a snapshot older than this is treated as no
+// evidence, so a source that died a year ago still surfaces as rot.
+const WAYBACK_MAX_AGE_DAYS = 365;
+
+// Pure: read the Wayback `available` API payload and decide whether its closest
+// snapshot is recent enough to vouch for the URL. Exported for unit tests —
+// this is the honesty-critical bit (shape + recency), separate from the fetch.
+export function waybackFreshness(data, nowMs = Date.now(), maxAgeDays = WAYBACK_MAX_AGE_DAYS) {
+  const snap = data?.archived_snapshots?.closest;
+  if (!snap || snap.available !== true || !snap.timestamp) return null;
+  // Wayback timestamps are yyyymmddhhmmss (UTC).
+  const t = String(snap.timestamp);
+  if (!/^\d{14}$/.test(t)) return null;
+  const iso = `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}T${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)}Z`;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  const ageDays = (nowMs - ms) / 86_400_000;
+  if (ageDays < 0 || ageDays > maxAgeDays) return null;
+  return { snapshotUrl: snap.url, ageDays: Math.round(ageDays) };
+}
+
 // ---------------------------------------------------------------------------
 // Registry parsing
 //
@@ -331,6 +366,58 @@ async function probeWithBrowserUa(url) {
   }
 }
 
+// True only if the URL serves a real page to a browser UA right now (not a
+// redirect onto a homepage/other host — that is rot, not liveness).
+async function reachableNow(url) {
+  try {
+    const res = await withTimeout((signal) => probe(url, "GET", signal, BROWSER_UA));
+    return res.ok && !landedElsewhere(url, res.url);
+  } catch {
+    return false;
+  }
+}
+
+// Ask the Internet Archive whether it holds a recent snapshot of the URL.
+async function waybackLookup(url) {
+  try {
+    const api = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`;
+    const res = await withTimeout((signal) =>
+      fetch(api, { signal, headers: { "User-Agent": USER_AGENT, Accept: "application/json" } }));
+    if (!res.ok) return null;
+    return waybackFreshness(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+// The fallback ladder. Called only once the direct probes have failed to reach a
+// source from CI, to tell "bot-walled but alive" apart from "actually gone".
+// Cheapest and most specific first; the off-host Archive lookup last because it
+// is the weakest evidence (existed recently ≠ live today) but the only one that
+// survives an IP-wide block. Returns { via, detail } or null.
+async function corroborateLiveness(entry) {
+  // 1. Publisher feed — a live signal fetched now, and often not WAF-walled.
+  if (entry.feed && await reachableNow(entry.feed)) {
+    return { via: "feed", detail: `feed reachable (${entry.feed})` };
+  }
+  // 2. Same-host well-known paths — only beat a PATH-specific block, but cheap.
+  let origin;
+  try { origin = new URL(entry.url).origin; } catch { origin = null; }
+  if (origin) {
+    for (const [path, via] of [["/sitemap.xml", "sitemap"], ["/robots.txt", "robots"]]) {
+      if (await reachableNow(origin + path)) {
+        return { via, detail: `${origin}${path} reachable` };
+      }
+    }
+  }
+  // 3. Off-host: a recent Internet Archive snapshot (survives an IP-wide block).
+  const snap = await waybackLookup(entry.url);
+  if (snap) {
+    return { via: "wayback", detail: `archived ${snap.ageDays}d ago (${snap.snapshotUrl})` };
+  }
+  return null;
+}
+
 async function checkOne(entry) {
   const result = { domain: entry.domain, url: entry.url, tier: entry.tier, name: entry.name };
 
@@ -370,8 +457,17 @@ async function checkOne(entry) {
             result.state = "REDIRECTED";
             result.finalUrl = browser.finalUrl;
           } else {
-            result.state = "DEAD";
-            result.error = `HTTP ${res.status} to any agent`;
+            // Refused to every UA — usually an IP-reputation block, not a dead
+            // host. Try the off-host fallback ladder before crying rot.
+            const live = await corroborateLiveness(entry);
+            if (live) {
+              result.state = "LIVE_FALLBACK";
+              result.via = live.via;
+              result.error = `HTTP ${res.status} to our agents; ${live.detail}`;
+            } else {
+              result.state = "DEAD";
+              result.error = `HTTP ${res.status} to any agent`;
+            }
           }
         }
       }
@@ -402,6 +498,15 @@ async function checkOne(entry) {
         if (browser.verdict === "moved") {
           result.state = "REDIRECTED";
           result.finalUrl = browser.finalUrl;
+          return result;
+        }
+        // A blackholing WAF hangs rather than answering; the source can still be
+        // alive. Corroborate off-host before reporting it unreachable.
+        const live = await corroborateLiveness(entry);
+        if (live) {
+          result.state = "LIVE_FALLBACK";
+          result.via = live.via;
+          result.error = `no direct response from CI; ${live.detail}`;
           return result;
         }
         result.state = err.name === "AbortError" ? "TIMEOUT" : "UNREACHABLE";
@@ -437,7 +542,7 @@ const PROBLEM = new Set(["DEAD", "SERVER_ERROR", "TIMEOUT", "UNREACHABLE", "REDI
 const FAIL = new Set(["DEAD", "UNREACHABLE", "TIMEOUT"]);
 
 function sortKey(r) {
-  const order = { DEAD: 0, UNREACHABLE: 1, TIMEOUT: 2, SERVER_ERROR: 3, REDIRECTED: 4, BLOCKED: 5, OK: 6 };
+  const order = { DEAD: 0, UNREACHABLE: 1, TIMEOUT: 2, SERVER_ERROR: 3, REDIRECTED: 4, BLOCKED: 5, LIVE_FALLBACK: 6, OK: 7 };
   const tier = r.tier === "brands" ? 9 : Number(r.tier);
   return [order[r.state] ?? 9, tier];
 }
@@ -448,13 +553,15 @@ function markdown(results, reg, retiredCount = 0) {
     return ao - bo || at - bt;
   });
   const blocked = results.filter((r) => r.state === "BLOCKED");
+  const fallback = results.filter((r) => r.state === "LIVE_FALLBACK");
   const ok = results.filter((r) => r.state === "OK").length;
 
   const out = [];
   out.push("## Threat-intel source check");
   out.push("");
   const retiredNote = retiredCount ? ` · ${retiredCount} retired (not checked)` : "";
-  out.push(`Registry \`v${reg.version}\`, updated ${reg.updated} · ${results.length} sources checked · **${ok} OK**, **${problems.length} need attention**, ${blocked.length} blocked-to-bots${retiredNote}.`);
+  const fallbackNote = fallback.length ? ` · ${fallback.length} live-via-fallback` : "";
+  out.push(`Registry \`v${reg.version}\`, updated ${reg.updated} · ${results.length} sources checked · **${ok} OK**, **${problems.length} need attention**, ${blocked.length} blocked-to-bots${fallbackNote}${retiredNote}.`);
   out.push("");
 
   if (problems.length === 0) {
@@ -492,6 +599,19 @@ function markdown(results, reg, retiredCount = 0) {
     out.push("</details>");
   }
 
+  if (fallback.length) {
+    out.push("");
+    out.push(`<details><summary>${fallback.length} unreachable from CI but corroborated live (not rot)</summary>`);
+    out.push("");
+    out.push("Refused every direct probe from the runner (usually a datacenter-IP block), but a fallback vouches the source is still live. Corroboration, not a verified 200 — confirm before citing anything fresh.");
+    out.push("");
+    for (const r of fallback) {
+      out.push(`- ${r.name || r.domain} — via ${r.via} — ${r.url}${r.error ? ` — ${r.error}` : ""}`);
+    }
+    out.push("");
+    out.push("</details>");
+  }
+
   out.push("");
   out.push("<sub>Reachability only — this does not check whether a source has published anything new. Indicator domains are never fetched.</sub>");
   return out.join("\n");
@@ -502,12 +622,15 @@ function human(results, reg, retiredCount = 0) {
   const lines = [];
   lines.push(`\nSource registry v${reg.version} (updated ${reg.updated})`);
   lines.push(`${results.length} sources checked${retiredCount ? `, ${retiredCount} retired (skipped)` : ""}\n`);
-  for (const state of ["DEAD", "UNREACHABLE", "TIMEOUT", "SERVER_ERROR", "REDIRECTED", "BLOCKED"]) {
+  for (const state of ["DEAD", "UNREACHABLE", "TIMEOUT", "SERVER_ERROR", "REDIRECTED", "BLOCKED", "LIVE_FALLBACK"]) {
     const rs = by(state);
     if (!rs.length) continue;
     lines.push(`${state} (${rs.length}):`);
     for (const r of rs) {
-      const extra = r.state === "REDIRECTED" ? ` -> ${r.finalUrl}` : r.error ? ` (${r.error})` : r.status ? ` (HTTP ${r.status})` : "";
+      const extra =
+        r.state === "REDIRECTED" ? ` -> ${r.finalUrl}` :
+        r.state === "LIVE_FALLBACK" ? ` (via ${r.via}${r.error ? ` — ${r.error}` : ""})` :
+        r.error ? ` (${r.error})` : r.status ? ` (HTTP ${r.status})` : "";
       lines.push(`  [tier ${r.tier}] ${r.domain}${extra}`);
     }
     lines.push("");

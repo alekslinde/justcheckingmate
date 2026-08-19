@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 // Plain .mjs script with no type declarations. `allowJs` lets TypeScript infer
 // its shape from the source, so the import resolves without a suppression.
-import { parseRegistry, validate } from "../scripts/check-sources.mjs";
+import { parseRegistry, validate, waybackFreshness } from "../scripts/check-sources.mjs";
 
 const REGISTRY_PATH = resolve(__dirname, "../docs/threat-intel/sources.yml");
 const registryText = readFileSync(REGISTRY_PATH, "utf8");
@@ -289,5 +289,43 @@ describe("lookalike discipline", () => {
       expect(s.note, `${s.domain} is retired without a note explaining why`).toBeTruthy();
       expect(s.name).toMatch(/DEFUNCT|RETIRED/i);
     }
+  });
+});
+
+describe("waybackFreshness (fallback-ladder liveness)", () => {
+  // Fixed "now" so the age window is deterministic.
+  const NOW = Date.parse("2026-08-19T00:00:00Z");
+  const snap = (timestamp: string, available = true) => ({
+    archived_snapshots: { closest: { available, timestamp, url: `https://web.archive.org/web/${timestamp}/x` } },
+  });
+
+  it("accepts a recent snapshot and reports its age in days", () => {
+    const r = waybackFreshness(snap("20260801000000"), NOW);
+    expect(r).toBeTruthy();
+    expect(r!.ageDays).toBe(18);
+    expect(r!.snapshotUrl).toContain("web.archive.org");
+  });
+
+  it("rejects a snapshot older than the window (stale evidence is not liveness)", () => {
+    // ~961 days old, well past the 365-day default.
+    expect(waybackFreshness(snap("20240101000000"), NOW)).toBeNull();
+  });
+
+  it("respects a custom max-age window", () => {
+    expect(waybackFreshness(snap("20260101000000"), NOW, 365)).toBeTruthy();
+    expect(waybackFreshness(snap("20260101000000"), NOW, 30)).toBeNull();
+  });
+
+  it("rejects an unavailable or missing snapshot", () => {
+    expect(waybackFreshness(snap("20260801000000", false), NOW)).toBeNull();
+    expect(waybackFreshness({ archived_snapshots: {} }, NOW)).toBeNull();
+    expect(waybackFreshness({}, NOW)).toBeNull();
+    expect(waybackFreshness(null, NOW)).toBeNull();
+  });
+
+  it("rejects a malformed or future timestamp", () => {
+    expect(waybackFreshness(snap("2026"), NOW)).toBeNull();
+    expect(waybackFreshness(snap("not-a-date"), NOW)).toBeNull();
+    expect(waybackFreshness(snap("20270101000000"), NOW)).toBeNull(); // future → negative age
   });
 });
