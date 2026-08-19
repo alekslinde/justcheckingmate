@@ -66,11 +66,29 @@ const REQUEST_WORDS = [
   // script is used internationally).
   "safe account", "safe transfer", "safe wallet",
   "move your funds", "transfer to safe", "protect your money",
+  // Physical courier cash/card collection fraud (#168). A cross-regional
+  // pattern active concurrently in AU, GB and IE this cycle (AFP Feb 2026;
+  // Cumbria Police 3 Aug 2026; Hertfordshire Aug 2026 — £63k; AIB IE 7 Aug
+  // 2026), so it belongs in base rather than one pack. A caller posing as
+  // police/bank says a courier will collect the victim's card, PIN or cash
+  // "for safekeeping" — a distinct script from the digital safe-account
+  // variant above. "withdraw cash and" is the weakest entry (an instruction
+  // prefix) and only contributes when compounded with authority/urgency
+  // signals; "collect your card" stays clear of branch pickup notices, which
+  // say "pick up" or "collect from the branch", never the imperative form.
+  "courier will collect", "send a courier", "collect your card",
+  "hand over your card", "withdraw cash and",
   // ClickFix fake-CAPTCHA social engineering (D3 / #74 / ACSC advisory May 2026).
   // Compromised sites display a fake Cloudflare overlay telling users to press
   // Win+R, paste a PowerShell command and run it. No legitimate site asks this;
   // the dedicated regex in scamDetector scores the strongest variants higher.
   "press windows+r", "press win+r", "press windows + r",
+  // ClickFix Windows Terminal variant (#164 / Microsoft Threat Intelligence,
+  // SecurityWeek — Feb 2026). Instead of the Run dialog, the lure says press
+  // Win+X → "I" to open Windows Terminal (wt.exe), then paste PowerShell —
+  // evading RunMRU forensics and Run-launched-process controls. No legitimate
+  // consumer message instructs Win+X → Windows Terminal, so FP risk is very low.
+  "press windows+x", "press win+x", "open windows terminal",
   "ctrl+v then enter", "ctrl v and enter",
   "paste this command", "paste the following command", "paste the command below",
   "run this to verify", "run the following to verify", "run this fix",

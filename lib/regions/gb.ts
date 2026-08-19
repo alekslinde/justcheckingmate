@@ -183,6 +183,15 @@ const REQUEST_WORDS = [
   "pension release", "release pension funds",
   // Bank-transfer terminology specific to UK payments, used in APP fraud.
   "faster payment", "chaps transfer",
+  // Smart-meter fee + government energy-rebate lures (#167 / My Safer Dorset,
+  // 7 April 2026). GB already carries energy-supplier brand mentions for the
+  // impersonation angle but no lure phrasing for the fee/rebate angle. Real
+  // suppliers never charge for the mandated smart-meter rollout, and no
+  // DESNZ/Ofgem rebate scheme cold-contacts by SMS with a payment link — so
+  // these GB-market-specific phrases are low-FP and stay in the GB pack (the
+  // IE energy phrasing differs and lives in ie.ts).
+  "smart meter installation fee", "smart meter replacement charge",
+  "government energy rebate", "energy bill rebate", "energy support payment",
 ];
 
 // FCA-authorised firms are legally prohibited from claiming regulator

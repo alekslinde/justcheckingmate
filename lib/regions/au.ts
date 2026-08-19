@@ -194,12 +194,31 @@ const REQUEST_WORDS = [
   // Rental/property bond redirect fraud (D5 / #105) is covered by "bsb" above
   // plus the bond composite, which reads bankIdentifiers. A separate "new bsb"
   // entry would double-score one phrase, since requestWords is substring-matched.
+  // AFP/ACSC dual-actor ReportCyber + cold-storage fraud (#165 / AFP-ACSC
+  // joint advisory, April 2026). Criminals file a false ReportCyber report in
+  // the victim's name to mint a real-looking case reference, then a fake
+  // "crypto representative" quotes it as authority and tells the victim to move
+  // funds to a "cold storage account". Both phrases are zero-FP in isolation:
+  // genuine cold-wallet guidance says "cold storage device/wallet", never
+  // "account", and ReportCyber sends no confirmation SMS/email with references.
+  "cold storage account", "reportcyber reference",
 ];
 
 // ASIC-regulated products are legally prohibited from being promoted as
 // regulator-endorsed, and ASIC never proactively endorses platforms via
 // SMS/email — so these are exclusively false-legitimacy claims (D6 / #85).
-const REWARD_WORDS = ["verified by asic", "asic-approved"];
+const REWARD_WORDS = [
+  "verified by asic", "asic-approved",
+  // Pump-and-dump group-invite recruitment (#166 / ASIC MR 26-157MR, 17 July
+  // 2026 — 16 victims, $2.7M in two weeks). Unsolicited WhatsApp/Telegram
+  // invites to a "stock tips group" or "investment club" manufacture social
+  // proof before steering victims to fake ASX-impersonating platforms.
+  // Legitimate brokers don't solicit via group invite; "investment club" only
+  // appears in formal registered contexts, not cold SMS/WhatsApp. Compounds
+  // with the ASIC-endorsement claims above and base's investment reward words.
+  "stock tips group", "investment club", "exclusive trading group",
+  "closed trading group",
+];
 
 const LEGIT_DOMAINS = [
   "gov.au", "ato.gov.au", "mygov.gov.au", "centrelink.gov.au",
