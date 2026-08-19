@@ -188,6 +188,12 @@ const REQUEST_WORDS = [
 const REWARD_WORDS = [
   "fma approved", "fma-approved", "fma registered", "verified by fma",
   "government backed investment",
+  // Deepfake media-brand investment lures (#169 / FMA NZ advisory, April 2026).
+  // Fake articles carrying RNZ/TVNZ/NZ Herald logos with deepfaked politicians
+  // endorse fake trading platforms. These "as seen on <trusted media>"
+  // legitimacy-cover phrases are essentially always scam in an investment-offer
+  // context and compound with the FMA-endorsement claims above.
+  "as seen on rnz", "as featured in nz herald", "as seen on tvnz",
 ];
 
 // Crown and agency domains. These are exact-or-subdomain matched by checkUrl, so
@@ -257,13 +263,24 @@ const BRAND_MENTIONS = [
   "countdown", "mighty ape", "mightyape", "amazon", "netflix",
   // Crypto.
   "coinbase", "binance", "kraken", "easy crypto", "crypto exchange",
+  // Trusted NZ news brands, impersonated in deepfake investment articles
+  // (#169 / FMA NZ, April 2026). "nz herald" is a multi-word phrase with no
+  // collision risk, so it sits here; the short "rnz"/"tvnz" go in the word list
+  // below for \b-boundary matching.
+  "nz herald",
 ];
 
 // Short names that need word-boundary matching in message text. "anz", "asb"
 // and "bnz" as bare substrings would fire inside ordinary words, and "acc" is
 // a fragment of "account" — which appears in almost every scam message, so
 // substring matching it would flag essentially everything.
-const BRAND_MENTION_WORDS = ["anz", "asb", "bnz", "tsb"];
+const BRAND_MENTION_WORDS = [
+  "anz", "asb", "bnz", "tsb",
+  // Trusted NZ news brands (#169). Short/distinctive acronyms matched on \b
+  // boundaries so "rnz" can't fire inside a longer token; the full "nz herald"
+  // phrase is in the substring list above.
+  "rnz", "tvnz",
+];
 
 // Names whose genuine mail always comes from a .govt.nz / .co.nz domain, so a
 // mismatched sender domain is textbook impersonation. Narrower than
