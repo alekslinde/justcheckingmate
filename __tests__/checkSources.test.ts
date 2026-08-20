@@ -10,12 +10,12 @@
 // Network reachability is deliberately NOT tested — that is what the weekly
 // workflow does, and asserting on live sites would make this suite flaky.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 // Plain .mjs script with no type declarations. `allowJs` lets TypeScript infer
 // its shape from the source, so the import resolves without a suppression.
-import { parseRegistry, validate, waybackFreshness } from "../scripts/check-sources.mjs";
+import { parseRegistry, validate, waybackFreshness, checkOne } from "../scripts/check-sources.mjs";
 
 const REGISTRY_PATH = resolve(__dirname, "../docs/threat-intel/sources.yml");
 const registryText = readFileSync(REGISTRY_PATH, "utf8");
@@ -327,5 +327,50 @@ describe("waybackFreshness (fallback-ladder liveness)", () => {
     expect(waybackFreshness(snap("2026"), NOW)).toBeNull();
     expect(waybackFreshness(snap("not-a-date"), NOW)).toBeNull();
     expect(waybackFreshness(snap("20270101000000"), NOW)).toBeNull(); // future → negative age
+  });
+});
+
+describe("5xx corroboration (ANP Tech / HTTP 520)", () => {
+  // A 5xx used to be a terminal SERVER_ERROR with no corroboration and no
+  // retry — unlike the 403 and hang paths, which both consult the ladder. That
+  // gap is what reported ANP Tech (Cloudflare 520) as needing attention while
+  // the site served 200 to an ordinary client.
+  const entry = {
+    domain: "anptech.com.au",
+    url: "https://www.anptech.com.au",
+    tier: "3",
+    name: "ANP Tech",
+  };
+
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  // Routes each URL the ladder may try to a caller-supplied status.
+  const stub = (route: (url: string) => number) => {
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      const status = route(url);
+      return { status, ok: status >= 200 && status < 300, url, json: async () => ({}) } as Response;
+    });
+  };
+
+  it("corroborates a 520 via robots.txt instead of crying rot", async () => {
+    stub((url) => (url.endsWith("/robots.txt") ? 200 : 520));
+    const r = await checkOne(entry);
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("robots");
+    expect(r.error).toContain("520");
+  });
+
+  it("still reports SERVER_ERROR when nothing corroborates", async () => {
+    stub(() => 520);
+    const r = await checkOne(entry);
+    expect(r.state).toBe("SERVER_ERROR");
+    expect(r.status).toBe(520);
+  });
+
+  it("leaves a plain 200 as OK", async () => {
+    stub(() => 200);
+    const r = await checkOne(entry);
+    expect(r.state).toBe("OK");
   });
 });

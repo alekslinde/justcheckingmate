@@ -418,7 +418,22 @@ async function corroborateLiveness(entry) {
   return null;
 }
 
+/**
+ * @typedef {object} CheckResult
+ * @property {string} domain
+ * @property {string} url
+ * @property {string} [tier]
+ * @property {string} [name]
+ * @property {string} [state]
+ * @property {number} [status]
+ * @property {string} [finalUrl]
+ * @property {string} [via]
+ * @property {string} [error]
+ */
+
+/** @param {object} entry @returns {Promise<CheckResult>} */
 async function checkOne(entry) {
+  /** @type {CheckResult} */
   const result = { domain: entry.domain, url: entry.url, tier: entry.tier, name: entry.name };
 
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
@@ -471,7 +486,21 @@ async function checkOne(entry) {
           }
         }
       }
-      else if (res.status >= 500) result.state = "SERVER_ERROR";
+      else if (res.status >= 500) {
+        // A 5xx is not proof of rot. Cloudflare's edge codes in particular
+        // (520-527) mean "the origin misbehaved for us right now" — often
+        // transient, and sometimes only for our agent. Corroborate off-host
+        // before flagging, exactly as the 403 path does; a source that is
+        // genuinely down still falls through to SERVER_ERROR.
+        const live = await corroborateLiveness(entry);
+        if (live) {
+          result.state = "LIVE_FALLBACK";
+          result.via = live.via;
+          result.error = `HTTP ${res.status} to our agents; ${live.detail}`;
+        } else {
+          result.state = "SERVER_ERROR";
+        }
+      }
       else if (!res.ok) result.state = "DEAD";
       else if (landedElsewhere(entry.url, res.url)) result.state = "REDIRECTED";
       else result.state = "OK";
@@ -778,4 +807,4 @@ if (invokedDirectly) {
   });
 }
 
-export { parseRegistry, validate };
+export { parseRegistry, validate, checkOne };
