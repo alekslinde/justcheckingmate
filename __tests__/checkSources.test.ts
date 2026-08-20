@@ -344,12 +344,20 @@ describe("5xx corroboration (ANP Tech / HTTP 520)", () => {
 
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  // Routes each URL the ladder may try to a caller-supplied status.
+  // Routes each URL the ladder may try to a caller-supplied status. Rungs now
+  // validate the BODY too, so a corroborating path must return a plausible one.
   const stub = (route: (url: string) => number) => {
     vi.stubGlobal("fetch", async (input: string | URL) => {
       const url = String(input);
       const status = route(url);
-      return { status, ok: status >= 200 && status < 300, url, json: async () => ({}) } as Response;
+      const body = url.endsWith("/robots.txt") ? "User-agent: *\nDisallow:" : "";
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        url,
+        text: async () => body,
+        json: async () => ({}),
+      } as Response;
     });
   };
 
@@ -372,5 +380,124 @@ describe("5xx corroboration (ANP Tech / HTTP 520)", () => {
     stub(() => 200);
     const r = await checkOne(entry);
     expect(r.state).toBe("OK");
+  });
+});
+
+describe("ladder corroboration discipline", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  // Route by URL to a [status, body] pair. Bodies matter now: a parked host
+  // answers 200 to everything, so the rungs check shape, not just status.
+  const stub = (route: (url: string) => [number, string]) => {
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      const [status, body] = route(url);
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        url,
+        text: async () => body,
+        json: async () => JSON.parse(body || "{}"),
+      } as Response;
+    });
+  };
+
+  const ROBOTS = "User-agent: *\nDisallow: /tmp";
+  const SITEMAP = '<?xml version="1.0"?><urlset xmlns="x"><url><loc>u</loc></url></urlset>';
+  const FEED = '<?xml version="1.0"?><rss version="2.0"><channel/></rss>';
+
+  it("rejects a third-party feed as corroboration (FeedBurner outlives the site)", async () => {
+    const entry = {
+      domain: "thehackernews.com",
+      url: "https://thehackernews.com",
+      feed: "https://feeds.feedburner.com/TheHackersNews",
+      tier: "2",
+    };
+    // The cached third-party feed is healthy; the site itself is gone.
+    stub((url) => (url.includes("feedburner") ? [200, FEED] : [403, ""]));
+    const r = await checkOne(entry);
+    expect(r.via).not.toBe("feed");
+    expect(r.state).toBe("DEAD");
+  });
+
+  it("accepts a feed on the source's own host", async () => {
+    const entry = {
+      domain: "bleepingcomputer.com",
+      url: "https://www.bleepingcomputer.com",
+      feed: "https://www.bleepingcomputer.com/feed/",
+      tier: "2",
+    };
+    stub((url) => (url.endsWith("/feed/") ? [200, FEED] : [403, ""]));
+    const r = await checkOne(entry);
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("feed");
+  });
+
+  it("rejects a parked host whose catch-all 200s every path", async () => {
+    // Decommissioned domain: every request, including /robots.txt and
+    // /sitemap.xml, returns a for-sale HTML page.
+    const parked = "<html><body>This domain is for sale</body></html>";
+    stub((url) => (url.includes("archive.org") ? [200, "{}"] : [200, parked]));
+    const r = await checkOne({ domain: "gone.example", url: "https://gone.example/x", tier: "3" });
+    expect(r.state).not.toBe("LIVE_FALLBACK");
+  });
+
+  it("records that a robots/sitemap hit proves the host, not the path", async () => {
+    stub((url) => (url.endsWith("/robots.txt") ? [200, ROBOTS] : [403, ""]));
+    const r = await checkOne({ domain: "ato.gov.au", url: "https://www.ato.gov.au/deep/page", tier: "1" });
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("robots");
+    expect(r.error).toContain("path not itself confirmed");
+  });
+
+  it("accepts a real sitemap body", async () => {
+    stub((url) => (url.endsWith("/sitemap.xml") ? [200, SITEMAP] : [403, ""]));
+    const r = await checkOne({ domain: "x.example", url: "https://x.example/p", tier: "3" });
+    expect(r.via).toBe("sitemap");
+  });
+
+  it("honours expect: blocked on a 5xx, as the 403 and hang paths do", async () => {
+    stub(() => [503, ""]);
+    const r = await checkOne({
+      domain: "acma.gov.au", url: "https://www.acma.gov.au/x", tier: "1", expect: "blocked",
+    });
+    expect(r.state).toBe("BLOCKED");
+    expect(r.error).toContain("expected");
+  });
+});
+
+describe("wayback snapshot must match the requested URL", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const wb = (snapshotUrl: string) => JSON.stringify({
+    archived_snapshots: {
+      closest: { available: true, timestamp: "20260819001716", url: snapshotUrl },
+    },
+  });
+
+  const stubWayback = (snapshotUrl: string) => {
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      const body = url.includes("archive.org") ? wb(snapshotUrl) : "";
+      const status = url.includes("archive.org") ? 200 : 403;
+      return {
+        status, ok: status === 200, url,
+        text: async () => body, json: async () => JSON.parse(body || "{}"),
+      } as Response;
+    });
+  };
+
+  it("rejects an ancestor snapshot standing in for a 404'd child", async () => {
+    // Asked about /deep/page; archive.org answers with the site root.
+    stubWayback("http://web.archive.org/web/20260819001716/https://x.example/");
+    const r = await checkOne({ domain: "x.example", url: "https://x.example/deep/page", tier: "3" });
+    expect(r.state).not.toBe("LIVE_FALLBACK");
+  });
+
+  it("accepts a snapshot of the exact page", async () => {
+    stubWayback("http://web.archive.org/web/20260819001716/https://x.example/deep/page");
+    const r = await checkOne({ domain: "x.example", url: "https://x.example/deep/page", tier: "3" });
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("wayback");
   });
 });

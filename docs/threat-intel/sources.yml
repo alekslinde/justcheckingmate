@@ -128,6 +128,10 @@ tiers:
         URL updated 2026-08-19 to the scam-alerts child page cited in 2026-08-02
         (was the parent). Edge WAF 403s CI, so it relies on the fallback ladder
         (LIVE_FALLBACK) rather than a direct 200 — no `expect: blocked` needed.
+        Caveat: with no `feed:` on this host, the rung that answers is
+        root-level robots.txt, which evidences the HOST is up and says nothing
+        about the /scam-alerts child page. Re-confirm the path by hand before
+        citing anything new from it.
     - domain: myid.gov.au
       name: myID (formerly myGovID)
       url: https://www.myid.gov.au/security-and-privacy/how-to-verify-or-report-a-scam

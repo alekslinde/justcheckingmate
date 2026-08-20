@@ -40,6 +40,14 @@ const TIMEOUT_MS = 30_000;
 const CONCURRENCY = 6;   // polite: several are small gov / single-operator sites
 const RETRIES = 1;
 
+// The ladder runs only AFTER the direct probes have already spent their budget,
+// so its rungs get a tighter one. At the full 30s a bad WAF week (every rung
+// hanging) pushed worst-case per-entry wall time to ~7x30s; across ~100 entries
+// at CONCURRENCY 6 that trends toward an hour and risks losing the digest
+// issue, which the workflow scores as a red build. Corroboration is a
+// best-effort signal — a rung that cannot answer in 8s is not worth the wait.
+const FALLBACK_TIMEOUT_MS = 8_000;
+
 // Identifies the bot and points operators at the repo. Some WAFs reject unknown
 // agents outright, which is itself a checkable outcome (BLOCKED, not DEAD).
 const USER_AGENT =
@@ -315,9 +323,9 @@ function validate(reg) {
 // ---------------------------------------------------------------------------
 
 // Runs one request under its own fresh timeout budget.
-async function withTimeout(fn) {
+async function withTimeout(fn, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fn(controller.signal);
   } finally {
@@ -368,10 +376,55 @@ async function probeWithBrowserUa(url) {
 
 // True only if the URL serves a real page to a browser UA right now (not a
 // redirect onto a homepage/other host — that is rot, not liveness).
-async function reachableNow(url) {
+async function reachableNow(url, validate) {
   try {
-    const res = await withTimeout((signal) => probe(url, "GET", signal, BROWSER_UA));
-    return res.ok && !landedElsewhere(url, res.url);
+    const res = await withTimeout(
+      (signal) => probe(url, "GET", signal, BROWSER_UA), FALLBACK_TIMEOUT_MS);
+    if (!res.ok || landedElsewhere(url, res.url)) return false;
+    // A parked or catch-all host answers 200 to anything, so a status code alone
+    // is not evidence. When the caller knows what the body must look like, make
+    // it prove it.
+    if (validate) {
+      let body;
+      try { body = await res.text(); } catch { return false; }
+      if (!validate(body)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Same registrable-ish host, or a subdomain of it. Used to reject corroboration
+// from a THIRD-PARTY host: a cached FeedBurner feed outlives the site it mirrors,
+// so it cannot vouch that entry.url is still live.
+function sameHost(url, domain) {
+  try {
+    const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    const d = String(domain).toLowerCase().replace(/^www\./, "");
+    return h === d || h.endsWith(`.${d}`);
+  } catch {
+    return false;
+  }
+}
+
+// Cheap shape checks — enough to tell a real file from a catch-all HTML page.
+const looksLikeSitemap = (b) => /<(urlset|sitemapindex)\b/i.test(b);
+const looksLikeRobots = (b) =>
+  /^\s*(user-agent|disallow|allow|sitemap|crawl-delay)\s*:/im.test(b) && !/<html\b/i.test(b);
+const looksLikeFeed = (b) => /<(rss|feed|rdf:RDF)\b/i.test(b);
+
+// Does an archive snapshot URL actually correspond to the requested URL?
+// Wayback URLs look like https://web.archive.org/web/<timestamp>/<original>.
+function snapshotMatches(snapshotUrl, requestedUrl) {
+  try {
+    const m = String(snapshotUrl).match(/\/web\/\d+(?:[a-z_]+)?\/(.*)$/i);
+    if (!m) return false;
+    const norm = (u) => {
+      const p = new URL(u);
+      return `${p.hostname.toLowerCase().replace(/^www\./, "")}${p.pathname.replace(/\/+$/, "")}`;
+    };
+    return norm(m[1]) === norm(requestedUrl);
   } catch {
     return false;
   }
@@ -382,9 +435,15 @@ async function waybackLookup(url) {
   try {
     const api = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`;
     const res = await withTimeout((signal) =>
-      fetch(api, { signal, headers: { "User-Agent": USER_AGENT, Accept: "application/json" } }));
+      fetch(api, { signal, headers: { "User-Agent": USER_AGENT, Accept: "application/json" } }),
+      FALLBACK_TIMEOUT_MS);
     if (!res.ok) return null;
-    return waybackFreshness(await res.json());
+    const snap = waybackFreshness(await res.json());
+    // archive.org can answer with a nearby ANCESTOR rather than the exact page.
+    // A snapshot of the parent vouches for nothing about a child that 404'd, so
+    // require the snapshot to be of the URL we actually asked about.
+    if (snap && !snapshotMatches(snap.snapshotUrl, url)) return null;
+    return snap;
   } catch {
     return null;
   }
@@ -397,16 +456,24 @@ async function waybackLookup(url) {
 // survives an IP-wide block. Returns { via, detail } or null.
 async function corroborateLiveness(entry) {
   // 1. Publisher feed — a live signal fetched now, and often not WAF-walled.
-  if (entry.feed && await reachableNow(entry.feed)) {
+  //    Only a feed on the source's OWN host counts: a third-party mirror
+  //    (FeedBurner et al) serves a cached copy that long outlives the site.
+  if (entry.feed && sameHost(entry.feed, entry.domain)
+      && await reachableNow(entry.feed, looksLikeFeed)) {
     return { via: "feed", detail: `feed reachable (${entry.feed})` };
   }
   // 2. Same-host well-known paths — only beat a PATH-specific block, but cheap.
+  //    These say the HOST is up, never that entry.url's own path survives, so
+  //    the detail line records that explicitly for whoever reads the digest.
   let origin;
   try { origin = new URL(entry.url).origin; } catch { origin = null; }
   if (origin) {
-    for (const [path, via] of [["/sitemap.xml", "sitemap"], ["/robots.txt", "robots"]]) {
-      if (await reachableNow(origin + path)) {
-        return { via, detail: `${origin}${path} reachable` };
+    for (const [path, via, shape] of [
+      ["/sitemap.xml", "sitemap", looksLikeSitemap],
+      ["/robots.txt", "robots", looksLikeRobots],
+    ]) {
+      if (await reachableNow(origin + path, shape)) {
+        return { via, detail: `${origin}${path} reachable (host up; path not itself confirmed)` };
       }
     }
   }
@@ -487,6 +554,14 @@ async function checkOne(entry) {
         }
       }
       else if (res.status >= 500) {
+        // A WAF that answers 5xx instead of hanging must honour `expect: blocked`
+        // too, or the flag is a no-op on this path and the entry reports
+        // SERVER_ERROR (a PROBLEM state) every run.
+        if (entry.expect === "blocked") {
+          result.state = "BLOCKED";
+          result.error = `HTTP ${res.status} (expected — bot protection)`;
+          return result;
+        }
         // A 5xx is not proof of rot. Cloudflare's edge codes in particular
         // (520-527) mean "the origin misbehaved for us right now" — often
         // transient, and sometimes only for our agent. Corroborate off-host
