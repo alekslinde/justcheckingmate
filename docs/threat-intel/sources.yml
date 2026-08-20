@@ -50,7 +50,7 @@
 # them, so one pasted into the wrong block fails the build.
 
 version: 1
-updated: 2026-08-09
+updated: 2026-08-19
 
 tiers:
   1:
@@ -119,12 +119,19 @@ tiers:
       check: manual
     - domain: ato.gov.au
       name: ATO — scam alerts
-      url: https://www.ato.gov.au/online-services/scams-cyber-safety-and-identity-protection
+      url: https://www.ato.gov.au/online-services/scams-cyber-safety-and-identity-protection/scam-alerts
       region: AU
       check: manual
       note: >-
         Impersonated constantly. NB the roadmaps also quote `ato-gov-au.github.io`
         as a typosquat SAMPLE — that string is an indicator, not this source.
+        URL updated 2026-08-19 to the scam-alerts child page cited in 2026-08-02
+        (was the parent). Edge WAF 403s CI, so it relies on the fallback ladder
+        (LIVE_FALLBACK) rather than a direct 200 — no `expect: blocked` needed.
+        Caveat: with no `feed:` on this host, the rung that answers is
+        root-level robots.txt, which evidences the HOST is up and says nothing
+        about the /scam-alerts child page. Re-confirm the path by hand before
+        citing anything new from it.
     - domain: myid.gov.au
       name: myID (formerly myGovID)
       url: https://www.myid.gov.au/security-and-privacy/how-to-verify-or-report-a-scam
@@ -195,7 +202,10 @@ tiers:
       name: Security Boulevard
       url: https://securityboulevard.com
       feed: https://securityboulevard.com/feed/
-      note: Syndicated vendor content — treat as a pointer to the original.
+      note: >-
+        Syndicated vendor content — treat as a pointer to the original. The
+        landing page 403s CI; the `feed:` above is the first rung of the fallback
+        ladder, so this resolves LIVE_FALLBACK rather than needing expect: blocked.
     - domain: isc.sans.edu
       name: SANS Internet Storm Center
       url: https://isc.sans.edu/diary.html

@@ -10,12 +10,12 @@
 // Network reachability is deliberately NOT tested — that is what the weekly
 // workflow does, and asserting on live sites would make this suite flaky.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 // Plain .mjs script with no type declarations. `allowJs` lets TypeScript infer
 // its shape from the source, so the import resolves without a suppression.
-import { parseRegistry, validate } from "../scripts/check-sources.mjs";
+import { parseRegistry, validate, waybackFreshness, checkOne } from "../scripts/check-sources.mjs";
 
 const REGISTRY_PATH = resolve(__dirname, "../docs/threat-intel/sources.yml");
 const registryText = readFileSync(REGISTRY_PATH, "utf8");
@@ -289,5 +289,215 @@ describe("lookalike discipline", () => {
       expect(s.note, `${s.domain} is retired without a note explaining why`).toBeTruthy();
       expect(s.name).toMatch(/DEFUNCT|RETIRED/i);
     }
+  });
+});
+
+describe("waybackFreshness (fallback-ladder liveness)", () => {
+  // Fixed "now" so the age window is deterministic.
+  const NOW = Date.parse("2026-08-19T00:00:00Z");
+  const snap = (timestamp: string, available = true) => ({
+    archived_snapshots: { closest: { available, timestamp, url: `https://web.archive.org/web/${timestamp}/x` } },
+  });
+
+  it("accepts a recent snapshot and reports its age in days", () => {
+    const r = waybackFreshness(snap("20260801000000"), NOW);
+    expect(r).toBeTruthy();
+    expect(r!.ageDays).toBe(18);
+    expect(r!.snapshotUrl).toContain("web.archive.org");
+  });
+
+  it("rejects a snapshot older than the window (stale evidence is not liveness)", () => {
+    // ~961 days old, well past the 365-day default.
+    expect(waybackFreshness(snap("20240101000000"), NOW)).toBeNull();
+  });
+
+  it("respects a custom max-age window", () => {
+    expect(waybackFreshness(snap("20260101000000"), NOW, 365)).toBeTruthy();
+    expect(waybackFreshness(snap("20260101000000"), NOW, 30)).toBeNull();
+  });
+
+  it("rejects an unavailable or missing snapshot", () => {
+    expect(waybackFreshness(snap("20260801000000", false), NOW)).toBeNull();
+    expect(waybackFreshness({ archived_snapshots: {} }, NOW)).toBeNull();
+    expect(waybackFreshness({}, NOW)).toBeNull();
+    expect(waybackFreshness(null, NOW)).toBeNull();
+  });
+
+  it("rejects a malformed or future timestamp", () => {
+    expect(waybackFreshness(snap("2026"), NOW)).toBeNull();
+    expect(waybackFreshness(snap("not-a-date"), NOW)).toBeNull();
+    expect(waybackFreshness(snap("20270101000000"), NOW)).toBeNull(); // future → negative age
+  });
+});
+
+describe("5xx corroboration (ANP Tech / HTTP 520)", () => {
+  // A 5xx used to be a terminal SERVER_ERROR with no corroboration and no
+  // retry — unlike the 403 and hang paths, which both consult the ladder. That
+  // gap is what reported ANP Tech (Cloudflare 520) as needing attention while
+  // the site served 200 to an ordinary client.
+  const entry = {
+    domain: "anptech.com.au",
+    url: "https://www.anptech.com.au",
+    tier: "3",
+    name: "ANP Tech",
+  };
+
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  // Routes each URL the ladder may try to a caller-supplied status. Rungs now
+  // validate the BODY too, so a corroborating path must return a plausible one.
+  const stub = (route: (url: string) => number) => {
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      const status = route(url);
+      const body = url.endsWith("/robots.txt") ? "User-agent: *\nDisallow:" : "";
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        url,
+        text: async () => body,
+        json: async () => ({}),
+      } as Response;
+    });
+  };
+
+  it("corroborates a 520 via robots.txt instead of crying rot", async () => {
+    stub((url) => (url.endsWith("/robots.txt") ? 200 : 520));
+    const r = await checkOne(entry);
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("robots");
+    expect(r.error).toContain("520");
+  });
+
+  it("still reports SERVER_ERROR when nothing corroborates", async () => {
+    stub(() => 520);
+    const r = await checkOne(entry);
+    expect(r.state).toBe("SERVER_ERROR");
+    expect(r.status).toBe(520);
+  });
+
+  it("leaves a plain 200 as OK", async () => {
+    stub(() => 200);
+    const r = await checkOne(entry);
+    expect(r.state).toBe("OK");
+  });
+});
+
+describe("ladder corroboration discipline", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  // Route by URL to a [status, body] pair. Bodies matter now: a parked host
+  // answers 200 to everything, so the rungs check shape, not just status.
+  const stub = (route: (url: string) => [number, string]) => {
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      const [status, body] = route(url);
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        url,
+        text: async () => body,
+        json: async () => JSON.parse(body || "{}"),
+      } as Response;
+    });
+  };
+
+  const ROBOTS = "User-agent: *\nDisallow: /tmp";
+  const SITEMAP = '<?xml version="1.0"?><urlset xmlns="x"><url><loc>u</loc></url></urlset>';
+  const FEED = '<?xml version="1.0"?><rss version="2.0"><channel/></rss>';
+
+  it("rejects a third-party feed as corroboration (FeedBurner outlives the site)", async () => {
+    const entry = {
+      domain: "thehackernews.com",
+      url: "https://thehackernews.com",
+      feed: "https://feeds.feedburner.com/TheHackersNews",
+      tier: "2",
+    };
+    // The cached third-party feed is healthy; the site itself is gone.
+    stub((url) => (url.includes("feedburner") ? [200, FEED] : [403, ""]));
+    const r = await checkOne(entry);
+    expect(r.via).not.toBe("feed");
+    expect(r.state).toBe("DEAD");
+  });
+
+  it("accepts a feed on the source's own host", async () => {
+    const entry = {
+      domain: "bleepingcomputer.com",
+      url: "https://www.bleepingcomputer.com",
+      feed: "https://www.bleepingcomputer.com/feed/",
+      tier: "2",
+    };
+    stub((url) => (url.endsWith("/feed/") ? [200, FEED] : [403, ""]));
+    const r = await checkOne(entry);
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("feed");
+  });
+
+  it("rejects a parked host whose catch-all 200s every path", async () => {
+    // Decommissioned domain: every request, including /robots.txt and
+    // /sitemap.xml, returns a for-sale HTML page.
+    const parked = "<html><body>This domain is for sale</body></html>";
+    stub((url) => (url.includes("archive.org") ? [200, "{}"] : [200, parked]));
+    const r = await checkOne({ domain: "gone.example", url: "https://gone.example/x", tier: "3" });
+    expect(r.state).not.toBe("LIVE_FALLBACK");
+  });
+
+  it("records that a robots/sitemap hit proves the host, not the path", async () => {
+    stub((url) => (url.endsWith("/robots.txt") ? [200, ROBOTS] : [403, ""]));
+    const r = await checkOne({ domain: "ato.gov.au", url: "https://www.ato.gov.au/deep/page", tier: "1" });
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("robots");
+    expect(r.error).toContain("path not itself confirmed");
+  });
+
+  it("accepts a real sitemap body", async () => {
+    stub((url) => (url.endsWith("/sitemap.xml") ? [200, SITEMAP] : [403, ""]));
+    const r = await checkOne({ domain: "x.example", url: "https://x.example/p", tier: "3" });
+    expect(r.via).toBe("sitemap");
+  });
+
+  it("honours expect: blocked on a 5xx, as the 403 and hang paths do", async () => {
+    stub(() => [503, ""]);
+    const r = await checkOne({
+      domain: "acma.gov.au", url: "https://www.acma.gov.au/x", tier: "1", expect: "blocked",
+    });
+    expect(r.state).toBe("BLOCKED");
+    expect(r.error).toContain("expected");
+  });
+});
+
+describe("wayback snapshot must match the requested URL", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const wb = (snapshotUrl: string) => JSON.stringify({
+    archived_snapshots: {
+      closest: { available: true, timestamp: "20260819001716", url: snapshotUrl },
+    },
+  });
+
+  const stubWayback = (snapshotUrl: string) => {
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = String(input);
+      const body = url.includes("archive.org") ? wb(snapshotUrl) : "";
+      const status = url.includes("archive.org") ? 200 : 403;
+      return {
+        status, ok: status === 200, url,
+        text: async () => body, json: async () => JSON.parse(body || "{}"),
+      } as Response;
+    });
+  };
+
+  it("rejects an ancestor snapshot standing in for a 404'd child", async () => {
+    // Asked about /deep/page; archive.org answers with the site root.
+    stubWayback("http://web.archive.org/web/20260819001716/https://x.example/");
+    const r = await checkOne({ domain: "x.example", url: "https://x.example/deep/page", tier: "3" });
+    expect(r.state).not.toBe("LIVE_FALLBACK");
+  });
+
+  it("accepts a snapshot of the exact page", async () => {
+    stubWayback("http://web.archive.org/web/20260819001716/https://x.example/deep/page");
+    const r = await checkOne({ domain: "x.example", url: "https://x.example/deep/page", tier: "3" });
+    expect(r.state).toBe("LIVE_FALLBACK");
+    expect(r.via).toBe("wayback");
   });
 });
