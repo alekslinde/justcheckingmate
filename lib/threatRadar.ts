@@ -157,7 +157,7 @@ export function roadmapUrl(entry: ThreatEntry): string {
 
 // ── Australia ───────────────────────────────────────────────────────────────
 //
-// Promoted from docs/threat-intel/2026-06-21 through 2026-08-09. Ordered
+// Promoted from docs/threat-intel/2026-06-21 through 2026-08-16. Ordered
 // roughly by how likely someone is to meet it, not by sweep date — the reader
 // wants "what should I know", not our publication history.
 
@@ -211,19 +211,20 @@ const AU_THREATS: ThreatEntry[] = [
     status: "active",
     coverage: "covered",
     firstSeen: "2026-08-09",
-    lastSeen: "2026-08-09",
+    lastSeen: "2026-08-16",
     summary:
-      "A fake CAPTCHA or browser-error overlay asks you to copy a command and paste it into your computer to prove you're human or fix a problem. Long-running on Windows, and now confirmed in a Mac version that points you at Terminal or Spotlight instead.",
+      "A fake CAPTCHA or browser-error overlay asks you to copy a command and paste it into your computer to prove you're human or fix a problem. Long-running on Windows via the Run box, now also using a Win+X → Windows Terminal route that skips Run entirely, and confirmed in a Mac version that points you at Terminal or Spotlight instead.",
     lures: [
       "\"Press Windows+R, then paste this to verify you're human\"",
+      "\"Press Win+X, then I, and paste this into Windows Terminal\"",
       "\"Open Terminal and paste the command below to fix the error\"",
       "\"Press Cmd+Space and paste to continue\"",
       "A fake Cloudflare or \"verify you are human\" screen with a copy button",
     ],
     advice:
       "No website ever needs you to paste a command into your own computer. Nothing legitimate has ever asked this. Close the tab — if you already pasted, disconnect from the internet and get help.",
-    detection: "We flag both the Windows and Mac versions of this instruction.",
-    roadmap: "2026-08-09",
+    detection: "We flag the Run box, the Win+X Windows Terminal route and the macOS Spotlight version of this instruction.",
+    roadmap: "2026-08-16",
   },
   {
     id: "health-insurer-impersonation",
@@ -331,10 +332,73 @@ const AU_THREATS: ThreatEntry[] = [
     roadmap: "2026-08-09",
   },
   {
+    id: "reportcyber-cold-storage",
+    title: "Fake \"fund recovery\" using a ReportCyber reference",
+    channel: "phone",
+    status: "active",
+    coverage: "covered",
+    firstSeen: "2026-08-16",
+    lastSeen: "2026-08-16",
+    summary:
+      "A follow-up to an earlier scam: someone posing as a cyber-crime investigator or a \"cryptocurrency representative\" quotes a genuine-looking ReportCyber reference number to prove they're official, then tells you to move your money into a \"cold storage account\" they control while they investigate. AFP and the ACSC flagged this two-actor version this cycle.",
+    lures: [
+      "\"Your ReportCyber reference is CY-… — quote it to our recovery team\"",
+      "\"We can recover the funds you lost — move them to a secure cold storage account\"",
+      "A call that arrives soon after you reported an earlier scam",
+      "\"Our officer will help you transfer to a safe wallet\"",
+    ],
+    advice:
+      "A reference number proves nothing about who is calling — ReportCyber issues them and never rings you back to move your money. No genuine recovery service asks you to transfer funds to an account you don't control. Hang up and check via cyber.gov.au.",
+    detection: "We flag \"cold storage account\" and \"reportcyber reference\" as recovery-scam signals.",
+    roadmap: "2026-08-16",
+  },
+  {
+    id: "stock-tips-group",
+    title: "Investment \"stock tips\" group invites",
+    channel: "mixed",
+    status: "active",
+    coverage: "covered",
+    firstSeen: "2026-08-16",
+    lastSeen: "2026-08-16",
+    summary:
+      "An invite to a WhatsApp or Telegram \"stock tips\" group, \"investment club\" or \"exclusive trading group\" promising coordinated buys and expert picks. ASIC tied one run of these to $2.7M lost in a fortnight — the group talks a stock up, then dumps it on the members who bought in.",
+    lures: [
+      "\"Join our exclusive stock tips group — members only\"",
+      "\"VIP investment club with guaranteed picks\"",
+      "A group chat pushing an ASX-lookalike trading platform",
+      "\"Our closed trading group is up 300% this month\"",
+    ],
+    advice:
+      "A real broker doesn't recruit through a group chat, and a coordinated \"buy now\" signal is the scam, not a tip-off. Check any platform against ASIC's list at moneysmart.gov.au before putting in a cent.",
+    detection: "We flag \"stock tips group\", \"investment club\" and \"exclusive/closed trading group\" as investment-recruitment signals.",
+    roadmap: "2026-08-16",
+  },
+  {
+    id: "courier-collection",
+    title: "Bank or police \"courier\" sent to collect your card or cash",
+    channel: "phone",
+    status: "active",
+    coverage: "covered",
+    firstSeen: "2026-08-16",
+    lastSeen: "2026-08-16",
+    summary:
+      "A caller posing as your bank's fraud team or the police says your account is compromised and a courier will come to your home to collect your card or cash \"for safekeeping\" while they investigate. A convergent pattern across Australia, the UK and Ireland this cycle.",
+    lures: [
+      "\"A courier will collect your card for safekeeping\"",
+      "\"Withdraw the cash and hand it to our officer\"",
+      "\"We're sending someone to collect your bank card\"",
+      "A request to cut your card in half and hand over the pieces",
+    ],
+    advice:
+      "No bank or police force ever sends someone to your home for your card or your cash — that request is the scam by itself. Hang up and ring your bank on the number printed on the back of your card.",
+    detection: "We flag courier-collection phrasing — \"a courier will collect\", \"send a courier\", \"collect/hand over your card\".",
+    roadmap: "2026-08-16",
+  },
+  {
     id: "crypto-exchange-impersonation",
     title: "AU crypto exchange impersonation",
     channel: "mixed",
-    status: "active",
+    status: "watchlist",
     coverage: "covered",
     firstSeen: "2026-08-02",
     lastSeen: "2026-08-02",
@@ -355,7 +419,7 @@ const AU_THREATS: ThreatEntry[] = [
     id: "energy-utility",
     title: "Energy and utility impersonation",
     channel: "mixed",
-    status: "active",
+    status: "watchlist",
     coverage: "covered",
     firstSeen: "2026-08-02",
     lastSeen: "2026-08-02",
@@ -376,7 +440,7 @@ const AU_THREATS: ThreatEntry[] = [
     id: "voicemail-lures",
     title: "Fake voicemail notifications",
     channel: "mixed",
-    status: "active",
+    status: "watchlist",
     coverage: "covered",
     firstSeen: "2026-08-02",
     lastSeen: "2026-08-02",
@@ -396,7 +460,7 @@ const AU_THREATS: ThreatEntry[] = [
     id: "toll-road-smishing",
     title: "Toll road texts (Linkt, E-Toll)",
     channel: "sms",
-    status: "active",
+    status: "watchlist",
     coverage: "covered",
     firstSeen: "2026-06-21",
     lastSeen: "2026-08-02",
@@ -741,9 +805,9 @@ export function activeThreats(code: RegionCode): ThreatEntry[] {
  * Entries the detector does not fully catch — `partial` and `none`.
  *
  * Surfaced as its own group because it is the part of the radar a reader can
- * act on. Twenty of twenty-five entries are `covered`, so the badge is near-
- * constant and carries almost no information scanning down the page; the five
- * exceptions are the ones worth pulling out. `n/a` is deliberately excluded —
+ * act on. Most entries are `covered`, so the badge is near-constant and carries
+ * almost no information scanning down the page; the handful of exceptions are the
+ * ones worth pulling out. `n/a` is deliberately excluded —
  * a voice call is not a gap in our coverage, it is outside what a text checker
  * can ever see, and mixing the two would overstate the shortfall.
  */

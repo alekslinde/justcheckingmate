@@ -1,0 +1,98 @@
+name: Radar / calendar promotion freshness
+
+# Flags when a weekly threat sweep has landed in docs/threat-intel/ but the
+# user-facing surfaces haven't been promoted forward to match it:
+#
+#   · lib/threatRadar.ts   — the "what's circulating now" board
+#   · lib/scamCalendar.ts  — the seasonal "what to expect now" calendar
+#
+# Roadmaps are docs-only by design (they never touch lib/ — see
+# docs/threat-intel/README.md), so promotion into these two files is a separate
+# hand step with, until now, nothing watching it. That is exactly how the
+# 2026-08-16 sweep merged while the radar still read "as at 2026-08-09". This
+# refreshes a single "📡 Radar / calendar promotion freshness" issue with the
+# gap, while the un-promoted sweep is still the newest thing on disk.
+#
+# It FLAGS, it does not edit the data — same philosophy as source-check.yml and
+# calendar-check.yml. Which campaigns a member of the public can actually act on
+# is an editorial call, not something a cron job should write.
+
+on:
+  schedule:
+    # Mondays 22:00 UTC ≈ 08:00 Tuesday Australia/Sydney — after the source and
+    # calendar link-rot checks, so the week's maintenance flags land together.
+    - cron: "0 22 * * 1"
+  push:
+    branches: [main]
+    # Fire right after a docs PR (new roadmap) or a promotion PR merges, so the
+    # flag issue reflects the current gap without waiting for Monday.
+    paths:
+      - "docs/threat-intel/*-threat-roadmap.md"
+      - "lib/threatRadar.ts"
+      - "lib/scamCalendar.ts"
+      - "scripts/check-promotion-freshness.ts"
+  pull_request:
+    paths:
+      - "docs/threat-intel/*-threat-roadmap.md"
+      - "lib/threatRadar.ts"
+      - "lib/scamCalendar.ts"
+      - "scripts/check-promotion-freshness.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: promotion-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # On a PR, report to the run summary but never fail on staleness. A docs PR
+      # that adds a roadmap is *meant* to leave the surfaces behind for a cycle —
+      # promotion follows in its own PR — so exit 1 here is expected, not a block.
+      # Only a broken checker (exit 2) goes red.
+      - name: Report promotion freshness (PR — informational)
+        if: github.event_name == 'pull_request'
+        run: |
+          set +e
+          npx tsx scripts/check-promotion-freshness.ts --markdown >> "$GITHUB_STEP_SUMMARY"
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::error::check-promotion-freshness failed (exit $code)."
+            exit "$code"
+          fi
+          [ "$code" -eq 1 ] && echo "::notice::Radar/calendar are behind the newest sweep — promote in a follow-up PR."
+          exit 0
+
+      # On main / schedule, refresh the single flag issue. Exit 1 (a surface is
+      # behind) is a maintenance signal, not a broken build, so it warns. Exit 2
+      # means the check or the publish itself broke and must go red, or a silently
+      # broken checker looks identical to a clean week forever.
+      - name: Check promotion freshness and refresh flag issue
+        if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set +e
+          npx tsx scripts/check-promotion-freshness.ts --issue --markdown >> "$GITHUB_STEP_SUMMARY"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "Radar and calendar are current with the newest sweep."
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::Radar/calendar are behind the newest sweep — see the flag issue."
+          else
+            echo "::error::check-promotion-freshness failed (exit $code) — flag issue may not have been published."
+            exit "$code"
+          fi

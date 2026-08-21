@@ -331,6 +331,9 @@ describe("coverage claims match the shipped detector", () => {
     { id: "rental-bond-fraud", text: "Your rental bond is due - our bank details have changed, new account number below", flag: /property bond fraud/i },
     { id: "foreign-authority-diaspora", text: "This is the Chinese Police. A parcel in your name contained contraband.", flag: /foreign police or government authority/i },
     { id: "toll-road-smishing", text: "Linkt: you have an unpaid toll of $4.80. Pay now to avoid a $195 fine.", flag: /toll/i },
+    { id: "reportcyber-cold-storage", text: "Quote the ReportCyber reference and transfer everything to the cold storage account today.", flag: /Asks for sensitive info/i },
+    { id: "stock-tips-group", text: "You're invited to our exclusive trading group, guaranteed returns — join our stock tips group.", flag: /Prize\/reward language/i },
+    { id: "courier-collection", text: "Your account is compromised. A courier will collect your card for safekeeping.", flag: /Asks for sensitive info/i },
     // The escalation phase, not the opener — the opener is the documented gap
     // that makes this entry `partial`. Sampling the opener here would assert a
     // signal we don't have; sampling the escalation asserts the half we do.

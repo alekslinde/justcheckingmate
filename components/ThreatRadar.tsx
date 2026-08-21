@@ -34,9 +34,9 @@ const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 // Coverage is rendered as inline text in the collapsed row rather than as a
-// filled badge. A badge on every card put the same pill on twenty of twenty-five
-// rows, which read as decoration and crowded out the title; naming only the
-// exceptions makes the exceptions visible. Where it is called out, amber is
+// filled badge. A badge on every card put the same "covered" pill on the large
+// majority of rows, which read as decoration and crowded out the title; naming
+// only the exceptions makes the exceptions visible. Where it is called out, amber is
 // deliberate — red is the verdict colour in this app, and a detection gap is a
 // statement about us, not about anything the user is holding.
 //
@@ -54,7 +54,7 @@ const COVERAGE_KEY: Record<RadarCoverage, MessageKey> = {
  * One campaign, collapsed to a scannable row until asked to open.
  *
  * The first draft rendered every card at full weight — badge, summary, lures,
- * advice, detection, source, five section labels — twenty-five times over. That
+ * advice, detection, source, five section labels — once per entry. That
  * measured 17,000px on a phone, twenty screens of scrolling, with no single card
  * fitting on screen at once, and it made scanning impossible: the reader had to
  * read to find out whether a card was relevant to them.
@@ -284,9 +284,9 @@ export default function ThreatRadar({
         </p>
       </section>
 
-      {/* Gaps first, before the full board. They are the five entries out of
-          twenty-five where the reader is genuinely on their own, and burying
-          them among twenty "we catch this" rows is the one ordering that makes
+      {/* Gaps first, before the full board. They are the handful of entries
+          where the reader is genuinely on their own, and burying them among the
+          many "we catch this" rows is the one ordering that makes
           the honesty useless. Same cards, so nothing is duplicated in substance
           — they simply also appear in their status group below. */}
       {gaps.length > 0 && (
