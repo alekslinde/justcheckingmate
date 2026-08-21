@@ -134,7 +134,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "The ATO never sends a link to log in, and never threatens arrest by SMS. Open the ATO app or type my.gov.au yourself — never follow the link in the message.",
     sources: [AU.ato, AU.scamwatch],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "eofy-business",
@@ -150,7 +150,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Any bank-detail change on an invoice gets a phone call to a number you already had — not the number on the invoice. This is the single most expensive scam for Australian businesses.",
     sources: [AU.scamwatch, AU.accc],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "black-friday",
@@ -168,7 +168,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Type the retailer's address in yourself rather than tapping the ad or the text. If a store is new to you, check how long the domain has existed before you enter card details.",
     sources: [AU.scamwatch, AU.accc],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "christmas-parcels",
@@ -185,7 +185,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Australia Post never asks for a fee by SMS link. Track parcels in the official app using the tracking number you were given at purchase.",
     sources: [AU.auspost, AU.scamwatch],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "romance",
@@ -200,7 +200,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Anyone who won't video call, and anyone who moves the conversation to investing, is running a script. Money sent is money gone — reverse-image-search their photos.",
     sources: [AU.scamwatch, AU.moneysmart],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "winter-energy",
@@ -215,7 +215,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Log in to your energy account directly to check any balance or rebate. Real rebates are applied to your bill, not paid out after you enter your card details.",
     sources: [AU.scamwatch, AU.accc],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "back-to-school",
@@ -230,7 +230,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Confirm any school payment request through the school's published phone number before paying, especially if the bank details differ from last term.",
     sources: [AU.scamwatch, AU.accc],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "uni-offers",
@@ -250,7 +250,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Log in to your offer through the tertiary admission centre or the university's own site, never a link in a message. No genuine scholarship charges a fee to release it.",
     sources: [AU.scamwatch, AU.studyassist],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "disaster-recovery",
@@ -270,7 +270,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Donate through the charity's own website, not a link you were sent. Real disaster payments come through myGov and Services Australia — they never arrive as a text asking for your bank details.",
     sources: [AU.scamwatch, AU.servicesaustralia],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "winter-health",
@@ -289,7 +289,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Medicare lives in the myGov app or Express Plus Medicare — it never suspends your card by SMS. Open the app yourself instead of tapping any link.",
     sources: [AU.servicesaustralia, AU.scamwatch],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "eofy-donations",
@@ -308,7 +308,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Check a charity is a deductible-gift recipient on ABN Lookup, and give through its own website. A real charity is happy for you to donate next week — pressure to beat a deadline is the tell.",
     sources: [AU.accc, AU.ato],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "spring-racing",
@@ -326,7 +326,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Only bet with operators licensed in Australia — check the licence on the regulator's list. Nobody can guarantee a win, and no legitimate prize needs a fee to release it.",
     sources: [AU.scamwatch, AU.acma],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
   {
     id: "summer-travel",
@@ -344,7 +344,7 @@ const AU_SEASONS: ScamSeason[] = [
     ],
     advice: "Book through a platform you know and pay by card, never a direct transfer to a private account. If a listing pushes you off the platform to pay, walk away.",
     sources: [AU.scamwatch, AU.accc],
-    reviewed: "2026-08-10",
+    reviewed: "2026-08-16",
   },
 ];
 
