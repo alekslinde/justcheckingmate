@@ -140,8 +140,22 @@ decay the archive exists to prevent.
 3. Implement in a **separate** PR, with tests in `__tests__/` — detection
    changes must ship with coverage.
 4. Add or update the Status block on the roadmap, then **merge the docs PR**.
+5. **Promote the cycle into the user-facing surfaces**, with test coverage:
+   - `lib/threatRadar.ts` — add the cycle's *consumer-facing* campaigns (the
+     ones a member of the public could actually meet; infrastructure findings
+     stay in docs), set their `lastSeen`/`roadmap` to this sweep, and age any
+     entry no longer in the two most recent sweeps down to `watchlist`.
+   - `lib/scamCalendar.ts` — re-review the seasons against the fresh intel and
+     bump their `reviewed` date. Only add a season for a genuinely *seasonal*
+     spike; a year-round campaign belongs on the radar, not the calendar.
 
-Step 4 is the one that gets skipped. See below.
+   This is the step that feeds the public `/radar` and `/calendar` pages. It is
+   an editorial call (what a member of the public can act on), so it stays a
+   human step rather than being auto-generated — but it is **not optional**, and
+   [`promotion-freshness.yml`](../../.github/workflows/promotion-freshness.yml)
+   now flags a sweep that has merged without it (see below).
+
+Steps 4 and 5 are the ones that get skipped. See below.
 
 ---
 
