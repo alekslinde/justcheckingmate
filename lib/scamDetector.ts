@@ -4,6 +4,7 @@ import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl } from "@/lib/urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
+import { KEYS_BY_POST_PHRASES } from "@/lib/regions/base";
 
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
 export type { PhoneIntel };
@@ -429,6 +430,17 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
   if (hasRentalContext && hasBankAsk) {
     flags.push("Property bond fraud pattern — scammers intercept rental communications to redirect bond payments. Always verify bank detail changes by calling the agency on a number from their official website, never one in the message.");
     score += 25;
+  }
+
+  // Keys-by-post, gated (D3 / #180). On its own this is an ordinary move-in
+  // message, so it never scores alone. Alongside a deposit ask it completes the
+  // remote-landlord script — no viewing, no handover, money up front — which is
+  // the part that makes the scam work. Scored modestly: the deposit phrasing in
+  // REQUEST_WORDS already carries the main weight, and this only corroborates.
+  const hasDepositAsk = /deposit/i.test(text);
+  if (KEYS_BY_POST_PHRASES.some((k) => lower.includes(k)) && (hasDepositAsk || hasBankAsk)) {
+    flags.push("Keys promised by post alongside a deposit request — in the fake-landlord script the 'landlord' is always abroad, so there's no viewing and no key handover. Never send a deposit for a property you or someone you trust hasn't physically viewed.");
+    score += 15;
   }
 
   // Payment details presented as *changed* — the core of redirect fraud (D5 /
