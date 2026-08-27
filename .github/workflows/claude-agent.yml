@@ -75,6 +75,7 @@ jobs:
       - run: npm ci
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -115,3 +116,14 @@ jobs:
             it out would need a judgement call about scoring weights or
             false-positive tradeoffs, say so in the PR description instead of
             picking an answer quietly.
+
+      # TEMPORARY — diagnostic only, remove once the allowlist is tuned.
+      # Prints just the tool NAMES seen in the execution log. Deliberately not
+      # `show_full_output`: that dumps every tool result into a log that is
+      # public on this repo, secrets included. Names only, no arguments, no
+      # results.
+      - name: Report denied tools
+        if: always() && steps.claude.outputs.execution_file != ''
+        env:
+          EXEC_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: python3 .github/scripts/denied-tools.py "$EXEC_FILE"
