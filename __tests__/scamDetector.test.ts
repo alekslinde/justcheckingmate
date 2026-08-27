@@ -636,6 +636,16 @@ describe("threat-intel roadmap — SMS rules", () => {
     const result = checkSms("This is CommBank security. Move your funds to a safe account immediately to protect your money.");
     expect(result.flags.some((f) => f.includes("sensitive info"))).toBe(true);
   });
+
+  it("detects recovery-fraud bait language (D2 / #179)", () => {
+    const result = checkSms("Hi, I'm a fund recovery specialist and I can recover your lost funds for a small upfront fee.");
+    expect(result.flags.some((f) => f.includes("reward language"))).toBe(true);
+  });
+
+  it("does not flag a lone recovery-fraud phrase as more than suspicious (D2 / #179)", () => {
+    const result = checkSms("This advisory explains how to recover your lost funds if you have been scammed.");
+    expect(result.verdict).not.toBe("likely_scam");
+  });
 });
 
 describe("threat-intel roadmap — phone rules (D15 / #49)", () => {

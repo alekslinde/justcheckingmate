@@ -47,6 +47,19 @@ const REWARD_WORDS = [
   // body differs.
   "guaranteed returns", "guaranteed profit", "risk-free investment",
   "double your money", "exclusive investment opportunity",
+  // Second-victimisation recovery-fraud bait (D2 / #179 / CAFC advisory Jul
+  // 2026). Scammers target people who have already lost money to a scam,
+  // offering to "recover" it for an upfront fee — the impersonated authority
+  // varies by region (CAFC, IC3/FBI, ACCC, Action Fraud) but the bait
+  // language is identical, so it belongs here rather than in one pack. No
+  // legitimate financial-services provider describes itself as a "fund
+  // recovery specialist". A lone hit scores 12 points (below the 20-point
+  // "safe" threshold), so — same as the loyalty-points group above — these
+  // only tip a verdict when they compound with another signal.
+  "recover your lost funds", "fund recovery specialist",
+  "funds recovery service", "asset recovery specialist",
+  "scam recovery specialist", "we can recover your money",
+  "get your money back from scammers", "recover your stolen funds",
 ];
 
 const REQUEST_WORDS = [
