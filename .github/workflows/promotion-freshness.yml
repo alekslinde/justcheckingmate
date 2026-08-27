@@ -11,7 +11,9 @@ name: Radar / calendar promotion freshness
 # hand step with, until now, nothing watching it. That is exactly how the
 # 2026-08-16 sweep merged while the radar still read "as at 2026-08-09". This
 # refreshes a single "📡 Radar / calendar promotion freshness" issue with the
-# gap, while the un-promoted sweep is still the newest thing on disk.
+# gap, while the un-promoted sweep is still the newest thing on disk. Once the
+# surfaces catch up the issue is closed, not refreshed green — an open digest
+# issue means work is outstanding — and the next un-promoted sweep reopens it.
 #
 # It FLAGS, it does not edit the data — same philosophy as source-check.yml and
 # calendar-check.yml. Which campaigns a member of the public can actually act on

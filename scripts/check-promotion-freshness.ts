@@ -36,6 +36,9 @@ import { dirname, resolve } from "node:path";
 
 import { lastUpdated } from "../lib/threatRadar";
 import { lastReviewed } from "../lib/scamCalendar";
+// Plain .mjs helper shared with check-sources.mjs / dependabot-triage.mjs;
+// `allowJs` resolves it and infers its shape from JSDoc.
+import { publishDigestIssue } from "./lib/digestIssue.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROADMAP_DIR = resolve(HERE, "../docs/threat-intel");
@@ -167,56 +170,6 @@ function markdown(report: Report): string {
   return lines.join("\n");
 }
 
-// ── Issue upsert (mirrors scripts/check-sources.mjs) ─────────────────────────
-
-async function ghFetch(path: string, token: string, init: RequestInit = {}) {
-  const res = await fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
-  if (!res.ok) throw new Error(`GitHub ${path} -> ${res.status} ${await res.text()}`);
-  return res.status === 204 ? null : res.json();
-}
-
-async function ensureLabel(repo: string, token: string, name: string, color: string, description: string) {
-  try {
-    await ghFetch(`/repos/${repo}/labels`, token, {
-      method: "POST",
-      body: JSON.stringify({ name, color, description }),
-    });
-  } catch (err) {
-    if (!/422/.test((err as Error).message)) throw err;
-  }
-}
-
-// One long-lived issue refreshed in place, same convention as the source-check
-// and deps digests — a new issue every week would just be noise. When nothing is
-// behind, the issue is refreshed with the green "in sync" body rather than
-// closed, so the check's own liveness stays visible.
-async function upsertDigestIssue(repo: string, token: string, body: string): Promise<number> {
-  const label = "promotion-freshness";
-  const title = "📡 Radar / calendar promotion freshness";
-  await ensureLabel(repo, token, label, "0e8a16", "Weekly check that the radar/calendar have been promoted to the newest sweep");
-  const existing = await ghFetch(`/repos/${repo}/issues?state=open&labels=${label}&per_page=1`, token);
-  if (Array.isArray(existing) && existing.length > 0) {
-    await ghFetch(`/repos/${repo}/issues/${existing[0].number}`, token, {
-      method: "PATCH",
-      body: JSON.stringify({ body }),
-    });
-    return existing[0].number;
-  }
-  const created = await ghFetch(`/repos/${repo}/issues`, token, {
-    method: "POST",
-    body: JSON.stringify({ title, body, labels: [label, "threat-intel"] }),
-  });
-  return created.number;
-}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -247,8 +200,21 @@ async function main() {
     // (exit 2), reported separately from the staleness signal (exit 1) — a
     // silently broken checker looks identical to a clean week forever.
     try {
-      const n = await upsertDigestIssue(repo, token, markdown(report));
-      console.error(`Digest issue #${n} refreshed.`);
+      const { number, action } = await publishDigestIssue({
+        repo,
+        token,
+        label: "promotion-freshness",
+        title: "📡 Radar / calendar promotion freshness",
+        body: markdown(report),
+        clean: report.behind.length === 0,
+        extraLabels: ["threat-intel"],
+        labelColor: "0e8a16",
+        labelDescription: "Weekly check that the radar/calendar have been promoted to the newest sweep",
+        closeComment:
+          "Radar and calendar are in sync with the newest sweep — closing. " +
+          "Reopened automatically when the next sweep lands un-promoted.",
+      });
+      console.error(number === null ? `Digest issue ${action}.` : `Digest issue #${number} ${action}.`);
     } catch (err) {
       console.error(`Failed to refresh digest issue: ${(err as Error).message}`);
       process.exitCode = 2;

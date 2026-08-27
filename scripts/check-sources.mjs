@@ -29,6 +29,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
+import { publishDigestIssue } from "./lib/digestIssue.mjs";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REGISTRY = resolve(HERE, "../docs/threat-intel/sources.yml");
 
@@ -745,56 +747,6 @@ function human(results, reg, retiredCount = 0) {
 
 // ---------------------------------------------------------------------------
 
-// GitHub API helper, matching the shape used by dependabot-triage.mjs.
-async function ghFetch(path, token, init = {}) {
-  const res = await fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
-  if (!res.ok) throw new Error(`GitHub ${path} -> ${res.status} ${await res.text()}`);
-  return res.status === 204 ? null : res.json();
-}
-
-// One long-lived issue refreshed in place, same convention as the deps digest —
-// a new issue every week would be 52 a year and read as noise.
-// Creating an issue with a label that does not exist fails the request outright,
-// so the digest could never be published on a fresh repo. Idempotent: a 422
-// means it already exists.
-async function ensureLabel(repo, token, name, color, description) {
-  try {
-    await ghFetch(`/repos/${repo}/labels`, token, {
-      method: "POST",
-      body: JSON.stringify({ name, color, description }),
-    });
-  } catch (err) {
-    if (!/422/.test(err.message)) throw err;
-  }
-}
-
-async function upsertDigestIssue(repo, token, body) {
-  const label = "source-check";
-  const title = "🔗 Threat-intel source check";
-  await ensureLabel(repo, token, label, "1d76db", "Weekly threat-intel source reachability digest");
-  const existing = await ghFetch(`/repos/${repo}/issues?state=open&labels=${label}&per_page=1`, token);
-  if (Array.isArray(existing) && existing.length > 0) {
-    await ghFetch(`/repos/${repo}/issues/${existing[0].number}`, token, {
-      method: "PATCH",
-      body: JSON.stringify({ body }),
-    });
-    return existing[0].number;
-  }
-  const created = await ghFetch(`/repos/${repo}/issues`, token, {
-    method: "POST",
-    body: JSON.stringify({ title, body, labels: [label, "threat-intel"] }),
-  });
-  return created.number;
-}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -848,6 +800,10 @@ async function main() {
   else if (asMarkdown) console.log(markdown(results, reg, retiredCount));
   else console.log(human(results, reg, retiredCount));
 
+  // Hoisted above the issue block: it is both the exit code and the digest's
+  // clean/unclean signal.
+  const rotted = results.some((r) => FAIL.has(r.state));
+
   if (asIssue) {
     const repo = process.env.GITHUB_REPOSITORY;
     const token = process.env.GITHUB_TOKEN;
@@ -860,8 +816,21 @@ async function main() {
     // swallowed — it exits 2, which the workflow reports separately from the
     // rot signal (exit 1).
     try {
-      const n = await upsertDigestIssue(repo, token, markdown(results, reg, retiredCount));
-      console.error(`Digest issue #${n} refreshed.`);
+      const { number, action } = await publishDigestIssue({
+        repo,
+        token,
+        label: "source-check",
+        title: "🔗 Threat-intel source check",
+        body: markdown(results, reg, retiredCount),
+        clean: !rotted,
+        extraLabels: ["threat-intel"],
+        labelColor: "1d76db",
+        labelDescription: "Weekly threat-intel source reachability digest",
+        closeComment:
+          "All threat-intel sources are reachable as of the latest run — closing. " +
+          "Reopened automatically the next time one rots.",
+      });
+      console.error(number === null ? `Digest issue ${action}.` : `Digest issue #${number} ${action}.`);
     } catch (err) {
       console.error(`Failed to refresh digest issue: ${err.message}`);
       process.exitCode = 2;
@@ -869,7 +838,7 @@ async function main() {
     }
   }
 
-  process.exitCode = results.some((r) => FAIL.has(r.state)) ? 1 : 0;
+  process.exitCode = rotted ? 1 : 0;
 }
 
 // Only run when invoked directly, so the parser and validator can be imported
