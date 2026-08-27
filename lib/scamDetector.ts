@@ -668,8 +668,18 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     score += 30;
   }
 
-  // Grammar/typo signals
-  const typos = text.match(/recieve|reciept|ur account|u have|pls|plz|kindly/gi);
+  // Grammar/typo signals.
+  //
+  // Word-boundaried, because these are short tokens matched against free text
+  // and the unanchored form fired inside ordinary words: "ur account" matched
+  // inside "yo|ur account| settings" and "fo|ur account|s", so every message
+  // containing "your account" was flagged for typos it does not have. Same
+  // collision class the pack lists guard against in __tests__/packShadowing —
+  // a short needle matching inside a longer legitimate word.
+  //
+  // "pls"/"plz"/"ur" need the boundary most; "recieve"/"reciept" are already
+  // unambiguous misspellings but are anchored too, for consistency.
+  const typos = text.match(/\brecieve\b|\breciept\b|\bur\s+account\b|\bu\s+have\b|\bpls\b|\bplz\b|\bkindly\b/gi);
   if (typos && typos.length > 0) {
     flags.push("Spelling/grammar patterns common in scam messages");
     score += 10;

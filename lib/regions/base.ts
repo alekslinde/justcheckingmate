@@ -8,10 +8,33 @@
 import type { BaseSignals } from "./types";
 
 // Generic pressure/urgency language common to nearly all scam messaging.
+//
+// Bare "your account" is deliberately absent. It is a noun phrase, not
+// pressure language: "your account balance is available", "your account will
+// renew on 3 September" and "your account is now active" are ordinary
+// service messages, and it scored +10 on every one of them. Nothing about
+// owning an account is a scam signal — what makes these messages scams is the
+// threat or instruction attached, which the entries around it already carry
+// ("account suspended", "verify now", "act now", "immediately").
+//
+// The verb-phrase forms below are the part that means something: an
+// instruction to act on the account, rather than a mention of it. They keep
+// the "verify your account now" shape scoring without flagging every
+// transactional notification a bank sends.
 const URGENCY_GENERIC = [
   "urgent", "immediately", "act now", "limited time", "expires today",
   "account suspended", "verify now", "confirm now", "last chance",
-  "final notice", "your account", "security alert", "unusual activity",
+  "final notice", "security alert", "unusual activity",
+  "verify your account", "confirm your account", "validate your account",
+  "secure your account", "update your account", "reactivate your account",
+  "your account has been", "your account will be",
+  // The threat *state*, which is what distinguishes a scam from a service
+  // notice — "your account is locked" versus "your account is now active".
+  // The state word carries the signal, so it is matched rather than the bare
+  // noun phrase.
+  "account is locked", "account is suspended", "account is on hold",
+  "account has been locked", "account has been suspended",
+  "account will be closed", "account will be suspended",
   "click here", "click link", "tap here", "don't ignore", "action required",
   "respond immediately", "within 24 hours", "within 48 hours",
 ];
