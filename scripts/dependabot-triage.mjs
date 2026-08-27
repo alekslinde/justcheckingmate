@@ -303,14 +303,17 @@ function buildContext() {
 }
 
 // Unlike the source-check and promotion-freshness digests, this one never
-// auto-closes (closeOnClean: false). Two reasons:
+// changes issue state (closeOnClean: false). Two reasons:
 //
 //   1. Its footer tells maintainers "edit labels/close to silence" — closing is
-//      already a deliberate human signal here, and auto-reopening would fight it.
+//      a deliberate human signal here, so the helper must neither close the
+//      issue nor reopen one that a person closed.
 //   2. This same issue carries the token-expiry skip notice, which is not a
 //      "clean" state even though it lists zero alerts.
 //
-// So it keeps the refresh-in-place behaviour it has always had.
+// So it keeps the refresh-in-place behaviour it has always had: body updated,
+// state left alone. `clean` is therefore always false — it is unused when
+// closeOnClean is false, but passing true would misdescribe the run.
 async function upsertDigestIssue(repo, token, body) {
   const { number } = await publishDigestIssue(
     {

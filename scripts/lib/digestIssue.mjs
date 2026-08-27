@@ -41,7 +41,11 @@ export async function ghFetch(path, token, init = {}, userAgent = "justcheckingm
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": userAgent,
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      // Unconditional, matching what check-sources and promotion-freshness sent
+      // before this was shared. Every caller posts a JSON string body; sending
+      // the header on a bodyless GET is harmless, whereas omitting it on a write
+      // is not, so the stricter of the two prior behaviours wins.
+      "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
   });
@@ -78,14 +82,23 @@ export async function ensureLabel(repo, token, name, color, description, deps = 
  * unclean run would open a duplicate — a fresh issue every time the checker
  * flipped state. Sorted newest-first so that if duplicates already exist from
  * before this change, we converge on the most recent one.
+ *
+ * `GET /issues` also returns pull requests — GitHub models a PR as an issue, and
+ * the endpoint does not filter them out. A PR carrying the digest's label (these
+ * workflows also run on PRs touching their data files, so the label is plausible
+ * there) would otherwise be picked up as `existing`, and the digest would be
+ * PATCHed over the PR body — or, on a clean run, the PR closed with a "nothing
+ * to report" comment. Items with a `pull_request` key are dropped, and enough
+ * are fetched that a run of labelled PRs cannot hide the real issue behind them.
  */
 async function findDigestIssue(repo, token, label, deps = {}) {
   const fetchFn = deps.ghFetch ?? ghFetch;
   const found = await fetchFn(
-    `/repos/${repo}/issues?state=all&labels=${encodeURIComponent(label)}&sort=created&direction=desc&per_page=1`,
+    `/repos/${repo}/issues?state=all&labels=${encodeURIComponent(label)}&sort=created&direction=desc&per_page=30`,
     token,
   );
-  return Array.isArray(found) && found.length > 0 ? found[0] : null;
+  if (!Array.isArray(found)) return null;
+  return found.find((item) => item && !item.pull_request) ?? null;
 }
 
 /**
@@ -107,7 +120,9 @@ async function findDigestIssue(repo, token, label, deps = {}) {
  *
  * `action` is one of: "created", "updated", "reopened", "closed",
  * "already-closed", "skipped-clean" (clean, and no issue has ever existed —
- * nothing to close, and opening one just to close it would be noise).
+ * nothing to close, and opening one just to close it would be noise), or
+ * "updated-while-closed" (a closeOnClean:false digest refreshed the body of an
+ * issue a maintainer had closed, leaving it closed).
  */
 export async function publishDigestIssue(opts, deps = {}) {
   const {
@@ -126,6 +141,15 @@ export async function publishDigestIssue(opts, deps = {}) {
 
   const fetchFn = deps.ghFetch ?? ghFetch;
   const ensure = deps.ensureLabel ?? ensureLabel;
+
+  // Ensure the label before looking anything up, not just on the create path.
+  // The label IS the identity of the digest's issue: if it is deleted while the
+  // issue lives on, GitHub also strips it from that issue, the lookup misses,
+  // and a duplicate is opened — orphaning the thread's history. Recreating it
+  // first cannot restore the association, but it does mean the label exists for
+  // the issue that gets opened, so the split happens at most once rather than
+  // every run. Idempotent, so this costs one 422 on the normal path.
+  await ensure(repo, token, label, labelColor, labelDescription, deps);
 
   const existing = await findDigestIssue(repo, token, label, deps);
 
@@ -149,18 +173,24 @@ export async function publishDigestIssue(opts, deps = {}) {
 
   // ── Something to report ────────────────────────────────────────────────────
   if (existing) {
-    // Reopen if a previous clean run closed it. `state` is sent only when it
-    // needs to change, so a maintainer-closed issue on a closeOnClean:false
-    // digest is not silently reopened by a body refresh.
-    const needsReopen = existing.state === "closed";
+    // Reopen only when this digest also closes itself. For a closeOnClean:false
+    // digest, a closed issue can only have been closed by a person — that is the
+    // documented way to silence deps-triage ("edit labels/close to silence") —
+    // and reopening it would override that. Such a digest never touches issue
+    // state in either direction; it only refreshes the body, exactly as it did
+    // when the pre-shared lookup searched state=open and simply never found a
+    // closed issue.
+    const needsReopen = existing.state === "closed" && closeOnClean;
     await fetchFn(`/repos/${repo}/issues/${existing.number}`, token, {
       method: "PATCH",
       body: JSON.stringify(needsReopen ? { body, state: "open" } : { body }),
     });
+    if (existing.state === "closed" && !closeOnClean) {
+      return { number: existing.number, action: "updated-while-closed" };
+    }
     return { number: existing.number, action: needsReopen ? "reopened" : "updated" };
   }
 
-  await ensure(repo, token, label, labelColor, labelDescription, deps);
   const created = await fetchFn(`/repos/${repo}/issues`, token, {
     method: "POST",
     body: JSON.stringify({ title, body, labels: [label, ...extraLabels] }),
