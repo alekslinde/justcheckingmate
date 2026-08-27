@@ -72,8 +72,11 @@ const URGENCY_RECALL = [
 
 // Tax-time cost-of-living lures (D1/D2/D10 / #73 / ATO-myGov peak season).
 // Scammers weaponise real government relief policies as bait. These appear in
-// legitimate gov comms too, so they lean on the compound scorer
-// (authorityMentions + URL) rather than firing hard on their own.
+// legitimate gov comms too, so they are written to need corroboration. Nothing
+// is gated: every urgency group is flattened into one `urgencyWords` union
+// (lib/regions/index.ts) and scored by hit count, +10 per hit capped at +35 —
+// enough for "suspicious" (20-44), short of "likely_scam" (45+). An
+// authorityMentions hit adds +25 independently. Additive, not conditional.
 const URGENCY_TAX = [
   "cost of living payment", "cost of living relief", "cost-of-living supplement",
   "energy rebate", "energy bill relief", "electricity rebate",
@@ -85,8 +88,10 @@ const URGENCY_TAX = [
 // psychologically distinct from the refund lures above and reaches a different
 // demographic (business owners, contractors, older Australians) ahead of EOFY
 // and the August BAS deadline. The real ATO does contact people about genuine
-// debts, so these lean on the compound scorer the same way URGENCY_TAX does —
-// an authorityMentions "ato" hit alongside one of these is what escalates.
+// debts, so these carry the same shared urgency cap as URGENCY_TAX: +10 per
+// hit, +35 maximum, with an "ato" authority hit adding +25 on top. The two are
+// independent, so several of these together reach "suspicious" with no
+// authority mention present — the cap, not a gate, is what holds them back.
 // "arrest warrant" is deliberately absent: it already lives in
 // URGENCY_FOREIGN_AUTHORITY and listing it twice would double-score.
 const URGENCY_TAX_THREAT = [
@@ -337,8 +342,11 @@ const BRAND_MENTIONS = [
   // Private health insurers (D4 / 2026-08-09 roadmap / ACSC Aug 2026 advisory).
   // Credential-harvest kits impersonating the big four AU funds, framed as
   // "your policy is expiring" / "your membership is suspended". Health cover is
-  // near-universal here and the funds do email members about renewals, so these
-  // lean on the compound scorer rather than firing hard alone.
+  // near-universal here and the funds do email members about renewals — but a
+  // brand mention is scored on its own, not compounded: a bare fund name is
+  // +20, which is already "suspicious". That is deliberate for a credential-
+  // harvest kit, though it does mean an ordinary message naming a fund scores.
+  // Keep this list to names a scam kit actually impersonates.
   //
   // Only the distinctive names are substring-matched. "medibank" and "bupa" are
   // unambiguous; "nib", "hcf" and "ahm" are in the word list below.

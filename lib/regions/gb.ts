@@ -19,8 +19,10 @@ import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 // Road-charging smishing. The UK equivalent of the AU toll campaigns: Dart
 // Charge (Dartford Crossing), the Mersey Gateway and London's congestion
 // charge / ULEZ are the recurring covers, and all three genuinely do issue
-// penalty notices — which is what makes the lure work. These lean on the
-// compound scorer (authority mention + link) rather than firing hard alone.
+// penalty notices — which is what makes the lure work. Urgency hits score +10
+// each and the group caps at +35, which sits inside "suspicious" (20-44) and
+// cannot reach "likely_scam" (45+) on its own — an authority mention or a bad
+// link is what carries one of these over.
 const URGENCY_TOLL = [
   "unpaid toll", "outstanding toll", "toll payment", "toll charge",
   "dart charge", "dartford crossing", "mersey gateway",
@@ -72,7 +74,11 @@ const URGENCY_RECALL = [
 
 // HMRC / DWP benefit and refund lures. Cost-of-living and Winter Fuel Payment
 // schemes are real government programmes, which is exactly why they're used as
-// bait — so these compound with an authority mention rather than firing alone.
+// bait. Nothing here is gated: every urgency group is flattened into one
+// `urgencyWords` union (lib/regions/index.ts) and scored by hit count, +10 per
+// hit capped at +35. An authority mention adds its own +25 independently. The
+// cap is what keeps a lone group under "likely_scam" (45+), so these phrases
+// still need a second signal to tip a verdict — by arithmetic, not by a gate.
 const URGENCY_TAX = [
   "tax refund", "tax rebate", "you are eligible for a refund",
   "hmrc refund", "refund is waiting", "claim your refund",
@@ -99,8 +105,11 @@ const URGENCY_TAX = [
 // HMRC debt / enforcement coercion. The threat framing reaches a different
 // demographic than the refund lures — the self-employed and small-company
 // directors around the 31 January Self Assessment deadline. HMRC does pursue
-// genuine debts, so these lean on the compound scorer: an "hmrc" authority hit
-// alongside one of these is what escalates.
+// genuine debts, so these are written to need corroboration: they score +10
+// each into the shared urgency cap of +35, enough for "suspicious" but not for
+// "likely_scam". An "hmrc" authority hit adds +25 on top, independently — the
+// two are additive, not conditional, so several of these together will reach a
+// "suspicious" verdict with no authority mention present at all.
 //
 // "arrest warrant" is deliberately absent — it lives in the foreign-authority
 // group, and listing it twice would double-score. Same convention as AU.
