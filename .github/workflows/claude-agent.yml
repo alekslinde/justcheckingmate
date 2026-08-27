@@ -1,0 +1,105 @@
+name: Claude agent
+
+# Opt-in agent runs. Nothing here fires on its own: an issue or PR must carry
+# the `claude-ready` label, or someone must write @claude in a comment. That
+# gate is deliberate and load-bearing — see "Why label-gated" below.
+#
+# Auth is CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`), not an API key,
+# so runs draw from the Claude subscription rather than pay-as-you-go billing.
+# The token lasts 12 months and there is no CI-side refresh: when it lapses,
+# runs start failing auth and it has to be regenerated locally and re-set with
+# `gh secret set CLAUDE_CODE_OAUTH_TOKEN`.
+#
+# Why label-gated rather than firing on every issue:
+#
+#   1. Cost lands on us, not a card. Subscription usage is shared with
+#      interactive sessions, so an agent burning quota is quota we don't have
+#      for our own work. Most issues in this repo are bot-generated refreshes
+#      (dependabot-triage, source-check, calendar-check) that are already
+#      computed by a cron and need no agent at all.
+#
+#   2. Detection changes carry real user consequences. A false positive here
+#      tells someone a legitimate message is a scam. CLAUDE.md requires test
+#      coverage for detector changes; a human still reads the diff before it
+#      lands. The agent opens a PR — it never merges one.
+#
+# The agent therefore proposes. CI (ci.yml) and a human reviewer dispose.
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+# Least privilege that still lets the agent open a PR. Notably NOT granted:
+# any write beyond contents/PRs/issues, and no access to the repo's other
+# secrets — the agent cannot touch Cloudflare or inbound-worker credentials.
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+# One agent run per issue/PR at a time. A second label or comment while a run
+# is in flight queues rather than racing it onto the same branch.
+concurrency:
+  group: claude-agent-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    name: Claude agent
+    runs-on: ubuntu-latest
+
+    # Either the opt-in label was just applied, or a human asked directly.
+    # `github.event.label.name` is only set on the `labeled` event, so the
+    # comment paths fall through to the @claude checks.
+    if: |
+      (github.event_name == 'issues' && github.event.label.name == 'claude-ready') ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The agent runs the repo's own lint/test commands, so it needs the same
+      # toolchain CI uses. Keep this in step with ci.yml.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Read this repository's CLAUDE.md first and follow it exactly —
+            especially the detection-logic and git-workflow rules.
+
+            Implement the change described in this issue or comment thread.
+
+            Hard requirements:
+              - Detection is rule-based only. Never introduce an LLM or an
+                external analysis API into lib/.
+              - Any change to detection logic ships with test coverage in
+                __tests__/. No coverage, no PR.
+              - Run `npm run lint` and `npm test`. Both must pass before you
+                open anything.
+              - Route user-facing copy through messages/, not hardcoded strings.
+              - Never weaken piiScrubber.ts or submissionGuard.ts.
+
+            Threat-intel issues cite a roadmap under docs/threat-intel/. Read the
+            cited proposal before editing — it carries the false-positive
+            analysis and the phrase list, and its guidance overrides any guess
+            you would otherwise make about scoring.
+
+            Work on a branch and open a PR for human review. Do not merge it,
+            and do not push to main. If the issue is ambiguous, or if carrying
+            it out would need a judgement call about scoring weights or
+            false-positive tradeoffs, say so in the PR description instead of
+            picking an answer quietly.
