@@ -111,16 +111,14 @@ const KNOWN_SHADOWING = new Set([
   "unclaimed tax refund <- tax refund",
   "final notice of unpaid toll <- unpaid toll",
   "unpaid tolls on your account <- unpaid toll",
-  // US, and the harmful class rather than the harmless one — the shadowing
-  // phrase is broad enough to match ordinary English. Left as-is because
-  // removing a live scoring entry is a detection change, not a test fix:
-  //   · "your account" scores +10 as urgency, so "Your account balance is
-  //     available in the app." reaches 20 / suspicious in the US pack
-  //   · "final notice" is milder but the same shape
-  // Flagged on #196 for a follow-up decision.
+  // US. "final notice" is broad, but it scores +10 and leaves an ordinary
+  // message ("Final notice: our newsletter is moving") at 10 / safe, which is
+  // the intended weak-signal behaviour — it needs corroboration to matter.
+  // The bare "your account" pair that used to sit here is gone: that entry was
+  // removed, since a noun phrase is not pressure language. See the note on
+  // URGENCY_GENERIC in lib/regions/base.ts.
   "final notice of intent to levy <- final notice",
   "final notice of unpaid toll <- final notice",
-  "unpaid tolls on your account <- your account",
 ]);
 
 describe("region pack substring shadowing", () => {
