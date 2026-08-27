@@ -2,6 +2,10 @@ name: Threat-intel source check
 
 # Checks that every source in docs/threat-intel/sources.yml still resolves, and
 # refreshes a single "🔗 Threat-intel source check" issue with whatever rotted.
+# A clean run closes that issue rather than refreshing it with a green body, so
+# an open digest issue always means there is something to act on; the next rot
+# reopens the same thread. The check's own liveness is the run and its job
+# summary, which are written whether or not anything rotted.
 #
 # Why this runs at all: the roadmaps in docs/threat-intel/ are the evidence layer
 # for hardcoded scores in lib/ — ".monster is +30 because CSC DBS measured >60%

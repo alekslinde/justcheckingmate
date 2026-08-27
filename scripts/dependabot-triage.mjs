@@ -25,6 +25,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
+import { ghFetch as sharedGhFetch, publishDigestIssue } from "./lib/digestIssue.mjs";
+
 const SEVERITY_RANK = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, unknown: 0 };
 const SOURCE_DIRS = ["app", "lib", "components", "workers"];
 
@@ -242,23 +244,10 @@ export function formatDigest(rows, { generatedAt = new Date().toISOString() } = 
 
 // ── I/O wiring (untested; keep thin) ─────────────────────────────────────────
 
-const GH_API = "https://api.github.com";
-
-async function ghFetch(path, token, init = {}) {
-  const res = await fetch(`${GH_API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "justcheckingmate-dependabot-triage",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!res.ok) throw new Error(`GitHub API ${init.method ?? "GET"} ${path} -> ${res.status} ${await res.text()}`);
-  return res.status === 204 ? null : res.json();
-}
+// Shared helper, bound to this script's User-Agent. Its thrown-error shape
+// ("... -> <status> ...") is what isAlertsAccessDenied() below matches on.
+const ghFetch = (path, token, init = {}) =>
+  sharedGhFetch(path, token, init, "justcheckingmate-dependabot-triage");
 
 /**
  * True when a Dependabot-alerts fetch failed because the token can't read the
@@ -313,19 +302,32 @@ function buildContext() {
   return { installedVersions, directImports };
 }
 
+// Unlike the source-check and promotion-freshness digests, this one never
+// auto-closes (closeOnClean: false). Two reasons:
+//
+//   1. Its footer tells maintainers "edit labels/close to silence" — closing is
+//      already a deliberate human signal here, and auto-reopening would fight it.
+//   2. This same issue carries the token-expiry skip notice, which is not a
+//      "clean" state even though it lists zero alerts.
+//
+// So it keeps the refresh-in-place behaviour it has always had.
 async function upsertDigestIssue(repo, token, body) {
-  const label = "deps-triage";
-  const existing = await ghFetch(`/repos/${repo}/issues?state=open&labels=${label}&per_page=1`, token);
-  const title = "🔒 Dependabot alert triage";
-  if (Array.isArray(existing) && existing.length > 0) {
-    await ghFetch(`/repos/${repo}/issues/${existing[0].number}`, token, { method: "PATCH", body: JSON.stringify({ body }) });
-    return existing[0].number;
-  }
-  const created = await ghFetch(`/repos/${repo}/issues`, token, {
-    method: "POST",
-    body: JSON.stringify({ title, body, labels: [label, "dependencies"] }),
-  });
-  return created.number;
+  const { number } = await publishDigestIssue(
+    {
+      repo,
+      token,
+      label: "deps-triage",
+      title: "🔒 Dependabot alert triage",
+      body,
+      clean: false,
+      closeOnClean: false,
+      extraLabels: ["dependencies"],
+      labelColor: "d93f0b",
+      labelDescription: "Weekly pre-triaged Dependabot alert digest",
+    },
+    { ghFetch },
+  );
+  return number;
 }
 
 async function main() {
