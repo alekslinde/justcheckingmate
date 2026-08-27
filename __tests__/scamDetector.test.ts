@@ -685,6 +685,45 @@ describe("threat-intel roadmap — SMS rules", () => {
     const result = checkSms("Tax Resolution Oversight Department", undefined, "US");
     expect(result.verdict).not.toBe("likely_scam");
   });
+
+  it("detects the generic DWP benefit-entitlement lure (D1 / #178)", () => {
+    const result = checkSms("Benefit entitlement check required. Confirm your details.", undefined, "GB");
+    expect(result.flags.some((f) => f.includes("Urgency language"))).toBe(true);
+  });
+
+  it("escalates the benefit lure when it carries an authority mention and a link (D1 / #178)", () => {
+    const result = checkSms(
+      "DWP: benefit entitlement check required. Confirm your details at https://dwp-check.cyou/x",
+      undefined,
+      "GB",
+    );
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("scopes the benefit-entitlement phrases to the GB pack (D1 / #178)", () => {
+    const result = checkSms("Benefit entitlement check required.", undefined, "AU");
+    expect(result.flags.some((f) => f.includes("Urgency language"))).toBe(false);
+  });
+
+  // Welfare-rights charities do text this phrasing, so the bare "entitled to a
+  // benefit" form the roadmap proposed is deliberately not in the list. This
+  // pins the near-miss the issue called out as the false-positive risk.
+  it("does not flag legitimate welfare-rights phrasing (D1 / #178)", () => {
+    const result = checkSms(
+      "You may be entitled to a benefit called Attendance Allowance. Ask us how to claim.",
+      undefined,
+      "GB",
+    );
+    expect(result.flags.some((f) => f.includes("Urgency language"))).toBe(false);
+  });
+
+  // A lone entitlement phrase scores +10 — below every verdict threshold. It
+  // takes a second signal to escalate, which is the behaviour the issue asked
+  // to confirm.
+  it("does not tip the verdict on a benefit phrase alone (D1 / #178)", () => {
+    const result = checkSms("Benefit entitlement check required.", undefined, "GB");
+    expect(result.verdict).not.toBe("likely_scam");
+  });
 });
 
 describe("threat-intel roadmap — phone rules (D15 / #49)", () => {

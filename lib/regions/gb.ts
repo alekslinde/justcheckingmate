@@ -80,6 +80,20 @@ const URGENCY_TAX = [
   "winter fuel payment", "energy bill support", "energy rebate",
   "council tax refund", "council tax rebate", "council tax reduction",
   "universal credit payment", "budgeting advance",
+  // Generic benefit-entitlement framing (D1 / #178 / Merseyside Police and
+  // Isle of Wight Trading Standards advisories, Aug 2026). The winter-fuel
+  // campaign evolved away from naming a specific payment: leading with an
+  // "entitlement check" instead is more durable, because it survives the
+  // named scheme going out of season. DWP does not do this by SMS — it
+  // writes by letter and through the UC journal.
+  //
+  // Bare "entitled to a benefit" is deliberately absent: it is ordinary
+  // welfare-rights language ("you may be entitled to a benefit called
+  // Attendance Allowance"), and advice charities do text it. The entries
+  // here keep enough qualifying words to stay clear of that phrasing.
+  "benefit entitlement check", "entitled to a new benefit",
+  "entitled to an additional benefit", "replacement benefit payment",
+  "benefit check required",
 ];
 
 // HMRC debt / enforcement coercion. The threat framing reaches a different
