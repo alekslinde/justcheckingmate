@@ -4,6 +4,47 @@
 
 ---
 
+## Status — as at 2026-08-27
+
+All four proposals have shipped. The research and rationale are kept as written
+on 2026-08-23; this block is the only part updated after the fact.
+
+| Proposal | Issue | Shipped in | Status |
+|---|---|---|---|
+| D1 — DWP generic benefit entitlement lure | #178 | #190 | ✅ Shipped |
+| D2 — Recovery-fraud bait language | #179 | #185 | ✅ Shipped |
+| D3 — Fake-landlord accommodation-deposit phrases | #180 | #192 | ✅ Shipped |
+| D4 — IRS "Tax Resolution Oversight Department" | #181 | #189 | ✅ Shipped |
+
+**Three implementations dropped or gated a phrase the proposal listed.** Noted
+here so this file isn't read as a description of the shipped code:
+
+- **D1** — `"you may be entitled to a benefit"` was not added. The proposal
+  already excluded the barer `"entitled to a benefit"` as too generic, but the
+  longer form is just as common in legitimate welfare-rights communication;
+  advice charities text almost exactly that sentence. The other five shipped.
+- **D3** — the three medium-confidence "keys by post" phrases are gated rather
+  than listed flat in `REQUEST_WORDS`. The proposal left this decision to
+  implementation. Ungated they flag ordinary move-in mail, so they live in
+  `KEYS_BY_POST_PHRASES` and score only alongside a deposit or bank ask.
+- **D4** — the bare `"tax resolution oversight"` was not added. Authority
+  mentions are substring-matched and the prefix is ordinary tax-industry
+  English, so it would have flagged the legitimate mail of the tax
+  professionals this campaign targets. It was also dead code: `mentionsAny`
+  short-circuits, so it would have shadowed the full department name.
+
+**Compound-scoring note (D1).** The proposal asked implementers to confirm the
+benefit phrases compound with an authority mention rather than firing alone.
+They do not — there is no compound gate. `urgency.tax` is flattened into the
+`urgencyWords` union in `lib/regions/index.ts` and scored by hit count; the
+authority mention scores independently. The phrases still cannot tip a verdict
+alone (+10, well under threshold), so the intent holds, but by a different
+mechanism than the proposal assumed. The comment in `lib/regions/gb.ts`
+describing a compound gate is inaccurate and predates this cycle — tracked
+separately, not fixed here.
+
+---
+
 ## Executive summary
 
 A quieter cycle than 2026-08-16. The dominant new signal is a GB DWP "you may be
