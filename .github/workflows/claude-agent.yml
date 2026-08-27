@@ -77,6 +77,18 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # CI has nobody to answer a permission prompt, so anything not listed
+          # here is denied and the agent quietly stops. The first run hit
+          # exactly that: 3 denials, 4 turns, no branch, and a green tick.
+          #
+          # Bash is scoped to the commands the prompt actually asks for rather
+          # than opened up wholesale. Note this is a capability boundary, not a
+          # security boundary — the agent writes the code it then runs. The
+          # real containment is the job's `permissions:` block above and the
+          # fact that a human reviews every PR.
+          claude_args: |
+            --allowed-tools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(npm ci),Bash(npm test),Bash(npm run lint),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh issue view:*)"
           prompt: |
             Read this repository's CLAUDE.md first and follow it exactly —
             especially the detection-logic and git-workflow rules.
