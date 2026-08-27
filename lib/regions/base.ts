@@ -140,6 +140,36 @@ const REQUEST_WORDS = [
   // redirect-fraud signal is unaffected; the rental *context* is what escalates
   // it, via the bond composite in checkSms.
   "new account details", "changed bank account",
+  // Fake-landlord accommodation-deposit fraud (D3 / #180 / An Garda Síochána
+  // advisory Aug 2026, seasonal college-intake spike). The script: the
+  // "landlord" is conveniently overseas, so no viewing and no keys in person —
+  // just a deposit by bank transfer to hold a room that was never available.
+  // The pattern is global; the Irish warnings were the catalyst, not the scope.
+  //
+  // The absent-landlord and hold-the-room phrasings carry the signal. A
+  // legitimate letting agent has local staff and takes deposits through a
+  // tenancy-deposit scheme, so neither is ordinary rental language.
+  //
+  // Not listed: "cannot view the property" / "unable to show the property"
+  // (real property managers say both in maintenance contexts), and the
+  // "keys will be posted" family — see KEYS_BY_POST_PHRASES below, which is
+  // gated on rental context rather than scoring flat.
+  "landlord is abroad", "landlord is currently overseas",
+  "landlord is currently abroad",
+  "pay deposit to hold the property", "send deposit to hold the property",
+  "deposit to secure the room", "deposit to reserve the room",
+  "transfer deposit to hold",
+];
+
+// The medium-confidence half of D3 (#180). "Keys will be posted to you" is a
+// perfectly ordinary letting message on its own — it only becomes a signal
+// alongside the rest of the remote-landlord script. The issue left the
+// fire-alone-or-gate decision to implementation; these are gated, because a
+// flat REQUEST_WORDS entry would flag legitimate move-in mail. Consumed by the
+// rental composite in scamDetector, never scored by themselves.
+export const KEYS_BY_POST_PHRASES = [
+  "keys will be sent by post", "keys will be posted to you",
+  "post the keys to you",
 ];
 
 const SCAM_DOMAINS = [

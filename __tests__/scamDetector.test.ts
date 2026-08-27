@@ -724,6 +724,62 @@ describe("threat-intel roadmap — SMS rules", () => {
     const result = checkSms("Benefit entitlement check required.", undefined, "GB");
     expect(result.verdict).not.toBe("likely_scam");
   });
+
+  const FAKE_LANDLORD =
+    "The landlord is abroad so we cannot do a viewing. Pay the holding deposit to secure the room; " +
+    "bank details below. Keys will be sent by post.";
+
+  it("detects the fake-landlord deposit script (D3 / #180)", () => {
+    const result = checkSms(FAKE_LANDLORD, undefined, "GB");
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("fires the fake-landlord phrases in every region (base signal) (D3 / #180)", () => {
+    for (const region of ["AU", "GB", "NZ", "IE", "US", "CA"]) {
+      const result = checkSms("The landlord is abroad, so transfer deposit to hold the room.", undefined, region);
+      expect(result.flags.some((f) => f.includes("sensitive info"))).toBe(true);
+    }
+  });
+
+  it("does not tip the verdict on an absent-landlord phrase alone (D3 / #180)", () => {
+    const result = checkSms("The landlord is abroad at the moment.", undefined, "GB");
+    expect(result.verdict).not.toBe("likely_scam");
+  });
+
+  // The medium-confidence "keys by post" phrases are gated on a deposit or bank
+  // ask rather than listed flat in REQUEST_WORDS — the issue left this decision
+  // to implementation. Ungated, this ordinary move-in message would score.
+  it("does not flag keys-by-post without a deposit ask (D3 / #180)", () => {
+    const result = checkSms(
+      "Your new keys will be posted to you once the lease agreement is signed.",
+      undefined,
+      "GB",
+    );
+    expect(result.verdict).toBe("safe");
+    expect(result.flags).toHaveLength(0);
+  });
+
+  it("flags keys-by-post when it accompanies a deposit ask (D3 / #180)", () => {
+    const result = checkSms(
+      "Send the deposit today and the keys will be posted to you.",
+      undefined,
+      "GB",
+    );
+    expect(result.flags.some((f) => f.includes("Keys promised by post"))).toBe(true);
+  });
+
+  // The issue asked to confirm the new phrases don't stack with the existing
+  // rental-bond composite into an unintentionally high score. They don't: real
+  // letting messages stay clean at zero.
+  it("leaves legitimate property-management messages clean (D3 / #180)", () => {
+    for (const text of [
+      "Your property manager has scheduled the annual inspection for Tuesday.",
+      "We have received your holding deposit and lodged it with the tenancy deposit scheme.",
+    ]) {
+      const result = checkSms(text, undefined, "GB");
+      expect(result.verdict).toBe("safe");
+    }
+  });
 });
 
 describe("threat-intel roadmap — phone rules (D15 / #49)", () => {
