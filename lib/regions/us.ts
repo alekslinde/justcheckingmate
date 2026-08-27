@@ -144,6 +144,21 @@ const AUTHORITY_MENTIONS = [
   // E-ZPass and the state toll authorities function as the toll-lure authority
   // exactly as Linkt does for AU.
   "e-zpass", "ezpass", "sunpass", "fastrak", "txtag",
+  // Fabricated IRS unit name (D4 / #181 / IRS Security Summit advisory Aug
+  // 2026). No "Tax Resolution Oversight Department" exists within the IRS —
+  // the advisory says so explicitly — so this is not an agency name that
+  // needs verifying but an invented one that only appears in the
+  // impersonation script. The campaign targets tax professionals with a
+  // claim that their preparer account has been flagged, but a member of the
+  // public may forward the message to check it.
+  //
+  // Only the full department name is listed. The roadmap also proposed the
+  // bare "tax resolution oversight", but that prefix is ordinary
+  // tax-industry English ("our tax resolution oversight process") and
+  // "tax resolution" is a term of art among the very professionals this
+  // campaign targets — matching it would flag their legitimate mail as
+  // government impersonation.
+  "tax resolution oversight department",
 ];
 
 // US bodies that have publicly confirmed they do not initiate contact by text.

@@ -646,6 +646,45 @@ describe("threat-intel roadmap — SMS rules", () => {
     const result = checkSms("This advisory explains how to recover your lost funds if you have been scammed.");
     expect(result.verdict).not.toBe("likely_scam");
   });
+
+  it("detects the fabricated IRS 'Tax Resolution Oversight Department' (D4 / #181)", () => {
+    const result = checkSms(
+      "Notice from the Tax Resolution Oversight Department: your preparer account has been flagged.",
+      undefined,
+      "US",
+    );
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(true);
+  });
+
+  // The roadmap proposed a bare "tax resolution oversight" entry alongside the
+  // full name. It was left out: the prefix is ordinary tax-industry English, and
+  // matching it would flag legitimate mail from the tax professionals this
+  // campaign targets. Only the fabricated department name is scored.
+  it("does not flag legitimate 'tax resolution oversight' prose (D4 / #181)", () => {
+    const result = checkSms(
+      "Our tax resolution oversight process ensures your return is reviewed.",
+      undefined,
+      "US",
+    );
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(false);
+  });
+
+  it("scopes the fabricated IRS unit name to the US pack (D4 / #181)", () => {
+    const result = checkSms(
+      "Notice from the Tax Resolution Oversight Department: your preparer account has been flagged.",
+      undefined,
+      "AU",
+    );
+    expect(result.flags.some((f) => f.includes("government agency"))).toBe(false);
+  });
+
+  // The unit name is fabricated, but on its own it only earns the standard +25
+  // authority-mention score. It takes a second signal — a link, a payment demand
+  // — to tip the verdict, so this asserts the flag rather than a scam verdict.
+  it("does not tip the verdict on the fabricated unit name alone (D4 / #181)", () => {
+    const result = checkSms("Tax Resolution Oversight Department", undefined, "US");
+    expect(result.verdict).not.toBe("likely_scam");
+  });
 });
 
 describe("threat-intel roadmap — phone rules (D15 / #49)", () => {
