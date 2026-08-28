@@ -233,6 +233,20 @@ describe("Privacy invariant — a submitted URL is never visited", () => {
     expect(hostsIn(contacted)).not.toContain("commbank-secure-login.tk");
   });
 
+  it("does not contact a host extracted without a scheme", async () => {
+    // Schemeless hosts are a second source of parseable URLs from text that was
+    // previously inert. Same rule as refanging: analysable, never reachable.
+    const cards = await analyzeContent(
+      "Your parcel is held. Pay at commbank-secure-login.tk/fee",
+      undefined,
+      undefined,
+      { fetcher: fetch as never },
+    );
+
+    expect(cards.some((c) => c.kind === "url"), "bare host produced no url card").toBe(true);
+    expect(hostsIn(contacted)).not.toContain("commbank-secure-login.tk");
+  });
+
   it("still produces a verdict for every hostile input, with nothing contacted", async () => {
     // A trivially safe way to satisfy this invariant would be to stop analysing.
     // Assert the engine still does its job.
