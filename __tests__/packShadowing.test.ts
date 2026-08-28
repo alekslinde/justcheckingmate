@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveRegionPack, supportedRegions } from "@/lib/regions";
+import { checkSms } from "@/lib/scamDetector";
 
 // Guards the substring-collision failure mode above the WORD_MATCH_MAX_LEN
 // threshold (#196).
@@ -170,5 +171,56 @@ describe("region pack substring shadowing", () => {
     }
     const stale = [...KNOWN_SHADOWING].filter((p) => !found.has(p)).sort();
     expect(stale, "Allowlist entries with no matching pair — remove them.").toEqual([]);
+  });
+});
+
+// ── Short scored entries must match on word boundaries ────────────────────────
+//
+// urgencyWords, rewardWords and requestWords were matched with a bare
+// `includes()`, so short entries fired inside ordinary English: "pin" in
+// "Pinned", "free" in "Freedom", "ato" in "atomic". Each added 12–15 points to
+// innocuous text, and the flag then quoted the fragment as evidence — "Asks for
+// sensitive info: 'pin'" on a message about a pinned document.
+//
+// scamDetector's `mentions()` already solved this for the authority lists (see
+// the note above WORD_MATCH_MAX_LEN); these lists simply never adopted it. The
+// threshold is 4 rather than 3 so "free" and "cash" are covered — every 4-char
+// entry across the packs is a standalone word or identifier ($500, 401k, nino,
+// ppsn, prsa, tfn), none of which needs to match inside a longer word.
+
+describe("short scored entries do not fire inside longer words", () => {
+  const INNOCUOUS = [
+    ["Pinned the document to the top of the channel.", "pin"],
+    ["Freedom of information request received.", "free"],
+    ["The atomic clock experiment is precise.", "ato"],
+    ["Shipping is included on every order.", "pin"],
+    ["Please review the attached information.", "ato"],
+  ] as const;
+
+  for (const [text, fragment] of INNOCUOUS) {
+    it(`does not flag "${fragment}" inside: ${text.slice(0, 34)}…`, () => {
+      const result = checkSms(text, undefined, "AU");
+      expect(result.flags.some((f) => f.includes(`"${fragment}"`)), result.flags.join(" | ")).toBe(false);
+      expect(result.verdict).toBe("safe");
+    });
+  }
+
+  it("still matches those same entries as whole words", () => {
+    // The entries exist for a reason — this is the behaviour being preserved.
+    const scam = "ATO: confirm your TFN and PIN to release your refund";
+    const result = checkSms(scam, undefined, "AU");
+    expect(result.flags.some((f) => /Asks for sensitive info/i.test(f))).toBe(true);
+    expect(result.score).toBeGreaterThan(0);
+  });
+
+  it("keeps scoring a real scam at full strength", () => {
+    const scam = "ATO: your tax refund is pending, confirm your TFN at http://ato-refund.xyz";
+    expect(checkSms(scam, undefined, "AU").verdict).toBe("likely_scam");
+  });
+
+  it("still catches a free-prize lure", () => {
+    const scam = "You have won a free prize! Claim now at http://prize.tk";
+    const result = checkSms(scam, undefined, "AU");
+    expect(result.flags.some((f) => /Prize\/reward language/i.test(f))).toBe(true);
   });
 });
