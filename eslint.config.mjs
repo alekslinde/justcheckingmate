@@ -27,7 +27,10 @@ const eslintConfig = defineConfig([
   // inside already-loaded production code, so a leak through node:dns or
   // node:net would pass every test in that file. The route contract in
   // app/api/check/route.ts explicitly names "an outbound HTTP request, DNS
-  // lookup, or socket connection" — this rule closes the two the test cannot.
+  // lookup, or socket connection" — these rules close the two the test cannot,
+  // for first-party code. They are static analysis, not a sandbox: a name
+  // assembled at runtime still slips through, as does a dependency doing it
+  // for us. The point is to make a leak cost a deliberate, visible act.
   //
   // Scoped to the code that handles submitted content. Scripts and workers are
   // deliberately excluded: they do legitimate network work and never analyse a
@@ -38,7 +41,7 @@ const eslintConfig = defineConfig([
   // decision about the privacy contract and should be argued in review, not
   // silenced with an inline disable.
   {
-    files: ["lib/**/*.ts", "app/**/*.ts", "app/**/*.tsx", "components/**/*.tsx"],
+    files: ["lib/**/*.{ts,tsx}", "app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -58,6 +61,29 @@ const eslintConfig = defineConfig([
               "Outbound calls go through the injected transport (see lib/urlExpander.ts) or an explicit " +
               "fetch to a fixed endpoint we chose. See __tests__/privacyInvariant.test.ts.",
           })),
+        },
+      ],
+      // no-restricted-imports only sees static import statements. A dynamic
+      // `await import("node:dns")` or a `require("node:net")` slips straight
+      // past it — and that is exactly the shape the behavioural test cannot see
+      // either, because module mocking does not reach a dynamic import inside
+      // already-loaded code. Without this selector the channel is enforced by
+      // neither half.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'ImportExpression > Literal[value=/^(node:)?(dns|net|tls|http|https|http2|dgram)(\\/.*)?$/]',
+          message:
+            "Dynamic import of a Node network module would break the never-visit-a-submitted-URL invariant. " +
+            "See __tests__/privacyInvariant.test.ts and eslint.config.mjs.",
+        },
+        {
+          selector:
+            'CallExpression[callee.name="require"] > Literal[value=/^(node:)?(dns|net|tls|http|https|http2|dgram)(\\/.*)?$/]',
+          message:
+            "require() of a Node network module would break the never-visit-a-submitted-URL invariant. " +
+            "See __tests__/privacyInvariant.test.ts and eslint.config.mjs.",
         },
       ],
     },

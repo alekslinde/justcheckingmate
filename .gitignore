@@ -45,6 +45,12 @@
 # dev/audit scripts that aren't part of the app
 audit.mjs
 
+# Throwaway probe files written by __tests__/engineNetworkImports.test.ts when
+# it lints a real repo path against the real config. Removed in a finally, but
+# an interrupted run must not leave a committable rule-violating file behind.
+__privacy_probe__.ts
+__privacy_probe__.tsx
+
 # debug
 npm-debug.log*
 yarn-debug.log*

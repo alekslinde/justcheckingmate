@@ -74,14 +74,19 @@ const HOSTILE_INPUTS = [
  * dynamic import inside already-loaded production code, so a leak via node:dns,
  * node:net or node:https would pass every test in this file.
  *
- * That half is covered by lint instead: eslint.config.mjs bans those imports
- * from lib/, app/ and components/, and __tests__/engineNetworkImports.test.ts
- * asserts the rule actually fires. Between the two, all three channels the
- * route contract names — HTTP request, DNS lookup, socket connection — are
- * enforced rather than merely documented.
+ * That half is covered by lint instead: eslint.config.mjs bans those modules
+ * from lib/, app/ and components/ — as static imports, dynamic import() and
+ * require() — and __tests__/engineNetworkImports.test.ts asserts the rules fire
+ * and that the config's globs reach every detector file.
  *
- * Still not covered: a transitive leak through a third-party dependency, which
- * neither mechanism sees. Stated plainly rather than papered over.
+ * Between the two, the three channels the route contract names are covered for
+ * FIRST-PARTY code. Two gaps remain, stated plainly rather than papered over:
+ *
+ *   · A transitive leak through a third-party dependency. Neither mechanism
+ *     sees it; catching it needs a network sandbox in CI.
+ *   · Indirection that defeats static analysis — a module name assembled at
+ *     runtime, or an eslint-disable comment. Lint raises the cost of a leak
+ *     and makes it visible in review; it is not a sandbox.
  */
 function interceptNetwork() {
   const contacted: string[] = [];
