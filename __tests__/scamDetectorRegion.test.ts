@@ -104,3 +104,71 @@ describe("the no-link-sender rule is SMS-only", () => {
     expect(result.flags.length).toBeGreaterThan(2);
   });
 });
+
+// ── Mail from an organisation's own domain isn't impersonation ────────────────
+//
+// The authority-mention signal exists to catch a message that NAMES an agency
+// while arriving from somewhere else. When the sender IS that organisation the
+// premise fails, and the advice it gives ("verify directly via official
+// channels") is wrong for mail that came through the official channel.
+//
+// A genuine Australia Post delivery notification scored 38/suspicious on this.
+//
+// The suppression is deliberately narrow: email only (an SMS sender is trivially
+// spoofed and unverifiable), exact-or-subdomain matching, and consulting only
+// the region's own researched allowlists.
+
+describe("authority mentions from the organisation's own domain", () => {
+  const auspostEmail = (from: string) =>
+    [`From: ${from}`, "Subject: Your parcel is on its way", "", "Track your delivery at https://auspost.com.au/track"].join("\n");
+
+  it("does not call a genuine Australia Post email impersonation", () => {
+    const result = checkEmail(auspostEmail("noreply@auspost.com.au"), undefined, "AU");
+    expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(false);
+    expect(result.verdict).toBe("safe");
+  });
+
+  it("accepts a subdomain of an allowlisted sender", () => {
+    const result = checkEmail(auspostEmail("noreply@track.auspost.com.au"), undefined, "AU");
+    expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(false);
+  });
+
+  it("is not fooled by a lookalike that merely starts with the domain", () => {
+    // The false-negative that would matter: auspost.com.au.evil.tk must not
+    // inherit Australia Post's standing.
+    const result = checkEmail(auspostEmail("noreply@auspost.com.au.evil.tk"), undefined, "AU");
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  it("is not fooled by a domain that merely contains the name", () => {
+    const result = checkEmail(auspostEmail("noreply@notauspost.com.au"), undefined, "AU");
+    expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(true);
+  });
+
+  it("still flags a scam that names the agency from an unrelated domain", () => {
+    // The rule's actual job — this is the common shape and must keep working.
+    const scam = [
+      "From: service@parcel-redelivery.tk",
+      "Subject: Australia Post: parcel held",
+      "",
+      "Australia Post: pay the redelivery fee at http://auspost-redelivery.tk/fee",
+    ].join("\n");
+    const result = checkEmail(scam, undefined, "AU");
+    expect(result.verdict).toBe("likely_scam");
+    expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(true);
+  });
+
+  it("recognises a government sender through the national suffix", () => {
+    // .gov.au is already in trustedHostSuffixes, so no allowlist entry needed.
+    const gov = ["From: noreply@ato.gov.au", "Subject: Your tax return", "", "Log in at https://ato.gov.au/mytax"].join("\n");
+    const result = checkEmail(gov, undefined, "AU");
+    expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(false);
+  });
+
+  it("does not extend the suppression to SMS, where the sender is unverifiable", () => {
+    // A text claiming to be Australia Post proves nothing about its origin.
+    const sms = "Australia Post: your parcel is held, pay at http://auspost-redelivery.tk/fee";
+    const result = checkSms(sms, undefined, "AU");
+    expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(true);
+  });
+});

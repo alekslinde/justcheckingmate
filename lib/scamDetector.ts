@@ -378,9 +378,59 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
  * requests read the same in either — but a few are specifically about SMS, and
  * firing those on an email produces a confident, wrongly-worded verdict.
  */
+/**
+ * Whether an email genuinely came from the organisation it talks about.
+ *
+ * The impersonation signals exist to catch a message that NAMES an agency while
+ * arriving from somewhere else. When the sender is the agency's own domain the
+ * premise fails, and the advice ("verify directly via official channels") is
+ * wrong for mail that arrived through the official channel.
+ *
+ * Deliberately strict, because a false positive here means a real scam scores
+ * lower:
+ *   · email only — an SMS has no verifiable sender, and the "From" of a text is
+ *     trivially spoofed, so the same reasoning does not transfer
+ *   · the domain must equal an allowlisted domain or be a subdomain of one.
+ *     `auspost.com.au` and `track.auspost.com.au` qualify;
+ *     `auspost.com.au.evil.tk` and `notauspost.com.au` do not
+ *   · it consults the region's own allowlists only, so an unrecognised domain
+ *     is treated as untrusted rather than assumed fine
+ *
+ * NOT a claim that the sender is authentic — nothing here verifies SPF or DKIM.
+ * A spoofed From would pass this check, which is why it only ever suppresses a
+ * signal that would otherwise misfire, and never lowers a score by itself.
+ * Header-based spoofing is caught separately by analyseEmailIdentities.
+ */
+function isOwnDomainSender(
+  channel: "sms" | "email",
+  senderDomain: string | undefined,
+  pack: { authorityOwnDomains: string[]; trustedHostSuffixes: string[] },
+): boolean {
+  if (channel !== "email" || !senderDomain) return false;
+  const host = senderDomain.toLowerCase();
+
+  const onAllowlist = pack.authorityOwnDomains.some((d) => {
+    const domain = d.toLowerCase();
+    return host === domain || host.endsWith("." + domain);
+  });
+  const onNationalSuffix = pack.trustedHostSuffixes.some((suffix) =>
+    host.endsWith(suffix.toLowerCase()),
+  );
+
+  return onAllowlist || onNationalSuffix;
+}
+
 export interface MessageCheckOptions {
   /** Where the text came from. Defaults to "sms", preserving prior behaviour. */
   channel?: "sms" | "email";
+  /**
+   * The From domain, when the caller has parsed headers (checkEmail does).
+   *
+   * Used only to suppress impersonation signals when the sender IS the
+   * organisation the body mentions — a real Australia Post email naming
+   * Australia Post is not impersonation. Never used to lower a score on its own.
+   */
+  senderDomain?: string;
 }
 
 export function checkSms(
@@ -597,8 +647,15 @@ export function checkSms(
     score += 30;
   }
 
-  // Sender mentions a gov agency but is a random number
-  if (mentionsAny(lower, PACK.authorityMentions)) {
+  // Sender mentions a gov agency but is a random number.
+  //
+  // Skipped when the message genuinely came FROM that organisation's own
+  // domain. The flag says "verify directly via official channels", which is
+  // wrong advice for mail that already arrived through the official channel —
+  // and it was scoring a real Australia Post delivery notification as
+  // suspicious. The domain is matched exactly or as a subdomain, so a lookalike
+  // like `auspost.com.au.evil.tk` does not qualify (see isOwnDomainSender).
+  if (mentionsAny(lower, PACK.authorityMentions) && !isOwnDomainSender(channel, options?.senderDomain, PACK)) {
     flags.push("Claims to be from a government agency — verify directly via official channels");
     score += 25;
 
@@ -742,7 +799,13 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   // it every email check ran the default (AU) signal set regardless of the
   // caller's region, so a UK email was scored against Australian agencies and
   // brands while the URL and SMS checkers correctly used the UK pack.
-  const smsCheck = checkSms(text, blocklist, region, { channel: "email" });
+  // Parsed up front so the shared body analysis can tell "names an agency" from
+  // "actually came from that agency" — see isOwnDomainSender.
+  const senderHeaders = parseEmailHeaders(text);
+  const smsCheck = checkSms(text, blocklist, region, {
+    channel: "email",
+    senderDomain: senderHeaders.fromAddress ? domainOf(senderHeaders.fromAddress) : undefined,
+  });
   flags.push(...smsCheck.flags);
   score += Math.floor(smsCheck.score * 0.7); // Email gets a bit more lenience
 
