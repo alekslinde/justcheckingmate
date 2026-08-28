@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkAndRecordRateLimit } from "@/lib/reportStore";
 import { sanitizeBugReport, storeBugReport } from "@/lib/bugStore";
-
-function getClientIp(req: NextRequest): string {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) {
-    const ip = fwd.split(",")[0].trim();
-    if (/^[\d.]+$/.test(ip) || /^[a-f0-9:]+$/i.test(ip)) return ip;
-  }
-  return "unknown";
-}
+import { clientIpFromHeaders } from "@/lib/geo";
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -27,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   // Share the report rate limiter, namespaced so bug reports and scam reports
   // don't starve each other.
-  if (!checkAndRecordRateLimit(`bug:${getClientIp(req)}`)) {
+  if (!checkAndRecordRateLimit(`bug:${clientIpFromHeaders(req.headers)}`)) {
     return NextResponse.json({ success: false, error: "rate_limited" }, { status: 429 });
   }
 

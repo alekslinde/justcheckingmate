@@ -2,27 +2,16 @@ import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/email
 import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanitizer";
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
-import { isShortened, expandUrl } from "@/lib/urlExpander";
+import { isShortened, expandUrl, type ExpandFetch } from "@/lib/urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
 import { KEYS_BY_POST_PHRASES } from "@/lib/regions/base";
+import type { CheckResult } from "@/lib/engineTypes";
 
-export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
+// ScamType and CheckResult live in engineTypes.ts to break the import cycle
+// with detectType (see the note there). Re-exported here so every existing
+// consumer keeps importing them from the scorer.
+export type { ScamType, CheckResult } from "@/lib/engineTypes";
 export type { PhoneIntel };
-
-export interface CheckResult {
-  verdict: "safe" | "suspicious" | "likely_scam" | "unknown";
-  score: number; // 0-100, higher = more scammy
-  flags: string[];
-  details: string;
-  category?: string;
-  phoneIntel?: PhoneIntel;
-  expandedUrl?: string; // defanged real destination when the input was a shortened URL
-  // Detection coverage of the region pack that produced this result. Present on
-  // every result; consumers must not render a confident "safe" when this is
-  // "partial" or "none" — a low score there can mean "no rules matched" rather
-  // than "nothing wrong". See downgradeForCoverage.
-  coverage?: RegionCoverage;
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Signal lists
@@ -1107,11 +1096,18 @@ const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
 // Expands a shortened URL and merges the destination analysis into the base result.
 // If expansion fails or times out, the base result is returned unchanged.
-async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput): Promise<CheckResult> {
+async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput, fetcher?: ExpandFetch): Promise<CheckResult> {
   if (!isShortened(url)) return base;
 
-  const { expandedUrl, hops } = await expandUrl(url);
-  if (!expandedUrl) return base;
+  const { expandedUrl, hops } = await expandUrl(url, fetcher);
+  if (!expandedUrl) {
+    // Say so whenever the destination was not resolved, rather than returning a
+    // verdict that reads as if it had been assessed. This covers both causes:
+    // no transport ("unavailable") and a timeout, missing Location or
+    // exhausted hop budget ("failed"). The shortener is all we ever saw, and a
+    // silent base result would present that as a complete answer.
+    return { ...base, flags: [...base.flags, "Shortened URL — destination could not be checked"] };
+  }
 
   const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
   const destDefanged = defang(expandedUrl);
@@ -1127,7 +1123,19 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
   return { ...merged, score: mergedScore, flags: mergedFlags, expandedUrl: destDefanged, category: "URL" };
 }
 
-export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput): Promise<AnalyzedIdentifier[]> {
+/**
+ * Options for a run of the engine.
+ *
+ * `fetcher` is the network transport used to unshorten links. Omitting it means
+ * the engine makes no network calls of any kind, and shortened URLs are
+ * reported as unexpanded rather than silently assessed on the shortener alone.
+ * Server callers pass fetch; see the transport contract in lib/urlExpander.ts.
+ */
+export interface AnalyzeOptions {
+  fetcher?: ExpandFetch;
+}
+
+export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput, options?: AnalyzeOptions): Promise<AnalyzedIdentifier[]> {
   const text = content.trim();
   if (!text) return [];
 
@@ -1154,7 +1162,7 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
     if (urls.length === 0) {
       const normalised = normaliseForAnalysis(text);
       const base = checkUrl(normalised, blocklist, region);
-      const result = await applyExpansion(normalised, base, blocklist, region);
+      const result = await applyExpansion(normalised, base, blocklist, region, options?.fetcher);
       out.push({ kind: "url", value: text, result });
     }
   } else {
@@ -1166,7 +1174,7 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
   for (const u of urls) {
     const normalised = normaliseForAnalysis(u);
     const base = checkUrl(normalised, blocklist, region);
-    const result = await applyExpansion(normalised, base, blocklist, region);
+    const result = await applyExpansion(normalised, base, blocklist, region, options?.fetcher);
     out.push({ kind: "url", value: u, result });
   }
 

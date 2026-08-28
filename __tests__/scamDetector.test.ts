@@ -14,7 +14,7 @@ import { expandUrl } from "@/lib/urlExpander";
 // existing tests are unaffected by network I/O.
 vi.mock("@/lib/urlExpander", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/urlExpander")>();
-  return { ...actual, expandUrl: vi.fn().mockResolvedValue({ expandedUrl: null, hops: [] }) };
+  return { ...actual, expandUrl: vi.fn().mockResolvedValue({ expandedUrl: null, hops: [], status: "failed" }) };
 });
 
 // ── checkUrl ──────────────────────────────────────────────────────────────────
@@ -473,6 +473,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "https://commbank-phishing.tk/steal",
       hops: ["https://commbank-phishing.tk/steal"],
+      status: "expanded",
     });
 
     const cards = await analyzeContent("https://bit.ly/scam-exp");
@@ -485,6 +486,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "http://1.2.3.4/phish",
       hops: ["http://1.2.3.4/phish"],
+      status: "expanded",
     });
 
     const cards = await analyzeContent("https://bit.ly/scam-score");
@@ -497,6 +499,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "https://example.com/landing",
       hops: ["https://example.com/landing"],
+      status: "expanded",
     });
 
     // bit.ly alone scores 40; example.com scores ~0; merged must stay ≥ 40
@@ -509,6 +512,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "https://evil-final.tk/phish",
       hops: ["https://tinyurl.com/hop2", "https://evil-final.tk/phish"],
+      status: "expanded",
     });
 
     const cards = await analyzeContent("https://bit.ly/multi-hop");
@@ -520,6 +524,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "https://evil.tk/phish",
       hops: ["https://evil.tk/phish"],
+      status: "expanded",
     });
 
     const cards = await analyzeContent("https://bit.ly/single-hop");
@@ -528,7 +533,7 @@ describe("analyzeContent — shortened URL expansion", () => {
   });
 
   it("falls back gracefully to the shortener result when expansion returns null", async () => {
-    vi.mocked(expandUrl).mockResolvedValueOnce({ expandedUrl: null, hops: [] });
+    vi.mocked(expandUrl).mockResolvedValueOnce({ expandedUrl: null, hops: [], status: "failed" });
 
     const cards = await analyzeContent("https://bit.ly/unexpandable");
     const urlCard = cards.find((c) => c.kind === "url");
@@ -540,6 +545,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "https://phishing-site.tk/steal",
       hops: ["https://phishing-site.tk/steal"],
+      status: "expanded",
     });
 
     const cards = await analyzeContent("https://bit.ly/defang-check");
@@ -553,6 +559,7 @@ describe("analyzeContent — shortened URL expansion", () => {
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: "https://commbank-phishing.tk/login",
       hops: ["https://commbank-phishing.tk/login"],
+      status: "expanded",
     });
 
     const cards = await analyzeContent(
@@ -1694,5 +1701,54 @@ describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
     ]) {
       expect(checkSms(msg).verdict).toBe("likely_scam");
     }
+  });
+});
+
+// ── analyzeContent — expansion without a network transport ────────────────────
+
+describe("analyzeContent — shortened URLs when expansion is unavailable", () => {
+  it("says the destination could not be checked rather than staying silent", async () => {
+    // A bundled client with no transport must not present a shortener-only
+    // verdict as though the destination had been assessed.
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: null,
+      hops: [],
+      status: "unavailable",
+    });
+
+    const cards = await analyzeContent("https://bit.ly/no-transport-card");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.flags.some((f) => f.includes("could not be checked"))).toBe(true);
+  });
+
+  it("also says so when expansion was attempted and failed", async () => {
+    // A timeout, a missing Location header or an exhausted hop budget all mean
+    // the same thing to the user: the destination was never seen. Returning the
+    // base result silently would present a shortener-only verdict as complete.
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: null,
+      hops: [],
+      status: "failed",
+    });
+
+    const cards = await analyzeContent("https://bit.ly/failed-expansion-card");
+    const urlCard = cards.find((c) => c.kind === "url");
+    expect(urlCard?.result.flags.some((f) => f.includes("could not be checked"))).toBe(true);
+  });
+
+  it("does not claim a destination was checked when none was resolved", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: null,
+      hops: ["https://tinyurl.com/cut-short"],
+      status: "failed",
+    });
+
+    const cards = await analyzeContent("https://bit.ly/no-destination-claim");
+    const urlCard = cards.find((c) => c.kind === "url");
+    // The base "URL shortener detected — hides the real destination" warning
+    // still fires and should; what must NOT appear is the expansion flag
+    // naming a destination we never resolved.
+    expect(urlCard?.result.flags.some((f) => f.includes("Shortened URL expanded"))).toBe(false);
+    expect(urlCard?.result.expandedUrl).toBeUndefined();
   });
 });

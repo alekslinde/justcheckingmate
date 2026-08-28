@@ -5,11 +5,16 @@ import type { NextConfig } from "next";
 // a bug or future code change tried to fetch a suspicious URL, the browser
 // would block it before a single byte left the machine.
 //
-// connect-src 'self'  → fetch()/XHR can only call our own API routes
+// connect-src 'self'  → fetch()/XHR can only call our own API routes. This
+//                        also covers the OCR WASM core and language data, which
+//                        are served from our origin (public/tesseract/,
+//                        public/tessdata/) rather than tesseract's default CDN
+//                        — the CDN fetch would be blocked, by design.
 // img-src 'self' data: blob: → canvas preview, no external pixel trackers
 // frame-ancestors 'none' → can't be embedded in an iframe (clickjacking)
 // form-action 'self'  → form POSTs can only go to our own origin
 // worker-src blob:    → tesseract.js spawns Web Workers from blob: URLs
+//                        (client-side OCR, lib/clientOcr.ts)
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js requires these

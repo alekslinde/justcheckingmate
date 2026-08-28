@@ -71,7 +71,9 @@ export async function POST(req: NextRequest) {
     // forwarder's. Guessing from them would be worse than the default. If
     // per-region email checking is wanted later, derive it from the
     // forwarding address, not the connection.
-    const results = await analyzeContent(original, blocklist);
+    // Server-side expansion, as in /api/check — the forwarder's IP is never
+    // exposed to a shortener.
+    const results = await analyzeContent(original, blocklist, undefined, { fetcher: fetch });
 
     const pixelReport = tracking.pixelReport.hasTrackingPixels ? tracking.pixelReport : null;
 

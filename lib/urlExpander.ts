@@ -5,6 +5,20 @@
 // The final destination URL is never fetched — only analysed as a string.
 // This is the single documented exception to the no-outbound-fetch contract in
 // app/api/check/route.ts. Scammer infrastructure is never reached.
+//
+// TRANSPORT CONTRACT: this module never reaches for a global fetch. The caller
+// supplies one, and supplying nothing means no network access — expansion
+// reports itself unavailable rather than silently skipping.
+//
+// The reason is privacy, and it only becomes visible once the engine runs
+// somewhere other than the server. Today the request originates from our
+// infrastructure, so the shortener sees us. Bundled into a browser extension
+// the identical code would originate from the user's browser, so the shortener
+// would see the home IP of someone who found a link suspicious enough to check
+// — an exposure the current architecture prevents by accident of where it runs.
+// Making the transport an argument forces each client to make that call
+// deliberately: the web app passes fetch, and a bundled client either routes
+// expansion through our API or goes without it.
 
 const EXPAND_TIMEOUT_MS = 3_000;
 const MAX_HOPS = 3;
@@ -17,9 +31,28 @@ export const SHORTENER_HOSTS = new Set([
   "snip.ly", "bl.ink", "soo.gd", "clck.ru", "x.co",
 ]);
 
+/** Injected network transport. Structurally a subset of the fetch signature. */
+export type ExpandFetch = (
+  url: string,
+  init: { method: string; redirect: "manual"; signal: AbortSignal; headers: Record<string, string> },
+) => Promise<{ headers: { get(name: string): string | null } }>;
+
 export interface ExpandResult {
   expandedUrl: string | null;
   hops: string[];
+  /**
+   * Why expandedUrl is null, so a caller can tell "we looked and there was
+   * nothing" from "we were unable to look".
+   *
+   *  · "expanded"    — resolved; expandedUrl is set
+   *  · "unavailable" — no transport supplied; we never tried
+   *  · "failed"      — tried and got nothing (timeout, no Location, error)
+   *
+   * The distinction matters for user-facing copy: a client with no transport
+   * should say "this is a shortened link we could not unshorten" rather than
+   * dropping the signal, which is what the previous silent null did.
+   */
+  status: "expanded" | "unavailable" | "failed";
 }
 
 const cache = new Map<string, { result: ExpandResult; expiresAt: number }>();
@@ -33,21 +66,29 @@ export function isShortened(url: string): boolean {
   }
 }
 
-export async function expandUrl(shortUrl: string): Promise<ExpandResult> {
+export async function expandUrl(shortUrl: string, fetcher?: ExpandFetch): Promise<ExpandResult> {
+  // No transport — report unavailability instead of pretending we looked.
+  // Not cached: a client that gains a transport later must not be served this.
+  if (!fetcher) return { expandedUrl: null, hops: [], status: "unavailable" };
+
   const cacheKey = shortUrl.toLowerCase();
   const hit = cache.get(cacheKey);
   if (hit && Date.now() < hit.expiresAt) return hit.result;
 
-  const result = await followRedirects(shortUrl, MAX_HOPS);
+  const result = await followRedirects(shortUrl, MAX_HOPS, fetcher);
   cache.set(cacheKey, { result, expiresAt: Date.now() + CACHE_TTL_MS });
   return result;
 }
 
-async function followRedirects(url: string, remainingHops: number): Promise<ExpandResult> {
-  if (remainingHops === 0) return { expandedUrl: null, hops: [] };
+async function followRedirects(
+  url: string,
+  remainingHops: number,
+  fetcher: ExpandFetch,
+): Promise<ExpandResult> {
+  if (remainingHops === 0) return { expandedUrl: null, hops: [], status: "failed" };
 
   try {
-    const res = await fetch(url, {
+    const res = await fetcher(url, {
       method: "HEAD",
       redirect: "manual",
       signal: AbortSignal.timeout(EXPAND_TIMEOUT_MS),
@@ -55,22 +96,35 @@ async function followRedirects(url: string, remainingHops: number): Promise<Expa
     });
 
     const location = res.headers.get("location");
-    if (!location) return { expandedUrl: null, hops: [] };
+    if (!location) return { expandedUrl: null, hops: [], status: "failed" };
 
     const dest = new URL(location, url).toString();
 
     // Recursively follow if the destination is also a known shortener,
     // but only while hops remain — prevents infinite chains.
-    if (isShortened(dest) && remainingHops > 1) {
-      const inner = await followRedirects(dest, remainingHops - 1);
+    if (isShortened(dest)) {
+      // Out of hops, or the inner hop did not resolve: we reached a shortener
+      // and stopped there. Report the failure rather than presenting that
+      // shortener as the real destination — a caller that scored it would find
+      // bit.ly reputable and tell the user a malicious chain looked clean.
+      // `hops` still records how far we actually got, for the multi-hop signal.
+      if (remainingHops <= 1) {
+        return { expandedUrl: null, hops: [dest], status: "failed" };
+      }
+
+      const inner = await followRedirects(dest, remainingHops - 1, fetcher);
+      if (!inner.expandedUrl) {
+        return { expandedUrl: null, hops: [dest, ...inner.hops], status: inner.status };
+      }
       return {
-        expandedUrl: inner.expandedUrl ?? dest,
+        expandedUrl: inner.expandedUrl,
         hops: [dest, ...inner.hops],
+        status: "expanded",
       };
     }
 
-    return { expandedUrl: dest, hops: [dest] };
+    return { expandedUrl: dest, hops: [dest], status: "expanded" };
   } catch {
-    return { expandedUrl: null, hops: [] };
+    return { expandedUrl: null, hops: [], status: "failed" };
   }
 }

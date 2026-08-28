@@ -5,22 +5,12 @@ import { stripTrackingParams } from "@/lib/urlSanitizer";
 import { summariseAuth } from "@/lib/emailHeaders";
 import { scrubPii } from "@/lib/piiScrubber";
 import { distillEmailContent } from "@/lib/emailDistiller";
-import { locationFromHeaders } from "@/lib/geo";
+import { clientIpFromHeaders, locationFromHeaders } from "@/lib/geo";
 import { resolveRegion } from "@/lib/regionResolver";
 
 // The client IP is used ONLY for transient, in-memory rate limiting inside
 // guardSubmission. It is never written to the database — the only geographic
 // trace a report carries is the coarse region string from locationFromHeaders.
-function getClientIp(req: NextRequest): string {
-  // x-forwarded-for can contain a comma-separated list; take the first entry.
-  // Treat obviously spoofed values as "unknown".
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) {
-    const ip = fwd.split(",")[0].trim();
-    if (/^[\d.]+$/.test(ip) || /^[a-f0-9:]+$/i.test(ip)) return ip;
-  }
-  return "unknown";
-}
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -70,7 +60,7 @@ export async function POST(req: NextRequest) {
     description: String(body.description ?? "").slice(0, 1000),
     hp: String(body.hp ?? ""),
     loadedAt: Number(body.loadedAt ?? 0),
-    ip: getClientIp(req),
+    ip: clientIpFromHeaders(req.headers),
     userAgent: req.headers.get("user-agent") ?? "",
     contentLength: rawContent.length,
   });

@@ -10,6 +10,9 @@ import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
+// Capability probe only — the OCR engine itself is imported dynamically so the
+// WASM core is never downloaded by someone who does not upload an image.
+import { canRunClientOcr } from "@/lib/clientOcr";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
@@ -167,22 +170,41 @@ export default function CheckFlow() {
 
       if (qrData) { setContent(qrData); return; }
 
-      const formData = new FormData();
-      formData.append("image", file);
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60_000);
-      let res: Response;
-      try {
-        res = await fetch("/api/ocr", { method: "POST", body: formData, signal: controller.signal });
-      } finally {
-        clearTimeout(timer);
+      // OCR on-device first: the image never leaves the machine, and it costs
+      // us nothing. /api/ocr is the fallback for browsers that can't run the
+      // WASM core, or when the local attempt fails outright.
+      let cleaned: string | null = null;
+      if (canRunClientOcr()) {
+        try {
+          const { recogniseImageText } = await import("@/lib/clientOcr");
+          cleaned = await recogniseImageText(file);
+        } catch (err) {
+          // Local OCR unavailable or broken for this image — fall through to
+          // the server rather than failing the upload.
+          console.warn("[Upload] client OCR failed, falling back to server:", err);
+          reportFailure("upload", err);
+        }
       }
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(errData.error ?? "OCR request failed");
+
+      if (cleaned === null) {
+        const formData = new FormData();
+        formData.append("image", file);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60_000);
+        let res: Response;
+        try {
+          res = await fetch("/api/ocr", { method: "POST", body: formData, signal: controller.signal });
+        } finally {
+          clearTimeout(timer);
+        }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(errData.error ?? "OCR request failed");
+        }
+        const data = await res.json() as { text?: string };
+        cleaned = (data.text ?? "").trim();
       }
-      const data = await res.json() as { text?: string };
-      const cleaned = (data.text ?? "").trim();
+
       if (cleaned) setContent(cleaned);
       else setUploadError(t("check.ocr.noText"));
     } catch (err) {

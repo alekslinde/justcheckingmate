@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-ocr-assets.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-ocr-assets.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -13,7 +15,8 @@
     "region-demand": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/region-demand.ts",
     "check-calendar": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/check-calendar-sources.ts",
     "check-promotion": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/check-promotion-freshness.ts",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "ocr-assets": "node scripts/copy-ocr-assets.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
