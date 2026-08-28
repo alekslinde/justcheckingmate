@@ -13,6 +13,7 @@ import type { RegionCoverage } from "@/lib/regions";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 import { TrackingFinding } from "@/lib/emailTracking";
 import { defang, defangEmail, defangPhone, defangText } from "@/lib/urlSanitizer";
+import { buildReportQuery, ReportPrefill } from "@/lib/reportPrefill";
 
 export type Verdict = CheckResult["verdict"];
 
@@ -147,6 +148,15 @@ export interface VerdictEmailInput {
   // receipts, …). Optional so existing callers/tests keep working; when given,
   // it supersedes the single pixel line in the "Why" section.
   trackingFindings?: TrackingFinding[];
+  // Canonical site origin. When given, the reply ends with a call to action
+  // linking to a prefilled report form so the forwarder can lodge the scam in
+  // the public database in one tap. Omitted → no CTA (the reply is still
+  // complete without it), which keeps existing callers and tests working.
+  siteUrl?: string;
+  // The original scammer's From / Reply-To, already unwrapped from the forward.
+  // Used only to prefill the report link — never to address anything.
+  senderAddress?: string;
+  replyToAddress?: string;
 }
 
 export interface VerdictEmail {
@@ -184,7 +194,7 @@ function escapeHtml(s: string): string {
 // Build the verdict reply. When there are no scored identifiers but sender flags
 // exist (header-only forward), the headline is driven by the flags' presence.
 export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
-  const { results, emailFlags, pixelReport, trackingFindings = [] } = input;
+  const { results, emailFlags, pixelReport, trackingFindings = [], siteUrl, senderAddress, replyToAddress } = input;
 
   // One shared severity decision — same rule the Check UI uses — so a header-
   // only forward still gets a meaningful headline and the two never disagree.
@@ -242,6 +252,37 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
         "and nothing matched."
       : "";
 
+  // Report CTA — the one action that turns a private verdict into a public
+  // warning. Only offered when something was actually found: inviting someone
+  // to lodge a report for an email we just called clean would pollute the
+  // database and waste their time.
+  //
+  // The link carries only the extracted identifiers (see lib/reportPrefill.ts).
+  // The forwarded email is never stored and never travels in the URL — the same
+  // reply promises we didn't keep a copy, and that has to stay true.
+  const reportUrl = (() => {
+    if (!siteUrl || verdict === "safe") return "";
+    const first = (kind: AnalyzedIdentifier["kind"]) =>
+      results.find((r) => r.kind === kind)?.value;
+    const scamEmail = senderAddress || first("email");
+    const prefill: ReportPrefill = {
+      // A sender address means we're looking at email source; otherwise fall
+      // back to whatever identifier the detector actually scored.
+      type: scamEmail ? "email" : first("url") ? "url" : first("phone") ? "phone" : "custom",
+      ...(first("url") ? { scamUrl: first("url") } : {}),
+      ...(scamEmail ? { scamEmail } : {}),
+      ...(replyToAddress ? { scamReplyTo: replyToAddress } : {}),
+      ...(first("phone") ? { scamPhone: first("phone") } : {}),
+    };
+    const query = buildReportQuery(prefill);
+    return `${siteUrl.replace(/\/$/, "")}/report${query ? `?${query}` : ""}`;
+  })();
+
+  const ctaLine =
+    "Help someone else dodge this: lodge it in our public scam database. " +
+    "We've already filled in what we found — you just add anything you want to " +
+    "say and hit submit.";
+
   // ── Plain text ──
   const textParts = [
     `${head.emoji} ${head.line}`,
@@ -259,6 +300,7 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     ...(nothingFound ? [nothingFound, ""] : []),
     ...(flagLines.length ? ["About the sender:", ...flagLines.map((f) => `  • ${f}`), ""] : []),
     ...(coverageNote ? [coverageNote, ""] : []),
+    ...(reportUrl ? [ctaLine, reportUrl, ""] : []),
     footer,
     "",
     "— Just Checking, Mate",
@@ -301,6 +343,17 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     coverageNote
       ? `<p style="margin:0 0 16px;padding:10px 12px;background:#fdf6e3;border-radius:4px;` +
         `color:#8a6d3b;font-size:13px">${escapeHtml(coverageNote)}</p>`
+      : "",
+    // The CTA is the only link in this email, and it points at our own origin —
+    // built from siteUrl and URL-encoded params, never from attacker-controlled
+    // text. Everything else stays unlinked so nothing in a quoted scam becomes
+    // clickable.
+    reportUrl
+      ? `<p style="margin:0 0 16px;padding:12px 14px;background:#f0f9f4;border-radius:4px;` +
+        `color:#245c3d;font-size:14px">${escapeHtml(ctaLine)}<br>` +
+        `<a href="${escapeHtml(reportUrl)}" style="display:inline-block;margin-top:10px;` +
+        `padding:10px 16px;background:#059669;color:#ffffff;text-decoration:none;` +
+        `border-radius:6px;font-weight:bold;font-size:14px">Report this scam</a></p>`
       : "",
     `<p style="margin:16px 0 0;padding-top:14px;border-top:1px solid #e5e5e5;` +
       `color:#555;font-size:13px">${escapeHtml(footer)}</p>`,

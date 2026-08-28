@@ -143,6 +143,75 @@ describe("formatVerdictEmail", () => {
     expect(email.text).toMatch(/did not keep a copy/i);
   });
 
+  it("ends with a report CTA linking to a prefilled form when siteUrl is given", () => {
+    const email = formatVerdictEmail({
+      results: [ident("email", "likely_scam", "scammer@evil.tk"), ident("url", "likely_scam", "https://evil.tk/login")],
+      emailFlags: [],
+      pixelReport: null,
+      siteUrl: "https://justcheckingmate.com",
+      senderAddress: "scammer@evil.tk",
+      replyToAddress: "reply@other.tk",
+    });
+    const match = email.text.match(/https:\/\/justcheckingmate\.com\/report\?\S+/);
+    expect(match).not.toBeNull();
+    const params = new URL(match![0]).searchParams;
+    expect(params.get("type")).toBe("email");
+    expect(params.get("scamEmail")).toBe("scammer@evil.tk");
+    expect(params.get("scamReplyTo")).toBe("reply@other.tk");
+    expect(params.get("scamUrl")).toBe("https://evil.tk/login");
+    // And the HTML gets a real button pointing at the same place.
+    expect(email.html).toContain("/report?");
+    expect(email.html).toMatch(/Report this scam/);
+  });
+
+  it("never puts the forwarded email content in the CTA link", () => {
+    // The reply promises we kept no copy; the CTA must not smuggle one out.
+    const secret = "PleaseSendYourPasswordToUs";
+    const email = formatVerdictEmail({
+      results: [ident("message", "likely_scam", secret, 90, ["Urgency pressure"])],
+      emailFlags: [],
+      pixelReport: null,
+      siteUrl: "https://justcheckingmate.com",
+    });
+    const link = email.text.match(/https:\/\/justcheckingmate\.com\/report\S*/)?.[0] ?? "";
+    expect(link).not.toContain(secret);
+    expect(link).not.toContain(encodeURIComponent(secret));
+  });
+
+  it("omits the CTA for a clean result", () => {
+    // Inviting a report for an email we just called safe would pollute the
+    // public database.
+    const email = formatVerdictEmail({
+      results: [ident("url", "safe", "https://example.com")],
+      emailFlags: [],
+      pixelReport: null,
+      siteUrl: "https://justcheckingmate.com",
+    });
+    expect(email.text).not.toContain("/report");
+    expect(email.html).not.toContain("/report");
+  });
+
+  it("omits the CTA entirely when no siteUrl is configured", () => {
+    const email = formatVerdictEmail({
+      results: [ident("url", "likely_scam", "https://evil.tk")],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    expect(email.text).not.toContain("/report");
+    expect(email.html).not.toContain("<a href");
+  });
+
+  it("does not double a trailing slash on the site URL", () => {
+    const email = formatVerdictEmail({
+      results: [ident("url", "likely_scam", "https://evil.tk")],
+      emailFlags: [],
+      pixelReport: null,
+      siteUrl: "https://justcheckingmate.com/",
+    });
+    expect(email.text).toContain("https://justcheckingmate.com/report");
+    expect(email.text).not.toContain("com//report");
+  });
+
   it("falls back to a suspicious verdict for a header-only forward with flags", () => {
     const email = formatVerdictEmail({
       results: [],

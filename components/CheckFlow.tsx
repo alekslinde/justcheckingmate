@@ -54,6 +54,15 @@ function EmailFileIcon() {
   );
 }
 
+function ForwardIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M3 17v-2a6 6 0 0 1 6-6h11" />
+      <path d="m16 5 4 4-4 4" />
+    </svg>
+  );
+}
+
 function SpinnerIcon() {
   return (
     <svg {...ICON} className="w-6 h-6 animate-spin">
@@ -597,44 +606,75 @@ export default function CheckFlow() {
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      {/* On mobile: camera is full-width (primary action), image+eml share the row.
-          On sm+: equal three columns. Per-field capture help (good photo, best
-          image, getting the email source) lives on the Learn page so this stays
-          uncluttered — linked just below. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* One vertical stack of capture options, most-direct first: take a photo,
+          upload an image, upload an .eml, forward it to us. A stack (rather than
+          the old 2/3-column grid) gives every option the same weight and a full-
+          width tap target, and lets each carry a one-line description that stays
+          readable on a phone. Forwarding is last because it is the only option
+          that sends the email through a mail provider — see its note. Per-field
+          capture help lives on the Learn page, linked just below. */}
+      <div className="space-y-2">
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
           disabled={busy}
-          className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
         >
-          <CameraIcon />
-          <span className="font-medium text-sm text-center">{t("check.takePhoto")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
+          <span className="shrink-0"><CameraIcon /></span>
+          <span className="min-w-0">
+            <span className="block font-medium text-sm">{t("check.takePhoto")}</span>
+            <span className="block text-xs text-gray-500 leading-tight">{t("check.takePhotoDesc")}</span>
+          </span>
         </button>
         <button
           type="button"
           onClick={() => imageRef.current?.click()}
           disabled={busy}
           aria-busy={uploadLoading}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
         >
-          {uploadLoading ? <SpinnerIcon /> : <ImageIcon />}
-          <span className="font-medium text-sm text-center">{t("check.uploadImage")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadImageDesc")}</span>
+          <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
+          <span className="min-w-0">
+            <span className="block font-medium text-sm">{t("check.uploadImage")}</span>
+            <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadImageDesc")}</span>
+          </span>
         </button>
         {/* .eml upload — labelled for clarity; described as advanced to de-prioritise for most users */}
         <button
           type="button"
           onClick={() => emlRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
         >
-          <EmailFileIcon />
-          <span className="font-medium text-sm text-center">{t("check.uploadEml")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadEmlDesc")}</span>
+          <span className="shrink-0"><EmailFileIcon /></span>
+          <span className="min-w-0">
+            <span className="block font-medium text-sm">{t("check.uploadEml")}</span>
+            <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadEmlDesc")}</span>
+          </span>
         </button>
+        {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
+            Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED).
+            It leaves the device, so the privacy trade-off is stated inline
+            rather than being left to the Learn page. */}
+        {INBOUND_ENABLED && (
+          <a
+            href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
+            className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 transition-colors text-left"
+          >
+            <span className="shrink-0"><ForwardIcon /></span>
+            <span className="min-w-0">
+              <span className="block font-medium text-sm">{t("check.forwardEmail")}</span>
+              <span className="block text-xs text-gray-500 leading-tight">
+                {t("check.forwardEmailDesc", { address: INBOUND_ADDRESS })}
+              </span>
+            </span>
+          </a>
+        )}
       </div>
+
+      {INBOUND_ENABLED && (
+        <p className="text-[11px] text-gray-500">{t("check.forward.note")}</p>
+      )}
 
       {/* Quiet pointer to the full capture guide on Learn — replaces the inline
           expandables that crowded this flow. */}
@@ -653,28 +693,6 @@ export default function CheckFlow() {
       )}
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
-
-      {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
-          Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED). */}
-      {INBOUND_ENABLED && (
-        <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 space-y-2">
-          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
-            <span aria-hidden="true">📨</span> {t("check.forward.heading")}
-          </p>
-          <p className="text-xs text-gray-400">
-            {t("check.forward.body", { address: INBOUND_ADDRESS })}
-          </p>
-          <p className="text-[11px] text-gray-500">
-            {t("check.forward.note")}
-          </p>
-          <a
-            href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition-colors"
-          >
-            <span aria-hidden="true">↪</span> {t("check.forward.cta", { address: INBOUND_ADDRESS })}
-          </a>
-        </div>
-      )}
 
       <div className="flex items-center gap-3" aria-hidden="true">
         <div className="flex-1 h-px bg-gray-700" />

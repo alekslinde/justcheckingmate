@@ -5,6 +5,7 @@ import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
 import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
+import { SITE_URL } from "@/lib/siteUrl";
 
 // Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (see
 // workers/inbound-email/) receives a forwarded suspicious email, POSTs the raw
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   try {
     // Reach the ORIGINAL scam inside the forward and run the shared analysis —
     // the top-level headers belong to the forwarder, not the scammer.
-    const { source, original, identityFlags, tracking } = analyseEmailSource(raw);
+    const { source, original, headers, identityFlags, tracking } = analyseEmailSource(raw);
 
     const blocklist = await getUrlhausBlocklist();
     // No region argument: this request originates from the inbound-email
@@ -82,6 +83,12 @@ export async function POST(req: NextRequest) {
       emailFlags: identityFlags,
       pixelReport,
       trackingFindings: tracking.findings,
+      // Lets the reply end with a one-tap link to a prefilled report form. Only
+      // the extracted identifiers travel in that link — the raw email is still
+      // discarded with this request. See lib/reportPrefill.ts.
+      siteUrl: SITE_URL,
+      senderAddress: headers.fromAddress,
+      replyToAddress: headers.replyTo,
     });
 
     incrementCheckCount().catch(() => {});
