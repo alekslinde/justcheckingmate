@@ -16,6 +16,78 @@ const eslintConfig = defineConfig([
     // scripts/copy-ocr-assets.mjs — vendor minified output, not our source.
     "public/tesseract/**",
   ]),
+  // ── Privacy invariant: no low-level network access in the detector ─────────
+  //
+  // The app's core promise is that submitting a suspicious link does not visit
+  // it. Fetching a scam URL tells the scammer their link is live and under
+  // investigation, which can cost a victim their one chance at a takedown.
+  //
+  // __tests__/privacyInvariant.test.ts enforces this behaviourally, but it can
+  // only intercept global fetch: module mocking cannot reach a dynamic import
+  // inside already-loaded production code, so a leak through node:dns or
+  // node:net would pass every test in that file. The route contract in
+  // app/api/check/route.ts explicitly names "an outbound HTTP request, DNS
+  // lookup, or socket connection" — these rules close the two the test cannot,
+  // for first-party code. They are static analysis, not a sandbox: a name
+  // assembled at runtime still slips through, as does a dependency doing it
+  // for us. The point is to make a leak cost a deliberate, visible act.
+  //
+  // Scoped to the code that handles submitted content. Scripts and workers are
+  // deliberately excluded: they do legitimate network work and never analyse a
+  // user's submission. Non-network builtins (crypto, path, fs) stay allowed —
+  // this bans reaching the network, not using Node.
+  //
+  // If a future change genuinely needs one of these, that is a deliberate
+  // decision about the privacy contract and should be argued in review, not
+  // silenced with an inline disable.
+  {
+    files: ["lib/**/*.{ts,tsx}", "app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            "dns", "node:dns", "dns/promises", "node:dns/promises",
+            "net", "node:net",
+            "tls", "node:tls",
+            "http", "node:http",
+            "https", "node:https",
+            "http2", "node:http2",
+            "dgram", "node:dgram",
+          ].map((name) => ({
+            name,
+            message:
+              "Network access from the detector would break the never-visit-a-submitted-URL invariant. " +
+              "Outbound calls go through the injected transport (see lib/urlExpander.ts) or an explicit " +
+              "fetch to a fixed endpoint we chose. See __tests__/privacyInvariant.test.ts.",
+          })),
+        },
+      ],
+      // no-restricted-imports only sees static import statements. A dynamic
+      // `await import("node:dns")` or a `require("node:net")` slips straight
+      // past it — and that is exactly the shape the behavioural test cannot see
+      // either, because module mocking does not reach a dynamic import inside
+      // already-loaded code. Without this selector the channel is enforced by
+      // neither half.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'ImportExpression > Literal[value=/^(node:)?(dns|net|tls|http|https|http2|dgram)(\\/.*)?$/]',
+          message:
+            "Dynamic import of a Node network module would break the never-visit-a-submitted-URL invariant. " +
+            "See __tests__/privacyInvariant.test.ts and eslint.config.mjs.",
+        },
+        {
+          selector:
+            'CallExpression[callee.name="require"] > Literal[value=/^(node:)?(dns|net|tls|http|https|http2|dgram)(\\/.*)?$/]',
+          message:
+            "require() of a Node network module would break the never-visit-a-submitted-URL invariant. " +
+            "See __tests__/privacyInvariant.test.ts and eslint.config.mjs.",
+        },
+      ],
+    },
+  },
   // Treat a leading underscore as "deliberately unused". Needed for the
   // omit-a-key destructure idiom (`const { dropMe: _, ...rest } = obj`) and
   // for signature-mandated parameters that go unread.

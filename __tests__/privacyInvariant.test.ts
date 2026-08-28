@@ -70,15 +70,23 @@ const HOSTILE_INPUTS = [
  *  2. It records rather than asserts, so each test decides what "forbidden"
  *     means for the path it exercises.
  *
- * SCOPE — what this does NOT cover. Only global fetch is intercepted. The
- * route's contract also names DNS lookups and socket connections, and a leak
- * via node:dns, node:net or node:https would pass every test in this file.
- * Module mocking does not reach a dynamic import inside already-loaded
- * production code, so catching that needs a different mechanism (a network
- * sandbox, or an eslint rule banning those imports from lib/). Stated plainly
- * rather than papered over: fetch is how every current call site reaches the
- * network, and this closes that door, but the guarantee is narrower than the
- * comment in app/api/check/route.ts.
+ * SCOPE. Only global fetch is intercepted here. Module mocking does not reach a
+ * dynamic import inside already-loaded production code, so a leak via node:dns,
+ * node:net or node:https would pass every test in this file.
+ *
+ * That half is covered by lint instead: eslint.config.mjs bans those modules
+ * from lib/, app/ and components/ — as static imports, dynamic import() and
+ * require() — and __tests__/engineNetworkImports.test.ts asserts the rules fire
+ * and that the config's globs reach every detector file.
+ *
+ * Between the two, the three channels the route contract names are covered for
+ * FIRST-PARTY code. Two gaps remain, stated plainly rather than papered over:
+ *
+ *   · A transitive leak through a third-party dependency. Neither mechanism
+ *     sees it; catching it needs a network sandbox in CI.
+ *   · Indirection that defeats static analysis — a module name assembled at
+ *     runtime, or an eslint-disable comment. Lint raises the cost of a leak
+ *     and makes it visible in review; it is not a sandbox.
  */
 function interceptNetwork() {
   const contacted: string[] = [];
