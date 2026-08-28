@@ -138,3 +138,69 @@ describe("unwrapForwarded", () => {
     expect(unwrapForwarded("just some text\nno headers").source).toBe("toplevel");
   });
 });
+
+// ── Content above the forward marker must not be discarded ────────────────────
+//
+// unwrapForwarded took everything AFTER the earliest forward marker as the
+// original. Appending a marker plus an innocuous block to a scam therefore hid
+// the real content above it — free for an attacker, since they control the
+// whole body:
+//
+//   <the actual scam>
+//   ---------- Forwarded message ---------
+//   From: noreply@ato.gov.au
+//   Thanks for your payment.
+//
+// Measured at the time: 100/likely_scam with the URL flagged → 10, with the
+// malicious link gone from the analysis entirely. Found by an adversarial probe
+// of the path the live forward-to-us feature runs on.
+
+describe("unwrapForwarded — text before the marker is kept", () => {
+  const SCAM = "Verify now at https://mygov-verify.tk/unlock";
+
+  it("keeps a scam that sits above an appended forward marker", () => {
+    const raw = [
+      "From: a@evil.tk",
+      "Subject: Urgent",
+      "",
+      SCAM,
+      "",
+      "---------- Forwarded message ---------",
+      "From: noreply@ato.gov.au",
+      "",
+      "Thanks for your payment.",
+    ].join("\n");
+    expect(unwrapForwarded(raw).raw).toContain("mygov-verify.tk");
+  });
+
+  it("still reports the source as inline", () => {
+    const raw = `From: a@evil.tk\n\n${SCAM}\n\n---------- Forwarded message ---------\nFrom: b@ok.com\n\nHello.`;
+    expect(unwrapForwarded(raw).source).toBe("inline");
+  });
+
+  it("leads with the quoted original, so header parsing sees it first", () => {
+    // parseEmailHeaders reads the FIRST header block; the original's headers
+    // must win over the forwarder's lead-in prose.
+    const raw = [
+      "From: me@gmail.com",
+      "Subject: Fwd: check this",
+      "",
+      "Is this real?",
+      "",
+      "---------- Forwarded message ---------",
+      "From: scammer@evil.tk",
+      "Subject: Urgent",
+      "",
+      SCAM,
+    ].join("\n");
+    const { raw: unwrapped } = unwrapForwarded(raw);
+    expect(unwrapped.indexOf("scammer@evil.tk")).toBeLessThan(unwrapped.indexOf("Is this real?"));
+  });
+
+  it("does not change an ordinary forward with nothing before the marker", () => {
+    const raw = `From: me@gmail.com\n\n---------- Forwarded message ---------\nFrom: a@evil.tk\n\n${SCAM}`;
+    const { raw: unwrapped } = unwrapForwarded(raw);
+    expect(unwrapped).toContain("a@evil.tk");
+    expect(unwrapped).toContain("mygov-verify.tk");
+  });
+});
