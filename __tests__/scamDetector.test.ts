@@ -1721,8 +1721,10 @@ describe("analyzeContent — shortened URLs when expansion is unavailable", () =
     expect(urlCard?.result.flags.some((f) => f.includes("could not be checked"))).toBe(true);
   });
 
-  it("does not add that flag when expansion was attempted and simply failed", async () => {
-    // "We tried and got nothing" is the pre-existing behaviour and stays quiet.
+  it("also says so when expansion was attempted and failed", async () => {
+    // A timeout, a missing Location header or an exhausted hop budget all mean
+    // the same thing to the user: the destination was never seen. Returning the
+    // base result silently would present a shortener-only verdict as complete.
     vi.mocked(expandUrl).mockResolvedValueOnce({
       expandedUrl: null,
       hops: [],
@@ -1731,6 +1733,22 @@ describe("analyzeContent — shortened URLs when expansion is unavailable", () =
 
     const cards = await analyzeContent("https://bit.ly/failed-expansion-card");
     const urlCard = cards.find((c) => c.kind === "url");
-    expect(urlCard?.result.flags.some((f) => f.includes("could not be checked"))).toBe(false);
+    expect(urlCard?.result.flags.some((f) => f.includes("could not be checked"))).toBe(true);
+  });
+
+  it("does not claim a destination was checked when none was resolved", async () => {
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: null,
+      hops: ["https://tinyurl.com/cut-short"],
+      status: "failed",
+    });
+
+    const cards = await analyzeContent("https://bit.ly/no-destination-claim");
+    const urlCard = cards.find((c) => c.kind === "url");
+    // The base "URL shortener detected — hides the real destination" warning
+    // still fires and should; what must NOT appear is the expansion flag
+    // naming a destination we never resolved.
+    expect(urlCard?.result.flags.some((f) => f.includes("Shortened URL expanded"))).toBe(false);
+    expect(urlCard?.result.expandedUrl).toBeUndefined();
   });
 });

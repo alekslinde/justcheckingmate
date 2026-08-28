@@ -55,11 +55,21 @@ export function locationFromHeaders(headers: Headers): string {
  * Takes Headers rather than NextRequest so this stays framework-free and
  * usable from any route handler or worker.
  */
+// Structural validation, not a full IP parse. The point is that a forged value
+// must collapse to "unknown" and share one bucket — a loose shape check lets an
+// attacker mint an unlimited number of distinct keys (`1.1.1.1.1`, `1.1.1.1.2`,
+// …) and walk straight through the rate limiter it feeds.
+const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+// IPv6 in any of its forms, including "::" compression, and the IPv4-mapped
+// tail (::ffff:203.0.113.5) that dual-stack proxies emit.
+const IPV6 = /^(?=.*:)(?!.*::.*::)(([0-9a-f]{1,4})?(:([0-9a-f]{1,4})?){1,7}|::)(%[0-9a-z]+)?$/i;
+const IPV6_MAPPED = /^::ffff:(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/i;
+
 export function clientIpFromHeaders(headers: Headers): string {
   const fwd = headers.get("x-forwarded-for");
   if (fwd) {
     const ip = fwd.split(",")[0].trim();
-    if (/^[\d.]+$/.test(ip) || /^[a-f0-9:]+$/i.test(ip)) return ip;
+    if (IPV4.test(ip) || IPV6_MAPPED.test(ip) || IPV6.test(ip)) return ip;
   }
   return "unknown";
 }

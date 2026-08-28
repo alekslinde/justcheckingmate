@@ -109,9 +109,14 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
     expect(result.hops.length).toBe(2);
   });
 
-  it("stops expanding after MAX_HOPS and returns the last resolved URL, making no further requests", async () => {
+  it("stops expanding after MAX_HOPS, making no further requests", async () => {
     // bit.ly → tinyurl.com → rb.gy → is.gd: four-hop chain but MAX_HOPS = 3,
     // so exactly 3 fetches are issued and the 4th shortener is never contacted.
+    //
+    // This used to also assert expandedUrl was non-null, which encoded a bug:
+    // the cut-short chain returned the last *shortener* as the real
+    // destination. The hop cap is the contract worth asserting; what the cutoff
+    // reports is covered by the regression tests at the end of this file.
     fetchSpy
       .mockResolvedValueOnce(
         new Response(null, { status: 301, headers: { location: "https://tinyurl.com/h2" } }),
@@ -123,8 +128,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
         new Response(null, { status: 301, headers: { location: "https://is.gd/h4" } }),
       );
 
-    const result = await expandUrl("https://bit.ly/xp-maxhops-unique", fetchSpy);
-    expect(result.expandedUrl).not.toBeNull();
+    await expandUrl("https://bit.ly/xp-maxhops-unique", fetchSpy);
     // Exactly MAX_HOPS (3) fetch calls — the chain is cut there
     expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
@@ -227,5 +231,93 @@ describe("Feature: expandUrl transport contract — no ambient network access", 
     for (const [calledUrl] of fetchSpy.mock.calls) {
       expect(isShortened(calledUrl as string), `contacted ${calledUrl}`).toBe(true);
     }
+  });
+});
+
+// ── Regression: an unresolved chain must never be reported as expanded ────────
+
+describe("Feature: expandUrl — a chain that does not resolve is not 'expanded'", () => {
+  // The recursion once stamped status "expanded" on the way back out and fell
+  // back to `inner.expandedUrl ?? dest`, so a shortener URL was returned as the
+  // verified real destination. applyExpansion then scored THAT with checkUrl,
+  // found bit.ly reputable, and reported a malicious chain as clean.
+  const fetchSpy = vi.fn();
+
+  beforeEach(() => {
+    fetchSpy.mockReset();
+  });
+
+  function redirectTo(location: string) {
+    return new Response(null, { status: 301, headers: { location } });
+  }
+
+  it("reports failure, not a shortener, when the hop budget runs out", async () => {
+    // Four shorteners deep; MAX_HOPS is 3, so the chain is cut mid-flight.
+    fetchSpy
+      .mockResolvedValueOnce(redirectTo("https://tinyurl.com/mh2"))
+      .mockResolvedValueOnce(redirectTo("https://is.gd/mh3"))
+      .mockResolvedValueOnce(redirectTo("https://cutt.ly/mh4"));
+
+    const result = await expandUrl("https://bit.ly/xp-maxhop-regression", fetchSpy);
+    expect(result.status).toBe("failed");
+    expect(result.expandedUrl).toBeNull();
+  });
+
+  it("never returns a known shortener as the resolved destination", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(redirectTo("https://tinyurl.com/sh2"))
+      .mockResolvedValueOnce(redirectTo("https://is.gd/sh3"))
+      .mockResolvedValueOnce(redirectTo("https://cutt.ly/sh4"));
+
+    const { expandedUrl } = await expandUrl("https://bit.ly/xp-never-shortener", fetchSpy);
+    if (expandedUrl) expect(isShortened(expandedUrl)).toBe(false);
+  });
+
+  it("reports failure when an inner hop times out", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(redirectTo("https://tinyurl.com/if2"))
+      .mockRejectedValueOnce(new Error("timeout"));
+
+    const result = await expandUrl("https://bit.ly/xp-inner-timeout", fetchSpy);
+    expect(result.status).toBe("failed");
+    expect(result.expandedUrl).toBeNull();
+  });
+
+  it("reports failure when an inner hop returns no Location header", async () => {
+    fetchSpy
+      .mockResolvedValueOnce(redirectTo("https://tinyurl.com/nl2"))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const result = await expandUrl("https://bit.ly/xp-inner-nolocation", fetchSpy);
+    expect(result.status).toBe("failed");
+    expect(result.expandedUrl).toBeNull();
+  });
+
+  it("still resolves a chain that reaches a real destination in budget", async () => {
+    // The fix must not break the case the recursion exists for.
+    fetchSpy
+      .mockResolvedValueOnce(redirectTo("https://tinyurl.com/ok2"))
+      .mockResolvedValueOnce(redirectTo("https://evil-final.tk/steal"));
+
+    const result = await expandUrl("https://bit.ly/xp-chain-resolves", fetchSpy);
+    expect(result.status).toBe("expanded");
+    expect(result.expandedUrl).toBe("https://evil-final.tk/steal");
+    expect(result.hops).toEqual(["https://tinyurl.com/ok2", "https://evil-final.tk/steal"]);
+  });
+
+  it("records the hops actually walked when the chain is cut short", async () => {
+    // hops feeds the "Multi-hop chain (N redirects)" flag, so it must reflect
+    // what was really traversed rather than being dropped or inflated.
+    fetchSpy
+      .mockResolvedValueOnce(redirectTo("https://tinyurl.com/hp2"))
+      .mockResolvedValueOnce(redirectTo("https://is.gd/hp3"))
+      .mockResolvedValueOnce(redirectTo("https://cutt.ly/hp4"));
+
+    const result = await expandUrl("https://bit.ly/xp-hops-recorded", fetchSpy);
+    expect(result.hops).toEqual([
+      "https://tinyurl.com/hp2",
+      "https://is.gd/hp3",
+      "https://cutt.ly/hp4",
+    ]);
   });
 });

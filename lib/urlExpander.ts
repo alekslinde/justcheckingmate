@@ -102,10 +102,22 @@ async function followRedirects(
 
     // Recursively follow if the destination is also a known shortener,
     // but only while hops remain — prevents infinite chains.
-    if (isShortened(dest) && remainingHops > 1) {
+    if (isShortened(dest)) {
+      // Out of hops, or the inner hop did not resolve: we reached a shortener
+      // and stopped there. Report the failure rather than presenting that
+      // shortener as the real destination — a caller that scored it would find
+      // bit.ly reputable and tell the user a malicious chain looked clean.
+      // `hops` still records how far we actually got, for the multi-hop signal.
+      if (remainingHops <= 1) {
+        return { expandedUrl: null, hops: [dest], status: "failed" };
+      }
+
       const inner = await followRedirects(dest, remainingHops - 1, fetcher);
+      if (!inner.expandedUrl) {
+        return { expandedUrl: null, hops: [dest, ...inner.hops], status: inner.status };
+      }
       return {
-        expandedUrl: inner.expandedUrl ?? dest,
+        expandedUrl: inner.expandedUrl,
         hops: [dest, ...inner.hops],
         status: "expanded",
       };

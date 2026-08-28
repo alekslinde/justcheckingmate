@@ -1099,15 +1099,14 @@ const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput, fetcher?: ExpandFetch): Promise<CheckResult> {
   if (!isShortened(url)) return base;
 
-  const { expandedUrl, hops, status } = await expandUrl(url, fetcher);
+  const { expandedUrl, hops } = await expandUrl(url, fetcher);
   if (!expandedUrl) {
-    // Say so when we could not look, rather than returning a verdict that
-    // reads as if the destination had been assessed. Without a transport the
-    // shortener is all we ever saw.
-    if (status === "unavailable") {
-      return { ...base, flags: [...base.flags, "Shortened URL — destination could not be checked"] };
-    }
-    return base;
+    // Say so whenever the destination was not resolved, rather than returning a
+    // verdict that reads as if it had been assessed. This covers both causes:
+    // no transport ("unavailable") and a timeout, missing Location or
+    // exhausted hop budget ("failed"). The shortener is all we ever saw, and a
+    // silent base result would present that as a complete answer.
+    return { ...base, flags: [...base.flags, "Shortened URL — destination could not be checked"] };
   }
 
   const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
