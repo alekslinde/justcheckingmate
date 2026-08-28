@@ -278,3 +278,31 @@ describe("extractIdentifiers", () => {
     expect(ids).toEqual({ scamUrl: "", scamEmail: "", scamPhone: "" });
   });
 });
+
+// ── Trailing-dot FQDN ─────────────────────────────────────────────────────────
+//
+// "evil.tk." is a valid absolute-form hostname that resolves to the same host
+// as "evil.tk", but the dot survives URL parsing into `hostname` and defeats
+// every endsWith() comparison downstream. Found during an adversarial-input
+// review; it cut both ways, which is what made it worth fixing:
+//
+//   http://commbank-secure-login.tk./verify   100 → 70   (evaded the TLD check)
+//   https://ato.gov.au./mytax                   5 → 0    (missed the allowlist)
+
+describe("normaliseForAnalysis — trailing-dot hostnames", () => {
+  it("strips a trailing dot so suffix checks see the real host", () => {
+    expect(normaliseForAnalysis("http://evil.tk./x")).toBe("http://evil.tk/x");
+  });
+
+  it("strips repeated trailing dots", () => {
+    expect(normaliseForAnalysis("http://evil.tk.../x")).toBe("http://evil.tk/x");
+  });
+
+  it("leaves dots inside the hostname alone", () => {
+    expect(normaliseForAnalysis("https://ato.gov.au/mytax")).toBe("https://ato.gov.au/mytax");
+  });
+
+  it("does not touch dots in the path", () => {
+    expect(normaliseForAnalysis("https://example.com/file.tar.gz")).toContain("/file.tar.gz");
+  });
+});

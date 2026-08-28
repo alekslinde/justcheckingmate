@@ -117,7 +117,14 @@ export function normaliseForAnalysis(raw: string): string {
   const input = raw.trim().startsWith("http") ? raw.trim() : `https://${raw.trim()}`;
   try {
     const u = new URL(input);
-    u.hostname = decodeURIComponent(u.hostname).toLowerCase();
+    // Trailing dot is a valid FQDN form ("ato.gov.au.") that resolves to the
+    // same host, but it survives URL parsing into `hostname` and defeats every
+    // endsWith() comparison downstream. Left in place it cuts both ways: a
+    // scam on "evil.tk./x" evades the suspicious-TLD check (100 → 70), and a
+    // real "ato.gov.au./mytax" misses the legit-domain allowlist and scores 0
+    // with no flags at all. Stripped here so both compare against the host the
+    // browser will actually visit.
+    u.hostname = decodeURIComponent(u.hostname).toLowerCase().replace(/\.+$/, "");
     u.pathname = u.pathname.replace(/\/+/g, "/");
     return u.toString();
   } catch {

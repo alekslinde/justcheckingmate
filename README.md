@@ -15,14 +15,14 @@ There's no input-type picker to fuss with. **The app works out what you gave it*
 
 Under the hood it runs:
 
-- **Links** — checks URLs against a live malware/phishing blocklist ([URLhaus](https://urlhaus.abuse.ch), from abuse.ch), URL-shortener expansion, suspicious TLDs, IP-address hosting, typosquatted AU brands, and phishing keywords.
+- **Links** — checks URLs against a live malware/phishing blocklist ([URLhaus](https://urlhaus.abuse.ch), from abuse.ch), URL-shortener expansion, suspicious TLDs, IP-address hosting, typosquatted AU brands, and phishing keywords. Defanged links (`hxxp://evil[.]tk`) and schemeless ones (`evil.tk/login`) are recognised too, so sharing a link safely doesn't cost you the check.
 - **Text messages** — urgency language, reward bait, requests for sensitive info, embedded dodgy links, and government-agency impersonation.
 - **Emails** — all the message checks plus sender-domain analysis, generic greetings, and **email authentication** (SPF / DKIM / DMARC) parsed straight from the raw headers. Forwarded emails are unwrapped back to the original scam, and **tracking pixels** are detected and flagged.
 - **Phone numbers** — line-type detection (mobile / fixed / VoIP / premium / free-call), AU premium-rate ranges, wangiri (one-ring) and premium-rate country risk, and spoofing-risk notes.
 
-**Screenshots and QR codes:** drop or upload an image and it'll try to decode a QR code first (client-side via jsQR), then fall back to OCR (Tesseract.js) to pull out the text — then run all the checks above on whatever it finds.
+**Screenshots and QR codes:** drop or upload an image and it'll try to decode a QR code first (client-side via jsQR), then fall back to OCR (Tesseract.js) to pull out the text — then run all the checks above on whatever it finds. **Both run on your own device** — the image never leaves it. A server-side OCR fallback exists only for browsers that can't run the WASM engine.
 
-**Forward it in:** on your phone? Forward a dodgy email to the app's inbox and it emails you back a straight-up verdict. It's read on arrival and no copy is kept.
+**Forward it in:** on your phone? Forward a dodgy email to the app's inbox and it emails you back a straight-up verdict — including *why*, signal by signal, so you know what to look for next time. It's read on arrival and no copy is kept.
 
 ### Region-aware detection
 
@@ -89,6 +89,13 @@ The schema is created automatically on first run — no migrations to run.
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Versioning
+
+The app version in `package.json` is bumped in the PR that makes the change.
+See [`docs/versioning.md`](docs/versioning.md) — the rule is framed around what
+a *user* would notice, not what would break a build, since the consumers here
+are people relying on a verdict.
+
 ### Handy commands
 
 ```bash
@@ -120,6 +127,8 @@ All scam detection is **rule-based** and runs in [`lib/`](lib/) — chiefly [`sc
 The educational modules — [`threatRadar.ts`](lib/threatRadar.ts) and [`scamCalendar.ts`](lib/scamCalendar.ts) — are deliberately kept out of that path. Neither is imported by the scorer.
 
 The only outbound calls are to fixed, trusted infrastructure — the URLhaus blocklist (abuse.ch) and HEAD requests to a whitelist of known URL-shortener hosts to expand short links. Neither involves sending the content you paste off-device for analysis.
+
+**That promise is enforced, not just stated.** [`__tests__/privacyInvariant.test.ts`](__tests__/privacyInvariant.test.ts) runs the real engine over real scam inputs with the network intercepted and fails the build if any host from the submitted content is contacted; a lint rule bans Node's network modules from the detector entirely, covering the DNS and socket paths the test can't see. The engine takes its network transport as an argument, so with none supplied it cannot reach the network at all.
 
 Because the logic is heuristic and transparent, it's intentionally open source — obscuring the keyword lists wouldn't stop sophisticated scammers (who already know what triggers spam filters), but it would make it harder for the community to contribute improvements.
 
