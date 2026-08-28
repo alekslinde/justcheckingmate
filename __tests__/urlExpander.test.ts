@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { isShortened, expandUrl, SHORTENER_HOSTS } from "@/lib/urlExpander";
 
 // ── Feature: isShortened ──────────────────────────────────────────────────────
@@ -39,15 +39,13 @@ describe("Feature: isShortened — identifying known shortener hostnames", () =>
 // ── Feature: expandUrl ────────────────────────────────────────────────────────
 
 describe("Feature: expandUrl — following redirects to reveal the real destination", () => {
+  // The transport is injected rather than stubbed onto the global: the module
+  // never reaches for a global fetch, so passing the spy here is what a real
+  // caller does. See the transport contract in lib/urlExpander.ts.
   const fetchSpy = vi.fn();
 
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchSpy);
     fetchSpy.mockReset();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   it("returns the Location header as expandedUrl on a 301 redirect", async () => {
@@ -55,7 +53,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
       new Response(null, { status: 301, headers: { location: "https://evil-phishing.tk/steal" } }),
     );
 
-    const result = await expandUrl("https://bit.ly/xp-301-unique");
+    const result = await expandUrl("https://bit.ly/xp-301-unique", fetchSpy);
     expect(result.expandedUrl).toBe("https://evil-phishing.tk/steal");
     expect(result.hops).toEqual(["https://evil-phishing.tk/steal"]);
   });
@@ -65,7 +63,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
       new Response(null, { status: 302, headers: { location: "https://real-destination.com/page" } }),
     );
 
-    const result = await expandUrl("https://tinyurl.com/xp-302-unique");
+    const result = await expandUrl("https://tinyurl.com/xp-302-unique", fetchSpy);
     expect(result.expandedUrl).toBe("https://real-destination.com/page");
     expect(result.hops).toEqual(["https://real-destination.com/page"]);
   });
@@ -73,7 +71,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
   it("returns null expandedUrl and empty hops when no Location header is present", async () => {
     fetchSpy.mockResolvedValueOnce(new Response(null, { status: 200 }));
 
-    const result = await expandUrl("https://bit.ly/xp-noloc-unique");
+    const result = await expandUrl("https://bit.ly/xp-noloc-unique", fetchSpy);
     expect(result.expandedUrl).toBeNull();
     expect(result.hops).toEqual([]);
   });
@@ -81,7 +79,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
   it("returns null expandedUrl gracefully when fetch throws a network error", async () => {
     fetchSpy.mockRejectedValueOnce(new Error("network failure"));
 
-    const result = await expandUrl("https://bit.ly/xp-neterr-unique");
+    const result = await expandUrl("https://bit.ly/xp-neterr-unique", fetchSpy);
     expect(result.expandedUrl).toBeNull();
     expect(result.hops).toEqual([]);
   });
@@ -89,7 +87,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
   it("returns null expandedUrl gracefully when fetch times out", async () => {
     fetchSpy.mockRejectedValueOnce(new DOMException("The operation was aborted", "AbortError"));
 
-    const result = await expandUrl("https://bit.ly/xp-timeout-unique");
+    const result = await expandUrl("https://bit.ly/xp-timeout-unique", fetchSpy);
     expect(result.expandedUrl).toBeNull();
     expect(result.hops).toEqual([]);
   });
@@ -104,7 +102,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
         new Response(null, { status: 301, headers: { location: "https://final-scam.tk/phish" } }),
       );
 
-    const result = await expandUrl("https://bit.ly/xp-chain-unique");
+    const result = await expandUrl("https://bit.ly/xp-chain-unique", fetchSpy);
     expect(result.expandedUrl).toBe("https://final-scam.tk/phish");
     expect(result.hops).toContain("https://tinyurl.com/hop2");
     expect(result.hops).toContain("https://final-scam.tk/phish");
@@ -125,7 +123,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
         new Response(null, { status: 301, headers: { location: "https://is.gd/h4" } }),
       );
 
-    const result = await expandUrl("https://bit.ly/xp-maxhops-unique");
+    const result = await expandUrl("https://bit.ly/xp-maxhops-unique", fetchSpy);
     expect(result.expandedUrl).not.toBeNull();
     // Exactly MAX_HOPS (3) fetch calls — the chain is cut there
     expect(fetchSpy).toHaveBeenCalledTimes(3);
@@ -137,8 +135,8 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
     );
 
     const url = "https://bit.ly/xp-cache-unique";
-    const first = await expandUrl(url);
-    const second = await expandUrl(url);
+    const first = await expandUrl(url, fetchSpy);
+    const second = await expandUrl(url, fetchSpy);
 
     expect(first).toEqual(second);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -149,7 +147,7 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
       new Response(null, { status: 301, headers: { location: "https://evil.tk/x" } }),
     );
 
-    await expandUrl("https://bit.ly/xp-method-unique");
+    await expandUrl("https://bit.ly/xp-method-unique", fetchSpy);
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ method: "HEAD" }),
@@ -161,10 +159,73 @@ describe("Feature: expandUrl — following redirects to reveal the real destinat
       new Response(null, { status: 301, headers: { location: "https://evil.tk/x" } }),
     );
 
-    await expandUrl("https://bit.ly/xp-redirect-mode-unique");
+    await expandUrl("https://bit.ly/xp-redirect-mode-unique", fetchSpy);
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ redirect: "manual" }),
     );
+  });
+});
+
+// ── Feature: the transport contract ───────────────────────────────────────────
+
+describe("Feature: expandUrl transport contract — no ambient network access", () => {
+  it("makes no network call when no transport is supplied", async () => {
+    // The guarantee a bundled client relies on: without a transport the engine
+    // is pure string analysis and cannot leak the user's IP to a shortener.
+    const globalFetch = vi.fn();
+    vi.stubGlobal("fetch", globalFetch);
+    try {
+      const result = await expandUrl("https://bit.ly/no-transport");
+      expect(globalFetch).not.toHaveBeenCalled();
+      expect(result.expandedUrl).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports 'unavailable' rather than 'failed' when it never tried", async () => {
+    // The distinction a caller needs to say "could not check" instead of
+    // silently dropping the signal.
+    const result = await expandUrl("https://bit.ly/unavailable-status");
+    expect(result.status).toBe("unavailable");
+  });
+
+  it("does not cache an unavailable result, so gaining a transport later works", async () => {
+    const url = "https://bit.ly/xp-uncached-unavailable";
+    expect((await expandUrl(url)).status).toBe("unavailable");
+
+    const fetchSpy = vi.fn().mockResolvedValueOnce(
+      new Response(null, { status: 301, headers: { location: "https://real-destination.com/p" } }),
+    );
+    const second = await expandUrl(url, fetchSpy);
+    expect(second.status).toBe("expanded");
+    expect(second.expandedUrl).toBe("https://real-destination.com/p");
+  });
+
+  it("reports 'failed' when a transport was supplied but returned nothing useful", async () => {
+    const fetchSpy = vi.fn().mockResolvedValueOnce(new Response(null, { status: 200 }));
+    const result = await expandUrl("https://bit.ly/xp-no-location", fetchSpy);
+    expect(result.status).toBe("failed");
+    expect(result.expandedUrl).toBeNull();
+  });
+
+  it("reports 'failed' when the transport throws, without propagating the error", async () => {
+    const fetchSpy = vi.fn().mockRejectedValueOnce(new Error("network down"));
+    const result = await expandUrl("https://bit.ly/xp-throws", fetchSpy);
+    expect(result.status).toBe("failed");
+  });
+
+  it("only ever contacts allowlisted shortener hosts, never the destination", async () => {
+    // The security contract: scammer infrastructure is never reached.
+    const fetchSpy = vi.fn().mockResolvedValueOnce(
+      new Response(null, { status: 301, headers: { location: "https://scam-site.tk/steal" } }),
+    );
+    await expandUrl("https://bit.ly/xp-allowlist-only", fetchSpy);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    for (const [calledUrl] of fetchSpy.mock.calls) {
+      expect(isShortened(calledUrl as string), `contacted ${calledUrl}`).toBe(true);
+    }
   });
 });

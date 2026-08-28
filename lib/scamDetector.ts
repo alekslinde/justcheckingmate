@@ -2,7 +2,7 @@ import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/email
 import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanitizer";
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
-import { isShortened, expandUrl } from "@/lib/urlExpander";
+import { isShortened, expandUrl, type ExpandFetch } from "@/lib/urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
 import { KEYS_BY_POST_PHRASES } from "@/lib/regions/base";
 import type { CheckResult } from "@/lib/engineTypes";
@@ -1096,11 +1096,19 @@ const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
 // Expands a shortened URL and merges the destination analysis into the base result.
 // If expansion fails or times out, the base result is returned unchanged.
-async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput): Promise<CheckResult> {
+async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput, fetcher?: ExpandFetch): Promise<CheckResult> {
   if (!isShortened(url)) return base;
 
-  const { expandedUrl, hops } = await expandUrl(url);
-  if (!expandedUrl) return base;
+  const { expandedUrl, hops, status } = await expandUrl(url, fetcher);
+  if (!expandedUrl) {
+    // Say so when we could not look, rather than returning a verdict that
+    // reads as if the destination had been assessed. Without a transport the
+    // shortener is all we ever saw.
+    if (status === "unavailable") {
+      return { ...base, flags: [...base.flags, "Shortened URL — destination could not be checked"] };
+    }
+    return base;
+  }
 
   const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
   const destDefanged = defang(expandedUrl);
@@ -1116,7 +1124,19 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
   return { ...merged, score: mergedScore, flags: mergedFlags, expandedUrl: destDefanged, category: "URL" };
 }
 
-export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput): Promise<AnalyzedIdentifier[]> {
+/**
+ * Options for a run of the engine.
+ *
+ * `fetcher` is the network transport used to unshorten links. Omitting it means
+ * the engine makes no network calls of any kind, and shortened URLs are
+ * reported as unexpanded rather than silently assessed on the shortener alone.
+ * Server callers pass fetch; see the transport contract in lib/urlExpander.ts.
+ */
+export interface AnalyzeOptions {
+  fetcher?: ExpandFetch;
+}
+
+export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput, options?: AnalyzeOptions): Promise<AnalyzedIdentifier[]> {
   const text = content.trim();
   if (!text) return [];
 
@@ -1143,7 +1163,7 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
     if (urls.length === 0) {
       const normalised = normaliseForAnalysis(text);
       const base = checkUrl(normalised, blocklist, region);
-      const result = await applyExpansion(normalised, base, blocklist, region);
+      const result = await applyExpansion(normalised, base, blocklist, region, options?.fetcher);
       out.push({ kind: "url", value: text, result });
     }
   } else {
@@ -1155,7 +1175,7 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
   for (const u of urls) {
     const normalised = normaliseForAnalysis(u);
     const base = checkUrl(normalised, blocklist, region);
-    const result = await applyExpansion(normalised, base, blocklist, region);
+    const result = await applyExpansion(normalised, base, blocklist, region, options?.fetcher);
     out.push({ kind: "url", value: u, result });
   }
 

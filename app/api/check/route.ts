@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
 
     // Pull each identifier out of the input and assess it on its own. All
     // analysis is pure string work — no outbound request is made to the input.
-    const results = await analyzeContent(content, blocklist, resolvedRegion);
+    // Expansion runs server-side so the shortener sees our infrastructure and
+    // never the user's IP (see the transport contract in lib/urlExpander.ts).
+    const results = await analyzeContent(content, blocklist, resolvedRegion, { fetcher: fetch });
 
     incrementCheckCount().catch(() => {});
     return NextResponse.json({ results, region: resolvedRegion });
