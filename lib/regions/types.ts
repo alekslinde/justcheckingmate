@@ -270,6 +270,27 @@ export interface RegionDefinition {
 
   /** Known-legitimate domains that should short-circuit URL scoring. */
   legitDomains: string[];
+
+  /**
+   * Domains of organisations named in `authorityMentions` that do NOT sit on a
+   * gated national suffix — Australia Post on `.com.au`, for instance.
+   *
+   * Used only to recognise that an email genuinely came from the body it talks
+   * about, so the impersonation signal does not fire on the organisation's own
+   * mail. Kept apart from `legitDomains` because that list short-circuits URL
+   * scoring to "safe" with government-specific copy, which would be wrong here:
+   * a link on a corporate domain still deserves normal scrutiny, and only the
+   * *sender* claim is being resolved.
+   *
+   * Add a domain only when the organisation is in `authorityMentions` and its
+   * real mail demonstrably comes from that domain. An entry here weakens a scam
+   * signal, so the bar is evidence, not plausibility.
+   *
+   * Optional: a pack with no researched entries omits it and the impersonation
+   * signal behaves exactly as before. Absent means "we have not checked", which
+   * is the safe default — never "no such domains exist".
+   */
+  authorityOwnDomains?: string[];
   /** Copy for the legit-domain pass; names the jurisdiction, so it's regional. */
   legitDomainFlag: string;
   /** Details line for the legit-domain pass. */
@@ -343,6 +364,7 @@ export interface RegionPack {
   identityReregFlag: string;
   fakeInvestmentPlatformFlag: (platform: string) => string;
   legitDomains: string[];
+  authorityOwnDomains: string[];
   legitDomainFlag: string;
   legitDomainDetails: string;
   senderIdFlag?: string;
