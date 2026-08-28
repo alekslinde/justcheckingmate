@@ -44,7 +44,7 @@ export type { PhoneIntel };
  * mode is mechanical: any short token collides eventually, and a new pack should
  * inherit the protection without anyone remembering to opt in.
  */
-const WORD_MATCH_MAX_LEN = 3;
+const WORD_MATCH_MAX_LEN = 4;
 function mentions(text: string, entry: string): boolean {
   const needle = entry.toLowerCase();
   if (needle.length > WORD_MATCH_MAX_LEN) return text.includes(needle);
@@ -455,19 +455,19 @@ export function checkSms(
   let score = 0;
   const lower = text.toLowerCase();
 
-  const urgencyHits = URGENCY_WORDS.filter((w) => lower.includes(w));
+  const urgencyHits = URGENCY_WORDS.filter((w) => mentions(lower, w));
   if (urgencyHits.length > 0) {
     flags.push(`Urgency language detected: "${urgencyHits.slice(0, 3).join('", "')}"`);
     score += Math.min(urgencyHits.length * 10, 35);
   }
 
-  const rewardHits = REWARD_WORDS.filter((w) => lower.includes(w));
+  const rewardHits = REWARD_WORDS.filter((w) => mentions(lower, w));
   if (rewardHits.length > 0) {
     flags.push(`Prize/reward language: "${rewardHits.slice(0, 2).join('", "')}"`);
     score += Math.min(rewardHits.length * 12, 40);
   }
 
-  const requestHits = REQUEST_WORDS.filter((w) => lower.includes(w));
+  const requestHits = REQUEST_WORDS.filter((w) => mentions(lower, w));
   if (requestHits.length > 0) {
     flags.push(`Asks for sensitive info: "${requestHits.slice(0, 2).join('", "')}"`);
     score += Math.min(requestHits.length * 15, 50);
