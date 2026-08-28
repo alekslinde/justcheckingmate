@@ -1,6 +1,6 @@
 {
   "name": "justcheckingmate",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "predev": "node scripts/copy-ocr-assets.mjs",
@@ -31,6 +31,10 @@
   "overrides": {
     "postcss": "^8.5.18",
     "sharp": "^0.35.3"
+  },
+  "allowScripts": {
+    "unrs-resolver": true,
+    "tesseract.js": false
   },
   "browserslist": [
     "> 0.5%",
