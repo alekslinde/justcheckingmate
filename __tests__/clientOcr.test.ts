@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
 import { canRunClientOcr } from "@/lib/clientOcr";
 import { readFileSync, existsSync } from "fs";
+import { execFileSync } from "child_process";
 import path from "path";
 
 // Client-side OCR is the privacy and cost win of roadmap Phase 0: the image is
@@ -66,6 +67,18 @@ describe("OCR asset wiring — the paths clientOcr requests must exist", () => {
   // A mismatch between the constants in lib/clientOcr.ts and what
   // scripts/copy-ocr-assets.mjs produces fails only in the browser, at upload
   // time, as a 404 inside a Web Worker. Assert the contract here instead.
+  //
+  // The assets are generated, not committed (see .gitignore), and CI runs the
+  // tests without a build — so run the copy script first rather than assuming
+  // someone has built locally. That makes this a test of the script's output,
+  // which is the contract that matters, instead of a test of ambient state.
+  beforeAll(() => {
+    execFileSync("node", ["scripts/copy-ocr-assets.mjs"], {
+      cwd: process.cwd(),
+      stdio: "pipe",
+    });
+  });
+
   const source = readFileSync(path.join(process.cwd(), "lib/clientOcr.ts"), "utf8");
 
   function constant(name: string): string {
