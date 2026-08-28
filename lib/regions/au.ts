@@ -225,6 +225,25 @@ const REWARD_WORDS = [
   "closed trading group",
 ];
 
+// Domains of organisations in authorityMentions whose real mail does NOT come
+// from a .gov.au address, so the trustedHostSuffixes rule cannot recognise them.
+//
+// Used ONLY to tell "this email names Australia Post" from "this email is from
+// Australia Post" — without it, a genuine parcel notification scored 38 and was
+// told to "verify directly via official channels", which is wrong advice for
+// mail that arrived through the official channel.
+//
+// Kept deliberately short. Each entry weakens a scam signal for that domain, so
+// the test is whether the organisation is in authorityMentions AND its real
+// mail demonstrably comes from here — not whether the brand is well known.
+// Matching is exact-or-subdomain (see isOwnDomainSender), so auspost.com.au and
+// track.auspost.com.au qualify while auspost.com.au.evil.tk does not.
+const AUTHORITY_OWN_DOMAINS = [
+  // Australia Post — in authorityMentions and in noLinkSenders; its consumer
+  // mail comes from auspost.com.au, not a government domain.
+  "auspost.com.au",
+];
+
 const LEGIT_DOMAINS = [
   "gov.au", "ato.gov.au", "mygov.gov.au", "centrelink.gov.au",
   "myhealth.gov.au", "australia.gov.au", "afp.gov.au", "accc.gov.au",
@@ -469,6 +488,7 @@ export const AU: RegionDefinition = {
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 
   legitDomains: LEGIT_DOMAINS,
+  authorityOwnDomains: AUTHORITY_OWN_DOMAINS,
   legitDomainFlag: "Verified Australian government domain",
   legitDomainDetails:
     "This looks like a legit Aussie government website. Still be cautious about what you're entering.",

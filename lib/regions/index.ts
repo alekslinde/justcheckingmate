@@ -88,6 +88,7 @@ function buildPack(region: RegionDefinition): RegionPack {
 
     typosquatBrands: region.typosquatBrands,
     trustedHostSuffixes: region.trustedHostSuffixes,
+    authorityOwnDomains: region.authorityOwnDomains ?? [],
     brandMentions: region.brandMentions,
     officialSenderNames: region.officialSenderNames,
 
