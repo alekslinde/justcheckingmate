@@ -190,3 +190,19 @@ describe("trailing-dot hostnames score the same as their plain form", () => {
     expect(dotted.verdict).toBe("safe");
   });
 });
+
+describe("display-name masking cannot lower a verdict", () => {
+  const body = "\n\nHi, please confirm your account details when you get a moment.";
+
+  it("scores a masked sender at least as high as the honest form", () => {
+    // The evasion: 37/suspicious → 17/safe before the fix.
+    const honest = checkEmail("From: attacker@evil-bank-support.tk" + body, undefined, "AU");
+    const masked = checkEmail(
+      'From: "noreply@ato.gov.au" <attacker@evil-bank-support.tk>' + body,
+      undefined,
+      "AU",
+    );
+    expect(masked.score).toBeGreaterThanOrEqual(honest.score);
+    expect(masked.verdict).not.toBe("safe");
+  });
+});
