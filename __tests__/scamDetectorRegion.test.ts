@@ -51,3 +51,56 @@ describe("analyzeContent region forwarding", () => {
     expect(unknown).toEqual(base);
   });
 });
+
+// ── SMS-only rules must not fire on email ─────────────────────────────────────
+//
+// checkEmail reuses checkSms for body content. Most signals are channel-
+// agnostic, but the no-link-sender rule is specifically about the 2024
+// commitment by the ATO, myGov, Medicare, Centrelink and Australia Post to
+// remove links from unsolicited *text messages*. Those bodies all send
+// legitimate email containing links, so firing this on an email flags ordinary
+// mail — and the flag text ("an SMS from one of these bodies with a clickable
+// link is a scam") then misdescribes what was checked.
+//
+// Found when a genuine Australia Post delivery notification scored 38.
+
+describe("the no-link-sender rule is SMS-only", () => {
+  const AUSPOST_EMAIL = [
+    "From: noreply@auspost.com.au",
+    "Subject: Your parcel is on its way",
+    "",
+    "Track your delivery at https://auspost.com.au/track",
+  ].join("\n");
+
+  it("does not fire on a legitimate agency email containing a link", () => {
+    const result = checkEmail(AUSPOST_EMAIL, undefined, "AU");
+    expect(result.flags.some((f) => /removed links from their unsolicited SMS/i.test(f))).toBe(false);
+  });
+
+  it("still fires on an SMS from a no-link sender that carries a link", () => {
+    // The rule's real job — this must keep working.
+    const sms = "Australia Post: your parcel is held. Pay the fee at http://auspost-redelivery.tk/fee";
+    const result = checkSms(sms, undefined, "AU");
+    expect(result.flags.some((f) => /removed links from their unsolicited SMS/i.test(f))).toBe(true);
+  });
+
+  it("scores a legitimate agency email lower than the same text as an SMS", () => {
+    // The channel distinction has to show up in the score, not just the flag.
+    const asEmail = checkEmail(AUSPOST_EMAIL, undefined, "AU");
+    const asSms = checkSms("Australia Post: track your delivery at https://auspost.com.au/track", undefined, "AU");
+    expect(asEmail.score).toBeLessThan(asSms.score);
+  });
+
+  it("leaves channel-agnostic signals firing on email", () => {
+    // Scoping one rule must not blunt the shared body analysis.
+    const scamEmail = [
+      "From: service@commbank-secure-login.tk",
+      "Subject: Urgent: account suspended",
+      "",
+      "Your account is suspended. Verify now at http://commbank-secure-login.tk/verify",
+    ].join("\n");
+    const result = checkEmail(scamEmail, undefined, "AU");
+    expect(result.verdict).toBe("likely_scam");
+    expect(result.flags.length).toBeGreaterThan(2);
+  });
+});
