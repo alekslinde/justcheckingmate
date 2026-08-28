@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent } from "@/lib/scamDetector";
 import { DEFAULT_REGION } from "@/lib/regions";
+import { normaliseForAnalysis } from "@/lib/urlSanitizer";
 
 // Phase 2 threads an optional region through every checker. These assert the
 // plumbing: omitting it must be identical to today's behaviour, and an
@@ -170,5 +171,22 @@ describe("authority mentions from the organisation's own domain", () => {
     const sms = "Australia Post: your parcel is held, pay at http://auspost-redelivery.tk/fee";
     const result = checkSms(sms, undefined, "AU");
     expect(result.flags.some((f) => /Claims to be from a government agency/i.test(f))).toBe(true);
+  });
+});
+
+describe("trailing-dot hostnames score the same as their plain form", () => {
+  // The bypass worked in both directions, so both are asserted.
+  it("does not let a scam evade the suspicious-TLD check", () => {
+    const plain = checkUrl(normaliseForAnalysis("http://commbank-secure-login.tk/verify"), undefined, "AU");
+    const dotted = checkUrl(normaliseForAnalysis("http://commbank-secure-login.tk./verify"), undefined, "AU");
+    expect(dotted.score).toBe(plain.score);
+    expect(dotted.verdict).toBe("likely_scam");
+  });
+
+  it("does not cost a legitimate domain its allowlist credit", () => {
+    const plain = checkUrl(normaliseForAnalysis("https://ato.gov.au/mytax"), undefined, "AU");
+    const dotted = checkUrl(normaliseForAnalysis("https://ato.gov.au./mytax"), undefined, "AU");
+    expect(dotted.score).toBe(plain.score);
+    expect(dotted.verdict).toBe("safe");
   });
 });
