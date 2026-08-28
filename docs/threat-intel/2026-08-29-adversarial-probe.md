@@ -1,7 +1,7 @@
 # Adversarial probe — 2026-08-29
 
-*Targets: `lib/urlSanitizer.ts`, `lib/emailHeaders.ts`. First run of this
-document type.*
+*Targets: `lib/urlSanitizer.ts`, `lib/emailHeaders.ts`, `lib/forwardedEmail.ts`.
+First run of this document type.*
 
 ---
 
@@ -11,6 +11,7 @@ document type.*
 |---|---|---|---|
 | P1 — Display-name address masking | **HIGH** | #210 | ✅ Shipped |
 | P2 — Trailing-dot FQDN bypass | MEDIUM | #209 | ✅ Shipped |
+| P3 — Content hidden above a forward marker | **HIGH** | #211 | ✅ Shipped |
 
 ---
 
@@ -107,6 +108,48 @@ place for closing this class of bypass. Shipped in #209.
 
 ---
 
+## P3 — Content hidden above a forward marker (HIGH)
+
+**Target:** `lib/forwardedEmail.ts`, `unwrapForwarded()`
+
+The unwrapper exists to reach the original scam inside a forward, and took
+everything **after** the earliest forward marker as that original. Appending a
+marker plus an innocuous block therefore hid the real content above it:
+
+```
+Your myGov account is locked. Verify now at https://mygov-verify.tk/unlock
+
+---------- Forwarded message ---------
+From: noreply@ato.gov.au
+Subject: Receipt
+
+Thanks for your payment.
+```
+
+**Measured against the live detector:**
+
+| Body | Score |
+|---|---|
+| Scam alone | `email:100` + `url:85` — likely scam, URL flagged |
+| Same scam, marker appended | **`email:10`** — malicious URL absent from the analysis entirely |
+
+**More serious than P1**, for three reasons: the attacker controls the whole
+body so it costs nothing; it hides the URL rather than merely lowering a score;
+and it targets the path the **live forward-to-us feature** runs on, which was
+enabled for real users the day before this probe.
+
+**Fix:** keep the lead-in text as well, rather than choosing between the two.
+The quoted original still leads, so `parseEmailHeaders` — which reads the first
+header block — continues to see the original's headers rather than the
+forwarder's.
+
+**FP risk: NONE measurable.** The lead-in is normally the forwarder's own "is
+this real?" note: short, harmless, and cheap to analyse. Genuine forwards score
+identically (`email:100` + `url:85` before and after), and all 1386 existing
+tests passed unmodified.
+
+---
+
 ## Held up — attacks that did not work
 
 Recorded so the next probe doesn't re-test them. All scored against the AU pack.
@@ -147,7 +190,7 @@ Nothing crashed, and nothing read `safe`.
 |---|---|
 | `lib/phoneIntel.ts` | Parsing is `libphonenumber-js`, heavily tested upstream. Our own logic is prefix lists and scoring, where an evasion means changing the number itself — which changes where the call goes. Low expected yield. |
 | Region packs (`lib/regions/`) | The pack-shadowing guard (#198) and word-boundary fix (#208) already cover the known collision classes. Worth a pass once a new pack is authored. |
-| `emailDistiller` / `forwardedEmail` | Untouched this run. Forwarded-mail unwrapping is attacker-influenced and structurally similar to the header parsing that yielded P1 — **the strongest candidate for the next probe.** |
+| `emailDistiller` | Not probed. `forwardedEmail` was, yielding P3; the distiller is the remaining half of that path. |
 | Multi-part MIME / attachment names | Not currently parsed for scoring, so nothing to evade yet. |
 
 ---

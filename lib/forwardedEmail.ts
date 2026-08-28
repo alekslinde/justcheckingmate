@@ -174,7 +174,24 @@ export function unwrapForwarded(raw: string): UnwrappedEmail {
 
   const { body } = splitHeadersBody(raw);
   const inline = findInline(body);
-  if (inline) return { raw: inline, source: "inline" };
+  if (inline) {
+    // Keep whatever preceded the marker as well, rather than analysing only the
+    // quoted original. Dropping it is an evasion an attacker gets for free:
+    // append "---------- Forwarded message ---------" plus an innocuous block
+    // to a scam, and the real content sits ABOVE the marker and is discarded.
+    // Measured at the time of the fix, that took a myGov phishing email from
+    // 100/likely_scam (with its URL flagged) to 10, with the malicious link
+    // gone from the analysis entirely.
+    //
+    // The lead-in is usually the forwarder's own "have a look at this" note, so
+    // it is almost always short and harmless; analysing it costs nothing and
+    // closes the hole. The quoted original still leads, so header parsing —
+    // which reads the FIRST header block — continues to see the original's
+    // headers rather than the forwarder's.
+    const leadIn = body.slice(0, body.indexOf(inline.split(/\r?\n/)[0] ?? "")).trim();
+    const combined = leadIn ? `${inline}\n\n${leadIn}` : inline;
+    return { raw: combined, source: "inline" };
+  }
 
   return { raw, source: "toplevel" };
 }
