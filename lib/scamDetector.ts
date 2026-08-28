@@ -370,7 +370,26 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
 // SMS checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkSms(text: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+/**
+ * Options for the shared message-body scoring in checkSms.
+ *
+ * `channel` exists because checkEmail reuses this function for body content.
+ * Almost every signal is channel-agnostic — urgency, reward bait, payment
+ * requests read the same in either — but a few are specifically about SMS, and
+ * firing those on an email produces a confident, wrongly-worded verdict.
+ */
+export interface MessageCheckOptions {
+  /** Where the text came from. Defaults to "sms", preserving prior behaviour. */
+  channel?: "sms" | "email";
+}
+
+export function checkSms(
+  text: string,
+  blocklist?: Set<string>,
+  region?: RegionInput,
+  options?: MessageCheckOptions,
+): CheckResult {
+  const channel = options?.channel ?? "sms";
   const PACK = resolveRegionPack(region);
   const {
     urgencyWords: URGENCY_WORDS,
@@ -587,7 +606,14 @@ export function checkSms(text: string, blocklist?: Set<string>, region?: RegionI
     // link alongside one of these is a scam. Scoped to the confirmed no-link
     // senders so the flag wording stays accurate (toll operators, by contrast,
     // do use links).
-    if (urlMatch && mentionsAny(lower, PACK.noLinkSenders)) {
+    //
+    // SMS ONLY. The 2024 commitment covers unsolicited text messages, not
+    // email: Australia Post, myGov and the ATO all send legitimate email with
+    // clickable links, so applying this to an email flags ordinary mail — and
+    // the flag text ("an SMS from one of these bodies...") is then plainly
+    // wrong about what was checked. Found when a genuine Australia Post
+    // delivery notification scored 38/suspicious on this rule.
+    if (channel === "sms" && urlMatch && mentionsAny(lower, PACK.noLinkSenders)) {
       flags.push(PACK.noLinkSendersFlag);
       score += 15;
     }
@@ -716,7 +742,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   // it every email check ran the default (AU) signal set regardless of the
   // caller's region, so a UK email was scored against Australian agencies and
   // brands while the URL and SMS checkers correctly used the UK pack.
-  const smsCheck = checkSms(text, blocklist, region);
+  const smsCheck = checkSms(text, blocklist, region, { channel: "email" });
   flags.push(...smsCheck.flags);
   score += Math.floor(smsCheck.score * 0.7); // Email gets a bit more lenience
 
