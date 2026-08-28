@@ -70,15 +70,18 @@ const HOSTILE_INPUTS = [
  *  2. It records rather than asserts, so each test decides what "forbidden"
  *     means for the path it exercises.
  *
- * SCOPE — what this does NOT cover. Only global fetch is intercepted. The
- * route's contract also names DNS lookups and socket connections, and a leak
- * via node:dns, node:net or node:https would pass every test in this file.
- * Module mocking does not reach a dynamic import inside already-loaded
- * production code, so catching that needs a different mechanism (a network
- * sandbox, or an eslint rule banning those imports from lib/). Stated plainly
- * rather than papered over: fetch is how every current call site reaches the
- * network, and this closes that door, but the guarantee is narrower than the
- * comment in app/api/check/route.ts.
+ * SCOPE. Only global fetch is intercepted here. Module mocking does not reach a
+ * dynamic import inside already-loaded production code, so a leak via node:dns,
+ * node:net or node:https would pass every test in this file.
+ *
+ * That half is covered by lint instead: eslint.config.mjs bans those imports
+ * from lib/, app/ and components/, and __tests__/engineNetworkImports.test.ts
+ * asserts the rule actually fires. Between the two, all three channels the
+ * route contract names — HTTP request, DNS lookup, socket connection — are
+ * enforced rather than merely documented.
+ *
+ * Still not covered: a transitive leak through a third-party dependency, which
+ * neither mechanism sees. Stated plainly rather than papered over.
  */
 function interceptNetwork() {
   const contacted: string[] = [];
