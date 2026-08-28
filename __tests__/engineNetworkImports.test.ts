@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { execFileSync } from "child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -25,6 +25,14 @@ import path from "path";
 //     sits inside the tsconfig include and the lint glob and is untracked, so
 //     an interrupted run strands a rule-violating file that breaks the next
 //     lint and is committable.
+
+// Every case here spawns `npx eslint`, which costs ~1.7s warm and noticeably
+// more on a cold runner while npx resolves and eslint boots. Vitest's 5s
+// default was enough locally but not in CI, where the first test timed out at
+// 5208ms while every later one passed in ~1700ms — a flake, not a failure.
+// Scoped to this file: a slow subprocess test should not license slow tests
+// everywhere else.
+vi.setConfig({ testTimeout: 30_000 });
 
 const PRIVACY_RULES = new Set(["no-restricted-imports", "no-restricted-syntax"]);
 
