@@ -404,7 +404,7 @@ describe("getPublicReports", () => {
       type: "url",
       // content is passed through defangText — URLs are defanged; stripTrackingParams
       // normalises bare domains to include a trailing slash
-      content: "hxtps://scam[.]com/",
+      content: "hxxps://scam[.]com/",
       submittedAt: 1700000000000,
     });
   });
@@ -417,8 +417,8 @@ describe("getPublicReports", () => {
 
     const reports = await getPublicReports();
     expect(reports[0].content).not.toContain("https://");
-    expect(reports[0].content).toContain("hxtps://evil[.]com/phish");
-    expect(reports[0].content).toContain("hxtp://bad[.]tk");
+    expect(reports[0].content).toContain("hxxps://evil[.]com/phish");
+    expect(reports[0].content).toContain("hxxp://bad[.]tk");
   });
 
   it("applies PII scrubbing to the description", async () => {
@@ -445,7 +445,7 @@ describe("getPublicReports", () => {
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
     const reports = await getPublicReports();
-    expect(reports[0].scamUrl).toBe("hxtps://fake-ato[.]xyz/verify");
+    expect(reports[0].scamUrl).toBe("hxxps://fake-ato[.]xyz/verify");
   });
 
   it("defangs scam_email in returned reports", async () => {

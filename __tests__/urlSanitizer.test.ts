@@ -11,12 +11,12 @@ import {
 } from "@/lib/urlSanitizer";
 
 describe("defang", () => {
-  it("converts https to hxtps", () => {
-    expect(defang("https://evil.com")).toBe("hxtps://evil[.]com");
+  it("converts https to hxxps", () => {
+    expect(defang("https://evil.com")).toBe("hxxps://evil[.]com");
   });
 
-  it("converts http to hxtp", () => {
-    expect(defang("http://evil.com")).toBe("hxtp://evil[.]com");
+  it("converts http to hxxp", () => {
+    expect(defang("http://evil.com")).toBe("hxxp://evil[.]com");
   });
 
   it("converts ftp to fxp", () => {
@@ -25,14 +25,13 @@ describe("defang", () => {
 
   it("replaces all dots in the URL", () => {
     expect(defang("https://sub.evil.co.uk/path")).toBe(
-      "hxtps://sub[.]evil[.]co[.]uk/path"
+      "hxxps://sub[.]evil[.]co[.]uk/path"
     );
   });
 
-  it("handles uppercase HTTPS (first T→x, second T→X)", () => {
-    // "HTTPS" → replace first T case-insensitively with "x" → "HxTPS"
-    // then replace uppercase T → "HxXPS"
-    expect(defang("HTTPS://Evil.Com")).toBe("HxXPS://Evil[.]Com");
+  it("handles uppercase HTTPS, preserving the case of each replaced T", () => {
+    expect(defang("HTTPS://Evil.Com")).toBe("HXXPS://Evil[.]Com");
+    expect(defang("HtTpS://Evil.Com")).toBe("HxXpS://Evil[.]Com");
   });
 
   it("does not transform strings that do not start with a known protocol", () => {
@@ -141,14 +140,14 @@ describe("safeDisplayUrl", () => {
 
   it("handles URLs with no tracking params", () => {
     const result = safeDisplayUrl("https://evil.com/phish");
-    expect(result).toBe("hxtps://evil[.]com/phish");
+    expect(result).toBe("hxxps://evil[.]com/phish");
   });
 });
 
 describe("defangText", () => {
   it("defangs URLs embedded in plain text", () => {
     const result = defangText("Click here: https://evil.com/phish");
-    expect(result).toContain("hxtps://evil[.]com/phish");
+    expect(result).toContain("hxxps://evil[.]com/phish");
     expect(result).not.toContain("https://evil.com");
   });
 
@@ -158,8 +157,8 @@ describe("defangText", () => {
     );
     expect(result).not.toContain("https://");
     expect(result).not.toContain("http://");
-    expect(result).toContain("hxtps://evil[.]com");
-    expect(result).toContain("hxtp://bad[.]tk/x");
+    expect(result).toContain("hxxps://evil[.]com");
+    expect(result).toContain("hxxp://bad[.]tk/x");
   });
 
   it("leaves text with no URLs unchanged", () => {

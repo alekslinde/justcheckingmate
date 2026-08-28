@@ -1,5 +1,5 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
-import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanitizer";
+import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged } from "@/lib/urlSanitizer";
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "@/lib/urlExpander";
@@ -1094,6 +1094,86 @@ export interface AnalyzedIdentifier {
 const MAX_CARDS = 5;
 const URL_GLOBAL = /https?:\/\/[^\s<>"']+/gi;
 
+// ── Schemeless hostnames ──────────────────────────────────────────────────────
+//
+// Scam SMS routinely omits the scheme ("Login at commbank-secure-login.tk/auth"),
+// and URL_GLOBAL requires http(s)://, so those submissions produced no URL card
+// at all. detectType already treats a leading "www." as a URL, so the same host
+// scored 85 with the prefix and 0 without it — an inconsistency, not a policy.
+//
+// Matching bare hostnames generally is unsafe: "report.docx", "README.md" and
+// "node.js" all look like hosts. Two rules keep this tight:
+//
+//   1. The TLD must be one the region packs already care about — the curated
+//      suspiciousTlds list plus the mainstream TLDs real scams impersonate.
+//      A file extension is only a false positive if it collides with one of
+//      those, which is why .zip and .mov are excluded here despite being on
+//      the suspicious list (they are file extensions far more often than hosts).
+//   2. It must not be part of an email address or a file path, checked at the
+//      match site rather than in the pattern.
+//
+// Anything outside that stays unmatched. A missed scam URL degrades to the
+// message-level analysis that already runs; a false positive puts a scary URL
+// card on an innocent message, so the asymmetry favours caution.
+const BARE_HOST_TLDS = new Set([
+  // Mainstream TLDs that legitimate brands use and scams impersonate.
+  "com", "net", "org", "co", "io", "app", "info", "biz", "me", "tv", "cc",
+  // Country codes for the covered regions.
+  "au", "uk", "nz", "ie", "ca", "us",
+]);
+
+// Excluded despite appearing in suspiciousTlds: as bare tokens these are file
+// extensions far more often than hostnames, and a URL card on "archive.zip"
+// would be a false positive on ordinary correspondence. They are still scored
+// normally when they appear with a scheme.
+const FILE_EXTENSION_TLDS = new Set(["zip", "mov"]);
+
+const BARE_HOST_GLOBAL =
+  /(?<![\w@.\/\\-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(\/[^\s<>"']*)?/gi;
+
+/**
+ * Schemeless hostnames in free text that are worth analysing as URLs.
+ *
+ * `suspiciousTlds` comes from the resolved region pack, so a host is picked up
+ * when its TLD is either mainstream or already flagged as abuse-prone.
+ */
+function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
+  const flagged = new Set(
+    suspiciousTlds
+      .map((t) => t.replace(/^\./, "").toLowerCase())
+      .filter((t) => !FILE_EXTENSION_TLDS.has(t)),
+  );
+
+  const found: string[] = [];
+  for (const match of text.matchAll(BARE_HOST_GLOBAL)) {
+    const [whole, hostname] = match;
+    const labels = hostname.toLowerCase().split(".");
+    const tld = labels[labels.length - 1];
+
+    const isFlaggedTld = flagged.has(tld);
+    if (!BARE_HOST_TLDS.has(tld) && !isFlaggedTld) continue;
+
+    // A mainstream TLD on its own is usually a mention, not a link — "send me
+    // the notes.org file", "our team is dev.io". Requiring a path or a www.
+    // prefix keeps those from raising a URL card on an innocent message, while
+    // still catching "auspost.com.au/track". An abuse-prone TLD needs no such
+    // corroboration: nobody mentions a .tk domain in passing.
+    const hasPath = Boolean(match[2]);
+    const hasWww = /^www\./i.test(hostname);
+    if (!isFlaggedTld && !hasPath && !hasWww) continue;
+    // A single label plus TLD is the minimum for a real host; "e.g" and "No.5"
+    // are already excluded by the TLD check, this guards the rest.
+    if (labels.length < 2 || labels.some((l) => l.length === 0)) continue;
+
+    // Skip anything already carried by a scheme'd URL — URL_GLOBAL has it.
+    const before = text.slice(0, match.index ?? 0);
+    if (/https?:\/\/\S*$/i.test(before)) continue;
+
+    found.push(whole.replace(/[.,;:!?)]+$/, ""));
+  }
+  return found;
+}
+
 // Expands a shortened URL and merges the destination analysis into the base result.
 // If expansion fails or times out, the base result is returned unchanged.
 async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput, fetcher?: ExpandFetch): Promise<CheckResult> {
@@ -1136,18 +1216,32 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput, options?: AnalyzeOptions): Promise<AnalyzedIdentifier[]> {
-  const text = content.trim();
-  if (!text) return [];
+  const raw = content.trim();
+  if (!raw) return [];
+
+  // Refang before anything else looks at the input. Defanging ("hxxp://evil[.]tk")
+  // is how security-aware people share a suspicious link without making it
+  // clickable, so it is ordinary input — but every extractor here requires a
+  // literal http(s)://, so those submissions previously matched nothing and fell
+  // through to generic message analysis scoring 0. The people most careful with
+  // a scam link got the least protection, and our own defanged verdict output
+  // could not be pasted back in.
+  //
+  // This is a string transformation for analysis only; nothing is ever fetched.
+  const wasDefanged = isDefanged(raw);
+  const text = wasDefanged ? refang(raw) : raw;
 
   const type = detectType(text);
   const ids = extractIdentifiers(text);
   const headers = parseEmailHeaders(text);
   const out: AnalyzedIdentifier[] = [];
 
-  // Distinct URLs found anywhere in the input (trailing punctuation trimmed).
-  const urls = Array.from(
-    new Set((text.match(URL_GLOBAL) || []).map((u) => u.replace(/[.,;:!?)]+$/, ""))),
-  ).slice(0, 3);
+  // Distinct URLs found anywhere in the input (trailing punctuation trimmed),
+  // plus schemeless hostnames — scam SMS routinely drops the scheme, and those
+  // previously produced no URL card at all. See extractBareHosts.
+  const schemed = (text.match(URL_GLOBAL) || []).map((u) => u.replace(/[.,;:!?)]+$/, ""));
+  const bare = extractBareHosts(text, resolveRegionPack(region).suspiciousTlds);
+  const urls = Array.from(new Set([...schemed, ...bare])).slice(0, 3);
 
   // Overall "message" assessment, by detected type.
   if (type === "email") {
