@@ -36,6 +36,12 @@
 # Tesseract OCR model — large binary, downloaded at runtime
 *.traineddata
 
+# Tesseract browser runtime — copied from node_modules by scripts/copy-ocr-assets.mjs
+# (npm run ocr-assets, and automatically on predev/prebuild). Reproducible, so
+# not committed; the language data in public/tessdata/ IS committed because it
+# ships with no package we depend on.
+/public/tesseract/
+
 # dev/audit scripts that aren't part of the app
 audit.mjs
 

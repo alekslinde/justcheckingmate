@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Tesseract browser runtime copied from node_modules by
+    // scripts/copy-ocr-assets.mjs — vendor minified output, not our source.
+    "public/tesseract/**",
   ]),
   // Treat a leading underscore as "deliberately unused". Needed for the
   // omit-a-key destructure idiom (`const { dropMe: _, ...rest } = obj`) and
