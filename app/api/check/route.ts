@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeContent } from "@/lib/scamDetector";
-import { incrementCheckCount } from "@/lib/reportStore";
+import { CHECK_RATE_LIMIT, checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
+import { clientIpFromHeaders } from "@/lib/geo";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { resolveRegion } from "@/lib/regionResolver";
 
@@ -16,6 +17,16 @@ import { resolveRegion } from "@/lib/regionResolver";
 
 export async function POST(req: NextRequest) {
   try {
+    // Throttle before parsing or analysing — this endpoint is public and
+    // unauthenticated, and analysis is the expensive part. The IP is used as a
+    // transient key only and is never stored.
+    if (!checkAndRecordRateLimit(`check:${clientIpFromHeaders(req.headers)}`, CHECK_RATE_LIMIT)) {
+      return NextResponse.json(
+        { error: "Too many checks — give it a minute and try again." },
+        { status: 429 },
+      );
+    }
+
     const { content, region }: { content: string; region?: string } = await req.json();
 
     if (!content?.trim()) {

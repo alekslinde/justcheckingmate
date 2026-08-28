@@ -41,3 +41,25 @@ export function locationFromHeaders(headers: Headers): string {
     return country;
   }
 }
+
+/**
+ * Client IP from the platform's forwarding header, or "unknown" when absent or
+ * malformed. Used ONLY as a transient rate-limiting key — never stored, and
+ * never written to the database (see the note at the top of this file).
+ *
+ * `x-forwarded-for` can carry a comma-separated chain; the first entry is the
+ * originating client. Values that don't look like an IPv4 or IPv6 address are
+ * treated as "unknown" rather than trusted, so a spoofed header degrades to
+ * sharing one bucket instead of forging a fresh one per request.
+ *
+ * Takes Headers rather than NextRequest so this stays framework-free and
+ * usable from any route handler or worker.
+ */
+export function clientIpFromHeaders(headers: Headers): string {
+  const fwd = headers.get("x-forwarded-for");
+  if (fwd) {
+    const ip = fwd.split(",")[0].trim();
+    if (/^[\d.]+$/.test(ip) || /^[a-f0-9:]+$/i.test(ip)) return ip;
+  }
+  return "unknown";
+}

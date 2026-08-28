@@ -13,11 +13,23 @@ vi.mock("@/lib/reportStore", async (importOriginal) => {
 import { POST } from "@/app/api/check/route";
 import { NextRequest } from "next/server";
 import { DEFAULT_REGION } from "@/lib/regions";
+import { CHECK_RATE_LIMIT } from "@/lib/reportStore";
+
+// The route's rate limiter is module-level state shared across this file, keyed
+// on x-forwarded-for. Each request gets a unique synthetic IP so tests can never
+// throttle each other — without this the suite would start failing on whichever
+// test happened to be the 31st. Rate-limit tests below opt into a fixed IP.
+let ipCounter = 0;
 
 function check(body: unknown, headers: Record<string, string> = {}): NextRequest {
+  ipCounter += 1;
   return new NextRequest("http://localhost/api/check", {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: {
+      "content-type": "application/json",
+      "x-forwarded-for": `10.0.0.${ipCounter % 254}`,
+      ...headers,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -71,5 +83,65 @@ describe("POST /api/check region resolution", () => {
     const a = await (await POST(check({ content: SCAM }))).json();
     const b = await (await POST(check({ content: SCAM, region: DEFAULT_REGION }))).json();
     expect(a.results).toEqual(b.results);
+  });
+});
+
+describe("POST /api/check rate limiting", () => {
+  // /api/check is public and unauthenticated. Before Phase 0 it had no limiter
+  // at all, so these tests are the regression guard on that gap.
+  function checkFrom(ip: string): NextRequest {
+    return new NextRequest("http://localhost/api/check", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ content: SCAM }),
+    });
+  }
+
+  it("allows a normal burst of checks from one client", async () => {
+    const ip = "203.0.113.10";
+    for (let i = 0; i < CHECK_RATE_LIMIT; i++) {
+      expect((await POST(checkFrom(ip))).status).toBe(200);
+    }
+  });
+
+  it("returns 429 once the budget is spent", async () => {
+    const ip = "203.0.113.11";
+    for (let i = 0; i < CHECK_RATE_LIMIT; i++) await POST(checkFrom(ip));
+
+    const res = await POST(checkFrom(ip));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toMatch(/too many checks/i);
+  });
+
+  it("throttles per client, so one abuser cannot block everyone else", async () => {
+    const noisy = "203.0.113.12";
+    for (let i = 0; i < CHECK_RATE_LIMIT + 1; i++) await POST(checkFrom(noisy));
+    expect((await POST(checkFrom(noisy))).status).toBe(429);
+
+    expect((await POST(checkFrom("203.0.113.13"))).status).toBe(200);
+  });
+
+  it("throttles before analysing, so a spent budget costs no work", async () => {
+    const ip = "203.0.113.14";
+    for (let i = 0; i < CHECK_RATE_LIMIT; i++) await POST(checkFrom(ip));
+
+    // Malformed body would normally 400 during parsing; the 429 proves the
+    // limiter short-circuits ahead of both parsing and analysis.
+    const res = await POST(
+      new NextRequest("http://localhost/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": ip },
+        body: "not json",
+      }),
+    );
+    expect(res.status).toBe(429);
+  });
+
+  it("shares no budget with report submissions", async () => {
+    // The submission budget is 4; check must not inherit it.
+    const ip = "203.0.113.15";
+    for (let i = 0; i < 5; i++) {
+      expect((await POST(checkFrom(ip))).status).toBe(200);
+    }
   });
 });

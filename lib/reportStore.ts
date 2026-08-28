@@ -33,6 +33,16 @@ export interface Report {
 
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT = 4;
+
+/**
+ * Budget for read-only analysis (`/api/check`), which is the core user action
+ * and gets repeated legitimately — someone working through a suspicious inbox
+ * may check a dozen things in a sitting. The submission budget of 4 exists to
+ * throttle writes to the shared database and is far too tight here; this one
+ * only needs to stop automated abuse of a public, unauthenticated endpoint.
+ */
+export const CHECK_RATE_LIMIT = 30;
+
 const rateLimiter = new Map<string, number[]>();
 
 function cleanRateLimiter() {
@@ -44,12 +54,23 @@ function cleanRateLimiter() {
   }
 }
 
-export function checkAndRecordRateLimit(ip: string): boolean {
+/**
+ * Records a hit against `key` and reports whether it is within budget.
+ *
+ * Callers namespace the key (`bug:`, `inbound:`, `check:`) so surfaces share
+ * this limiter without starving each other. `limit` defaults to the submission
+ * budget; pass CHECK_RATE_LIMIT for read-only analysis.
+ *
+ * NOTE: this is per-process memory. On serverless each instance keeps its own
+ * counts, so the effective limit is looser than it reads under horizontal
+ * scaling. It stops casual scripted abuse, not a distributed attacker.
+ */
+export function checkAndRecordRateLimit(key: string, limit: number = RATE_LIMIT): boolean {
   cleanRateLimiter();
   const now = Date.now();
-  const times = (rateLimiter.get(ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
-  if (times.length >= RATE_LIMIT) return false;
-  rateLimiter.set(ip, [...times, now]);
+  const times = (rateLimiter.get(key) || []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (times.length >= limit) return false;
+  rateLimiter.set(key, [...times, now]);
   return true;
 }
 
