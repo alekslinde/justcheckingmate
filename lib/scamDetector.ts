@@ -5,24 +5,13 @@ import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl } from "@/lib/urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
 import { KEYS_BY_POST_PHRASES } from "@/lib/regions/base";
+import type { CheckResult } from "@/lib/engineTypes";
 
-export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";
+// ScamType and CheckResult live in engineTypes.ts to break the import cycle
+// with detectType (see the note there). Re-exported here so every existing
+// consumer keeps importing them from the scorer.
+export type { ScamType, CheckResult } from "@/lib/engineTypes";
 export type { PhoneIntel };
-
-export interface CheckResult {
-  verdict: "safe" | "suspicious" | "likely_scam" | "unknown";
-  score: number; // 0-100, higher = more scammy
-  flags: string[];
-  details: string;
-  category?: string;
-  phoneIntel?: PhoneIntel;
-  expandedUrl?: string; // defanged real destination when the input was a shortened URL
-  // Detection coverage of the region pack that produced this result. Present on
-  // every result; consumers must not render a confident "safe" when this is
-  // "partial" or "none" — a low score there can mean "no rules matched" rather
-  // than "nothing wrong". See downgradeForCoverage.
-  coverage?: RegionCoverage;
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Signal lists
