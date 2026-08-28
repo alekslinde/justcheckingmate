@@ -18,8 +18,10 @@ function ident(
   verdict: CheckResult["verdict"],
   value = "",
   score = 0,
+  flags: string[] = [],
+  extra: Partial<CheckResult> = {},
 ): AnalyzedIdentifier {
-  return { kind, value, result: { verdict, score, flags: [], details: "" } };
+  return { kind, value, result: { verdict, score, flags, details: "", ...extra } };
 }
 
 function pixel(summary = "1 tracking pixel"): TrackingPixelReport {
@@ -161,5 +163,120 @@ describe("formatVerdictEmail", () => {
     });
     expect(email.html).not.toContain("<script>");
     expect(email.html).toContain("&lt;script&gt;");
+  });
+});
+
+// ── Explaining the verdict ────────────────────────────────────────────────────
+//
+// The email once printed "Link evil[.]tk: likely scam" and nothing else: the
+// per-result flags were computed and then discarded. That tells someone to be
+// afraid without teaching them what to look for, which is the opposite of what
+// this project is for. These cover the reasoning now reaching the reader.
+
+describe("formatVerdictEmail — explaining why", () => {
+  it("lists the reasons under each identifier, not just its verdict", () => {
+    const email = formatVerdictEmail({
+      results: [
+        ident("url", "likely_scam", "http://evil.tk/login", 90, [
+          "Dodgy top-level domain (.tk) — commonly used by scammers",
+          "Contains login/verify/secure keywords — common in phishing URLs",
+        ]),
+      ],
+      emailFlags: [],
+      pixelReport: null,
+    });
+
+    expect(email.text).toContain("Dodgy top-level domain");
+    expect(email.text).toContain("Contains login/verify/secure keywords");
+    expect(email.html).toContain("Dodgy top-level domain");
+  });
+
+  it("defangs any domain appearing inside a reason", () => {
+    // Reasons quote attacker-controlled content; a live link in the verdict
+    // email would hand the reader the very thing we told them not to click.
+    const email = formatVerdictEmail({
+      results: [ident("url", "likely_scam", "http://evil.tk", 90, ["Impersonates commbank.com.au"])],
+      emailFlags: [],
+      pixelReport: null,
+    });
+
+    expect(email.text).toContain("commbank[.]com[.]au");
+    expect(email.text).not.toMatch(/commbank\.com\.au/);
+  });
+
+  it("caps a long reason list so the verdict is not buried", () => {
+    const many = Array.from({ length: 9 }, (_, i) => `Reason number ${i + 1}`);
+    const email = formatVerdictEmail({
+      results: [ident("url", "likely_scam", "http://evil.tk", 90, many)],
+      emailFlags: [],
+      pixelReport: null,
+    });
+
+    expect(email.text).toContain("Reason number 1");
+    expect(email.text).not.toContain("Reason number 9");
+    expect(email.text).toMatch(/and 5 more signals/);
+  });
+
+  it("uses the singular when exactly one reason is hidden", () => {
+    const many = Array.from({ length: 5 }, (_, i) => `Reason ${i + 1}`);
+    const email = formatVerdictEmail({
+      results: [ident("url", "likely_scam", "http://evil.tk", 90, many)],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    expect(email.text).toMatch(/and 1 more signal(?!s)/);
+  });
+
+  it("leads with the resolved destination of a shortened link", () => {
+    // The single most useful fact for a shortened URL, so it goes first rather
+    // than sitting among the other signals.
+    const email = formatVerdictEmail({
+      results: [
+        ident("url", "likely_scam", "https://bit.ly/x", 90, ["URL shortener detected"], {
+          expandedUrl: "hxxp://evil[.]tk/steal",
+        }),
+      ],
+      emailFlags: [],
+      pixelReport: null,
+    });
+
+    const lines = email.text.split("\n");
+    const destination = lines.findIndex((l) => l.includes("Real destination"));
+    const shortener = lines.findIndex((l) => l.includes("URL shortener detected"));
+    expect(destination).toBeGreaterThan(-1);
+    expect(destination).toBeLessThan(shortener);
+  });
+
+  it("says what was checked when nothing was flagged, rather than going quiet", () => {
+    // Silence reads as "we didn't bother"; naming the checks is the reassurance.
+    const email = formatVerdictEmail({
+      results: [ident("url", "safe", "https://auspost.com.au/track", 0)],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    expect(email.text).toMatch(/nothing matched/i);
+  });
+
+  it("escapes HTML coming from a per-result reason", () => {
+    // Same injection surface as emailFlags, via the new path.
+    const email = formatVerdictEmail({
+      results: [ident("url", "suspicious", "http://x.test", 40, ["<img src=x onerror=alert(1)>"])],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    expect(email.html).not.toContain("<img src=x");
+    expect(email.html).toContain("&lt;img");
+  });
+
+  it("references no external resource, so the reply cannot leak a read receipt", () => {
+    // The recipient may be a scam victim; a remote image would disclose their
+    // IP and the fact they opened it.
+    const email = formatVerdictEmail({
+      results: [ident("url", "likely_scam", "http://evil.tk", 90, ["Dodgy TLD"])],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    expect(email.html).not.toMatch(/src\s*=\s*["']?https?:/i);
+    expect(email.html).not.toMatch(/<link|@import|url\(/i);
   });
 });

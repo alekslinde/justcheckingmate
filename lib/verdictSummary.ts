@@ -130,11 +130,13 @@ export function overallCoverage(results: AnalyzedIdentifier[]): RegionCoverage {
 // the body — the reply must never contain a live link back to the scam.
 
 // One-sentence headline per verdict, plus an emoji the reply can lead with.
-const VERDICT_HEADLINE: Record<Verdict, { emoji: string; line: string }> = {
-  likely_scam: { emoji: "🚨", line: "This looks like a scam." },
-  suspicious:  { emoji: "⚠️", line: "This looks suspicious — treat it with caution." },
-  unknown:     { emoji: "❓", line: "We couldn't confirm this either way — stay cautious." },
-  safe:        { emoji: "✅", line: "We didn't find scam signals in this — but stay alert." },
+// accent/tint colour the headline block so the verdict is legible at a glance
+// without relying on the emoji, which some clients render inconsistently.
+const VERDICT_HEADLINE: Record<Verdict, { emoji: string; line: string; accent: string; tint: string }> = {
+  likely_scam: { emoji: "🚨", line: "This looks like a scam.", accent: "#c0392b", tint: "#fdeceb" },
+  suspicious:  { emoji: "⚠️", line: "This looks suspicious — treat it with caution.", accent: "#d68910", tint: "#fdf6e3" },
+  unknown:     { emoji: "❓", line: "We couldn't confirm this either way — stay cautious.", accent: "#7f8c8d", tint: "#f4f6f6" },
+  safe:        { emoji: "✅", line: "We didn't find scam signals in this — but stay alert.", accent: "#1e8449", tint: "#eafaf1" },
 };
 
 export interface VerdictEmailInput {
@@ -158,6 +160,21 @@ const KIND_LABEL: Record<AnalyzedIdentifier["kind"], string> = {
   url: "Link", email: "Sender", phone: "Phone", message: "Message",
 };
 
+/**
+ * Reasons shown per identifier before collapsing into "…and N more".
+ *
+ * A heavily-flagged message can trip a dozen rules; printing all of them buries
+ * the verdict in a wall of text on a phone. The flags are ordered by the
+ * detector in roughly descending importance, so the first few carry most of the
+ * explanation.
+ */
+const MAX_REASONS_PER_ITEM = 4;
+
+interface BreakdownItem {
+  heading: string;
+  reasons: string[];
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -174,11 +191,25 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
   const { verdict } = overallVerdict(results, pixelReport, emailFlags, trackingFindings.length > 0);
   const head = VERDICT_HEADLINE[verdict];
 
-  // Breakdown lines — defanged identifier + its per-item status.
-  const breakdown: string[] = results.map((r) => {
+  // Breakdown — each identifier, its status, and WHY. The reasons are the point:
+  // "Link evil[.]tk: likely scam" with nothing under it tells someone to be
+  // afraid without teaching them what to look for next time. The detector
+  // already writes lay-readable flags ("Dodgy top-level domain (.tk) — commonly
+  // used by scammers"); this surfaces them instead of discarding them.
+  const breakdown: BreakdownItem[] = results.map((r) => {
     const label = KIND_LABEL[r.kind];
     const value = r.kind !== "message" && r.value ? ` ${defangValue(r.kind, r.value)}` : "";
-    return `${label}${value}: ${r.result.verdict.replace("_", " ")}`;
+    const reasons = r.result.flags.slice(0, MAX_REASONS_PER_ITEM).map((f) => defangFlag(f));
+    const hidden = Math.max(0, r.result.flags.length - MAX_REASONS_PER_ITEM);
+    if (hidden > 0) reasons.push(`…and ${hidden} more signal${hidden === 1 ? "" : "s"}`);
+
+    // The resolved destination of a shortened link is the single most useful
+    // fact we can give someone, so it leads rather than sitting among the flags.
+    if (r.result.expandedUrl) {
+      reasons.unshift(`Real destination: ${r.result.expandedUrl}`);
+    }
+
+    return { heading: `${label}${value}: ${r.result.verdict.replace("_", " ")}`, reasons };
   });
   const flagLines = emailFlags.map((f) => defangFlag(f));
   // Tracking: prefer the broader findings when present; otherwise fall back to
@@ -203,12 +234,30 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     "details, contact IDCARE on 1800 595 160. You can also report scams to Scamwatch " +
     "(scamwatch.gov.au). We analysed the email on receipt and did not keep a copy.";
 
+  // When nothing was flagged, say what we looked at rather than going quiet.
+  // Silence reads as "we didn't bother"; naming the checks is the reassurance.
+  const nothingFound =
+    breakdown.length > 0 && breakdown.every((b) => b.reasons.length === 0) && flagLines.length === 0
+      ? "We checked the sender's details, the links, and the wording against our scam patterns, " +
+        "and nothing matched."
+      : "";
+
   // ── Plain text ──
   const textParts = [
     `${head.emoji} ${head.line}`,
     "",
-    ...(breakdown.length ? ["What we checked:", ...breakdown.map((b) => `  • ${b}`), ""] : []),
-    ...(flagLines.length ? ["Why:", ...flagLines.map((f) => `  • ${f}`), ""] : []),
+    ...(breakdown.length
+      ? [
+          "What we checked:",
+          ...breakdown.flatMap((b) => [
+            `  • ${b.heading}`,
+            ...b.reasons.map((r) => `      - ${r}`),
+          ]),
+          "",
+        ]
+      : []),
+    ...(nothingFound ? [nothingFound, ""] : []),
+    ...(flagLines.length ? ["About the sender:", ...flagLines.map((f) => `  • ${f}`), ""] : []),
     ...(coverageNote ? [coverageNote, ""] : []),
     footer,
     "",
@@ -216,15 +265,47 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
   ];
   const text = textParts.join("\n");
 
-  // ── Minimal HTML (no external resources, everything escaped) ──
+  // ── HTML ──
+  // Deliberately self-contained: everything is escaped and NO external resource
+  // is referenced. This email quotes attacker-controlled text, and a remote
+  // image would leak the recipient's IP and read status to whoever hosts it —
+  // unacceptable when the recipient may be a scam victim. Styling stays inline
+  // so it survives clients that strip <style>; the colour-coded accent bar is
+  // what makes the verdict readable at a glance on a phone.
   const li = (items: string[]) => items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
+
+  const breakdownHtml = breakdown
+    .map((b) => {
+      const reasons = b.reasons.length
+        ? `<ul style="margin:4px 0 0;padding-left:20px;color:#444;font-size:14px">${li(b.reasons)}</ul>`
+        : "";
+      return `<li style="margin-bottom:10px"><strong>${escapeHtml(b.heading)}</strong>${reasons}</li>`;
+    })
+    .join("");
+
   const htmlParts = [
-    `<p style="font-size:16px;font-weight:bold">${escapeHtml(`${head.emoji} ${head.line}`)}</p>`,
-    breakdown.length ? `<p><strong>What we checked:</strong></p><ul>${li(breakdown)}</ul>` : "",
-    flagLines.length ? `<p><strong>Why:</strong></p><ul>${li(flagLines)}</ul>` : "",
-    coverageNote ? `<p style="color:#8a6d3b;font-size:13px">${escapeHtml(coverageNote)}</p>` : "",
-    `<p style="color:#555;font-size:13px">${escapeHtml(footer)}</p>`,
-    `<p style="color:#888;font-size:13px">— Just Checking, Mate</p>`,
+    `<div style="max-width:600px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;` +
+      `font-size:15px;line-height:1.5;color:#222">`,
+    `<p style="font-size:18px;font-weight:bold;margin:0 0 16px;padding:12px 14px;` +
+      `border-left:4px solid ${head.accent};background:${head.tint};border-radius:4px">` +
+      `${escapeHtml(`${head.emoji} ${head.line}`)}</p>`,
+    breakdown.length
+      ? `<p style="margin:0 0 6px"><strong>What we checked</strong></p>` +
+        `<ul style="margin:0 0 16px;padding-left:20px">${breakdownHtml}</ul>`
+      : "",
+    nothingFound ? `<p style="margin:0 0 16px;color:#444">${escapeHtml(nothingFound)}</p>` : "",
+    flagLines.length
+      ? `<p style="margin:0 0 6px"><strong>About the sender</strong></p>` +
+        `<ul style="margin:0 0 16px;padding-left:20px;color:#444;font-size:14px">${li(flagLines)}</ul>`
+      : "",
+    coverageNote
+      ? `<p style="margin:0 0 16px;padding:10px 12px;background:#fdf6e3;border-radius:4px;` +
+        `color:#8a6d3b;font-size:13px">${escapeHtml(coverageNote)}</p>`
+      : "",
+    `<p style="margin:16px 0 0;padding-top:14px;border-top:1px solid #e5e5e5;` +
+      `color:#555;font-size:13px">${escapeHtml(footer)}</p>`,
+    `<p style="margin:10px 0 0;color:#888;font-size:13px">— Just Checking, Mate</p>`,
+    `</div>`,
   ];
   const html = htmlParts.filter(Boolean).join("\n");
 
