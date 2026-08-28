@@ -217,6 +217,22 @@ describe("Privacy invariant — a submitted URL is never visited", () => {
     expect(hostsIn(contacted)).not.toContain("commbank-secure-login.tk");
   });
 
+  it("does not contact a host recovered by refanging", async () => {
+    // Refanging turns "hxxp://evil[.]tk" into a parseable URL so it can be
+    // scored — which means text that was previously inert now yields a real
+    // host. That must make the URL analysable, never reachable.
+    const cards = await analyzeContent(
+      "Someone sent me hxxps://commbank-secure-login[.]tk/auth — is it real?",
+      undefined,
+      undefined,
+      { fetcher: fetch as never },
+    );
+
+    // Guard against vacuity: the refang path must actually have produced a URL.
+    expect(cards.some((c) => c.kind === "url"), "refang produced no url card").toBe(true);
+    expect(hostsIn(contacted)).not.toContain("commbank-secure-login.tk");
+  });
+
   it("still produces a verdict for every hostile input, with nothing contacted", async () => {
     // A trivially safe way to satisfy this invariant would be to stop analysing.
     // Assert the engine still does its job.

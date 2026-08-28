@@ -28,9 +28,64 @@ const TRACKING_PARAMS = new Set([
 // https://malicious.tk/phish → hxxps://malicious[.]tk/phish
 export function defang(url: string): string {
   return url
-    .replace(/^https?/i, (p) => p.replace(/t/i, "x").replace(/T/, "X"))
+    // http → hxxp, https → hxxps. Both t's, which is the actual convention —
+    // this replaced only the first, emitting the non-standard "hxtps://".
+    // Case is preserved per character so "HTTPS" defangs to "HXXPS".
+    .replace(/^https?/i, (p) =>
+      p.replace(/t/gi, (t) => (t === "T" ? "X" : "x")),
+    )
     .replace(/^ftp/i, "fxp")
     .replace(/\./g, "[.]");
+}
+
+// ── Refanging ─────────────────────────────────────────────────────────────────
+// The inverse of defang: turn a neutralised URL back into a parseable one for
+// ANALYSIS ONLY. Nothing here makes a request — the result is scored as a
+// string, exactly like any other input.
+//
+// Why this is needed: defanging is how security-aware people share suspicious
+// links without making them clickable, so "hxxp://evil[.]tk" is a completely
+// ordinary thing for someone to paste. Before this, none of those forms were
+// recognised as URLs at all — they fell through to generic message analysis and
+// scored 0, meaning the users most careful about handling a scam link got the
+// least protection. Our own defang() output had the same problem: a verdict
+// copied out of the UI and pasted back in returned nothing.
+//
+// Conventions handled (all seen in the wild, and all case-insensitive):
+//   hxxp:// hxxps:// hxtp:// h**p:// fxp://   → http:// https:// ftp://
+//   [.]  (.)  {.}  [dot]  (dot)  {dot}          → .
+//   [:]  [://]                                  → : ://
+//   [@]                                         → @
+// Not anchored: a defanged link is usually pasted inside a sentence ("someone
+// sent me hxxps://evil[.]tk — is it real?"), so anchoring to the start of the
+// string would leave the common case unrefanged.
+const REFANG_SCHEME = /\bh(?:xx|xt|\*\*)(ps?|tps?)?:\/\//gi;
+const REFANG_FTP = /\bfxp:\/\//gi;
+
+export function refang(text: string): string {
+  return text
+    // Scheme first, so a mangled scheme does not survive dot-replacement.
+    .replace(REFANG_SCHEME, (m) => (/s/i.test(m) ? "https://" : "http://"))
+    .replace(REFANG_FTP, "ftp://")
+    // Bracketed separators. The spaced "dot" form needs its own pass because
+    // the surrounding whitespace is part of the obfuscation.
+    .replace(/\s*[[({]\s*(?:\.|dot)\s*[\])}]\s*/gi, ".")
+    // Deliberately NOT handling the unbracketed " dot " form: it rewrites
+    // ordinary English ("I dot my i" → "I.my i"). Bracketed forms are
+    // unambiguous obfuscation; a bare "dot" between words is usually a word.
+    .replace(/\s*[[({]\s*:\s*\/\s*\/\s*[\])}]\s*/g, "://")
+    .replace(/\s*[[({]\s*:\s*[\])}]\s*/g, ":")
+    .replace(/\s*[[({]\s*(?:@|at)\s*[\])}]\s*/gi, "@");
+}
+
+/**
+ * Whether refanging changed anything — i.e. the input was defanged.
+ *
+ * Callers use this to decide whether to re-run extraction on the refanged text,
+ * so ordinary input costs nothing.
+ */
+export function isDefanged(text: string): boolean {
+  return refang(text) !== text;
 }
 
 // ── Strip tracking parameters ────────────────────────────────────────────────

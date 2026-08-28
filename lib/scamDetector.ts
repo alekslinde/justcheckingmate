@@ -1,5 +1,5 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
-import { extractIdentifiers, normaliseForAnalysis, defang } from "@/lib/urlSanitizer";
+import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged } from "@/lib/urlSanitizer";
 import { detectType } from "@/lib/detectType";
 import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "@/lib/urlExpander";
@@ -1136,8 +1136,20 @@ export interface AnalyzeOptions {
 }
 
 export async function analyzeContent(content: string, blocklist?: Set<string>, region?: RegionInput, options?: AnalyzeOptions): Promise<AnalyzedIdentifier[]> {
-  const text = content.trim();
-  if (!text) return [];
+  const raw = content.trim();
+  if (!raw) return [];
+
+  // Refang before anything else looks at the input. Defanging ("hxxp://evil[.]tk")
+  // is how security-aware people share a suspicious link without making it
+  // clickable, so it is ordinary input — but every extractor here requires a
+  // literal http(s)://, so those submissions previously matched nothing and fell
+  // through to generic message analysis scoring 0. The people most careful with
+  // a scam link got the least protection, and our own defanged verdict output
+  // could not be pasted back in.
+  //
+  // This is a string transformation for analysis only; nothing is ever fetched.
+  const wasDefanged = isDefanged(raw);
+  const text = wasDefanged ? refang(raw) : raw;
 
   const type = detectType(text);
   const ids = extractIdentifiers(text);
