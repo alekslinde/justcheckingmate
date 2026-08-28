@@ -358,3 +358,52 @@ describe("summariseAuth", () => {
     expect(summariseAuth({ dkim: "pass" })).toBe("DKIM pass");
   });
 });
+
+// ── Display-name address masking ──────────────────────────────────────────────
+//
+// RFC 5322 puts the real address inside angle brackets; anything before them is
+// a display name. addressIn() took the FIRST address anywhere in the value, so
+// a display name containing an address won:
+//
+//   From: "noreply@ato.gov.au" <attacker@evil.tk>
+//
+// A mail client renders that as the attacker's address with a reassuring label,
+// but it scored as though it came from ato.gov.au. Measured at the time:
+// 37/suspicious → 17/safe. The verdict flipped, and a phishing email was
+// reported as safe. Found by an adversarial-input review of the header parser.
+
+describe("parseEmailHeaders — the address is the one in angle brackets", () => {
+  it("ignores an address hidden in the display name", () => {
+    const h = parseEmailHeaders('From: "noreply@ato.gov.au" <attacker@evil.tk>');
+    expect(h.fromAddress).toBe("attacker@evil.tk");
+  });
+
+  it("ignores an address in an unquoted display name", () => {
+    const h = parseEmailHeaders("From: noreply@ato.gov.au <attacker@evil.tk>");
+    expect(h.fromAddress).toBe("attacker@evil.tk");
+  });
+
+  it("applies the same rule to Reply-To", () => {
+    const h = parseEmailHeaders(
+      'From: a@b.com\nReply-To: "support@auspost.com.au" <collect@evil.tk>',
+    );
+    expect(h.replyTo).toBe("collect@evil.tk");
+  });
+
+  it("still reads an ordinary display name and address", () => {
+    const h = parseEmailHeaders("From: Australia Post <noreply@auspost.com.au>");
+    expect(h.fromAddress).toBe("noreply@auspost.com.au");
+    expect(h.fromDisplay).toBe("Australia Post");
+  });
+
+  it("still reads a bare address with no brackets", () => {
+    const h = parseEmailHeaders("From: noreply@auspost.com.au");
+    expect(h.fromAddress).toBe("noreply@auspost.com.au");
+  });
+
+  it("falls back to a bare address when the brackets hold nothing usable", () => {
+    // Malformed rather than hostile — don't lose the address entirely.
+    const h = parseEmailHeaders("From: noreply@auspost.com.au <>");
+    expect(h.fromAddress).toBe("noreply@auspost.com.au");
+  });
+});

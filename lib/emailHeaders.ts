@@ -60,9 +60,31 @@ export function domainOf(address: string): string {
   return address.slice(at + 1).trim().toLowerCase().replace(/[>)\].,;:]+$/, "");
 }
 
-// Pull the first email address out of a header value.
+const ADDRESS_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+
+/**
+ * The actual address from a header value.
+ *
+ * When angle brackets are present RFC 5322 says the address inside them is the
+ * real one and everything before it is a display name — so that is where we
+ * look first. Taking the first address anywhere in the value instead is an
+ * evasion: `From: "noreply@ato.gov.au" <attacker@evil.tk>` renders in a mail
+ * client as the attacker's address with a reassuring label, but scored as
+ * though it came from ato.gov.au. Measured at the time of the fix, that dropped
+ * a phishing email from 37/suspicious to 17/safe — the verdict flipped, and the
+ * user was told a scam was safe.
+ *
+ * Falls back to a scan of the whole value for a bare address with no brackets.
+ */
 function addressIn(value: string): string {
-  const m = value.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  const angled = value.match(/<([^<>]*)>/);
+  if (angled) {
+    const inner = angled[1].match(ADDRESS_RE);
+    if (inner) return inner[0];
+    // Brackets present but nothing address-shaped inside: fall through rather
+    // than trusting a display name that happens to contain an address.
+  }
+  const m = value.match(ADDRESS_RE);
   return m ? m[0] : "";
 }
 

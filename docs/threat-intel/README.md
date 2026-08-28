@@ -89,6 +89,34 @@ the time — rewriting it to match the outcome destroys that.
 
 ---
 
+## Adversarial probes
+
+A **probe** is the inward-looking counterpart to a sweep. A sweep asks *"what
+are scammers doing that we don't detect?"* and answers it from sourced
+advisories. A probe asks *"can our existing rules be evaded?"* and answers it by
+attacking them.
+
+Named `YYYY-MM-DD-adversarial-probe.md`, and following the same workflow: a
+research doc, then implementation in a separate PR with tests, then a Status
+block. Two differences from a sweep:
+
+- **No sources.** The evidence is a reproduction — every finding states the
+  score before and after, measured against the live detector. `sources.yml` is
+  not involved.
+- **The negative results are most of the value.** A sweep's watchlist records
+  threats deferred; a probe's records attacks that *failed*, so the next run
+  doesn't re-test the same ground.
+
+Probes are **not** on a cadence. Run one when there's a reason to think an area
+has had less adversarial attention than it needs — after a parser changes, when
+a new input form is accepted, or when a run of false positives suggests the
+rules were never pushed on. The first one
+([2026-08-29](2026-08-29-adversarial-probe.md)) was prompted by three false
+positives surfacing in two days once verdict emails started explaining
+themselves.
+
+---
+
 ## The source registry
 
 [`sources.yml`](sources.yml) is the curated list of sources this research draws
