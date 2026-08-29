@@ -36,8 +36,13 @@ the Worker, or the webhook 401s every call.
 
 Do these in order. Steps 0–1 are the prerequisites people miss.
 
+Throughout, **`<your-domain>`** is the domain you are receiving mail on —
+substitute your own. Nothing below is specific to any one deployment: the only
+committed values that name a particular one are `name` and
+`INBOUND_WEBHOOK_URL` in `wrangler.toml`, and both are yours to change.
+
 0. **Domain DNS must be on Cloudflare.** Cloudflare Email Routing can only add MX
-   records if Cloudflare is the domain's DNS provider. If `justcheckingmate.com`
+   records if Cloudflare is the domain's DNS provider. If `<your-domain>`
    currently resolves through Vercel/your registrar, move the domain's
    nameservers to Cloudflare first (Vercel still serves the site via its records;
    only DNS hosting moves). **Nothing below works until this is done.**
@@ -62,8 +67,9 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
    at build time, so **redeploy** after adding it.
 
 4. **Point the webhook at the app.** `wrangler.toml` → `INBOUND_WEBHOOK_URL`
-   should be your deployed app's `/api/inbound` (default:
-   `https://justcheckingmate.com/api/inbound`).
+   should be your deployed app's `/api/inbound`
+   (`https://<your-domain>/api/inbound`). The committed value points at this
+   project's own deployment — change it when running your own.
 
 5. **Deploy the Worker** — either path sets the secret on the Worker:
 
@@ -81,8 +87,9 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
      ```
 
 6. **Bind the address.** Email Routing (Compute → Email Service, as in step 1) →
-   Routing rules → add a custom address `check@justcheckingmate.com` → action
-   **Send to a Worker → jcm-inbound-email**.
+   Routing rules → add a custom address `check@<your-domain>` → action
+   **Send to a Worker → `jcm-inbound-email`** (the `name` in `wrangler.toml` —
+   rename it there first if you want your own).
 
 7. **Verify end-to-end.** Forward a known scam email to `check@<domain>` from a
    normal account (Gmail/iCloud). Within a few seconds you should get a threaded
