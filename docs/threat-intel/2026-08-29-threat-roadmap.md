@@ -5,6 +5,61 @@ unchanged — this one was prompted rather than due.*
 
 ---
 
+## Status — as at 2026-08-29
+
+Both proposals shipped. The research above is kept as written; this block is the
+only part updated after the fact.
+
+| Proposal | Shipped in | Status |
+|---|---|---|
+| D1 — AU parcel address-correction lure | `9be74ef` (0.4.0) | ✅ Shipped |
+| D2 — Generic held-parcel framing | `9be74ef` (0.4.0) | ✅ Shipped |
+
+**Result: 7 of the 10 measured phrasings now flag, up from 1.** All eight
+legitimate messages still score 0 — including `Please confirm your address for
+our records before we ship`, the one that decided the gated design.
+
+### Deviations
+
+- **The gate is on a plain delivery noun, not a parcel-urgency hit.** The
+  proposal said these should score "only alongside an existing parcel or
+  delivery signal", which was implemented first as *a hit in
+  `urgency.parcel`* — and it almost never fired. These messages are engineered
+  to sound routine, so they carry no urgency phrase at all: `Your parcel is
+  waiting. Update your address to complete delivery` produces **zero** urgency
+  hits. Gating on one meant the gate could only open for messages already
+  scoring, which is backwards. It now tests for `parcel|package|shipment|
+  deliver*|courier|consignment|tracking`, which separates every measured scam
+  from every measured legitimate message.
+
+- **`PARCEL_ADDRESS_PHRASES` needed its own pack field, not a list entry.** The
+  proposal flagged this as "confirm at implementation" and the answer was the
+  one it suspected: every urgency group is flattened into one `urgencyWords`
+  union and scored by hit count, so a list entry cannot express a condition.
+  Added as an optional `parcelAddressPhrases` on `RegionDefinition`, resolved to
+  `[]` on `RegionPack` for the five regions that define none.
+
+- **`select your desired delivery solution` was not added**, as proposed.
+  Confirmed at implementation: it stays at 0/safe, which is the intended
+  outcome for a tail phrase a paraphrase defeats.
+
+- **Scored +20, not the +10 an urgency hit carries.** The pairing is the
+  complete lure on its own, and the delivery half usually contributes nothing.
+  +20 reaches `suspicious` (20-44) without reaching `likely_scam` (45+) — the
+  right ceiling for a signal whose two halves are each individually innocent.
+
+### Corrections
+
+- **D2's headline case still scores 10/safe, not suspicious.** `Your parcel is
+  held. Pay the fee now` now matches (`parcel is held` is a hit where it scored
+  0 before), but a single urgency hit caps at +10. That is the shared urgency
+  cap working as designed — one signal should not reach `suspicious` alone — and
+  the phrase does its job in combination: `Your package is being held pending
+  payment` scores 20/suspicious. Recorded because the sweep implied D2 would
+  resolve the probe's residual case outright, and on its own it does not.
+
+---
+
 ## Why this sweep is off-cycle
 
 It was triggered by a **residual gap left by a probe**, not by the calendar. The
