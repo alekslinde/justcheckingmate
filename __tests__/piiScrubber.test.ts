@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scrubPii, stripReporterHeaders } from "@/lib/piiScrubber";
+import { scrubPii, stripReporterHeaders, findPii } from "@/lib/piiScrubber";
 
 describe("scrubPii", () => {
   it("redacts email addresses", () => {
@@ -270,5 +270,59 @@ describe("stripReporterHeaders", () => {
   it("leaves non-email content unchanged", () => {
     const sms = "Your parcel is on hold. Pay $3.50 at https://auspost-fee.cc/pay";
     expect(stripReporterHeaders(sms)).toBe(sms);
+  });
+});
+
+describe("findPii", () => {
+  it("returns nothing for clean text", () => {
+    expect(findPii("Your parcel is on board for delivery today")).toEqual([]);
+  });
+
+  it("returns each identifier as its own exact span", () => {
+    expect(findPii("a@victim.com and c@evil.tk")).toEqual(["a@victim.com", "c@evil.tk"]);
+  });
+
+  it("keeps adjacent identifiers separate", () => {
+    // Two addresses one character apart. The span must not run from the first
+    // to the end of the second.
+    expect(findPii("From: evil@scam.tk <victim@gmail.com>")).toEqual([
+      "evil@scam.tk",
+      "victim@gmail.com",
+    ]);
+  });
+
+  it("separates identifiers whose own pattern spans whitespace", () => {
+    expect(findPii("Call 0412 345 678 or 0412 999 111 today")).toEqual([
+      "0412 345 678",
+      "0412 999 111",
+    ]);
+  });
+
+  it("reports spans in order of appearance across pattern kinds", () => {
+    expect(findPii("mail a@b.com then call 0412 345 678")).toEqual(["a@b.com", "0412 345 678"]);
+  });
+
+  it("does not double-report a span an earlier pattern already consumed", () => {
+    // scrubPii runs IPv4 before IPv6 so a mapped address has its tail redacted
+    // first; findPii mirrors that rather than reporting both.
+    expect(findPii("relay ::ffff:1.2.3.4 hop")).toEqual(["1.2.3.4"]);
+  });
+
+  it("agrees with scrubPii on whether anything matched", () => {
+    for (const text of [
+      "nothing here",
+      "TFN 123 456 789",
+      "BSB 062-123",
+      "Card: 4532 1234 5678 9012",
+      "Server at 192.168.1.1",
+      "sent at 12:30:45",
+    ]) {
+      expect(findPii(text).length > 0).toBe(scrubPii(text) !== text);
+    }
+  });
+
+  it("returns spans that are literal substrings of the input", () => {
+    const text = "From: \"myGov\" <noreply@evil.tk> ring 0412 345 678";
+    for (const hit of findPii(text)) expect(text).toContain(hit);
   });
 });

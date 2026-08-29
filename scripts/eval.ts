@@ -76,14 +76,33 @@ async function main(): Promise<void> {
 
   // ── Gate ──────────────────────────────────────────────────────────────────────
 
-  const thresholds = JSON.parse(readFileSync(join(ROOT, "eval/thresholds.json"), "utf8")) as
-    Record<string, Thresholds | string>;
-
-  const breaches: Breach[] = [];
-  for (const [region, m] of byRegion) {
-    const t = thresholds[region];
-    if (t && typeof t !== "string") breaches.push(...checkThresholds(region, m, t));
+  interface ThresholdFile {
+    region?: Record<string, Thresholds>;
+    category?: Record<string, Thresholds>;
+    type?: Record<string, Thresholds>;
   }
+  const thresholds = JSON.parse(
+    readFileSync(join(ROOT, "eval/thresholds.json"), "utf8"),
+  ) as ThresholdFile;
+
+  // Every printed slice is gated, not just the regional one. Category is where
+  // a regression actually surfaces first: overall recall can hold steady while
+  // one lure family collapses, and gating only by region would let that ship.
+  const breaches: Breach[] = [];
+  const gate = (
+    rows: Map<string, Metrics>,
+    config: Record<string, Thresholds> | undefined,
+    prefix: string,
+  ): void => {
+    if (!config) return;
+    for (const [slice, m] of rows) {
+      const t = config[slice];
+      if (t) breaches.push(...checkThresholds(`${prefix}${slice}`, m, t));
+    }
+  };
+  gate(byRegion, thresholds.region, "");
+  gate(byCategory, thresholds.category, "category ");
+  gate(byType, thresholds.type, "type ");
 
   // ── Baseline ratchet ──────────────────────────────────────────────────────────
   //

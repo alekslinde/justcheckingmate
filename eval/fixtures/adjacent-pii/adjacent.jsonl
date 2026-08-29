@@ -1,0 +1,4 @@
+{"id":"adjacent-0001","type":"sms","region":"AU","content":"a@victim.com and c@evil.tk","label":"scam","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"adjacent-0002","type":"email","region":"AU","content":"From: evil@scam.tk <victim@gmail.com>","label":"scam","source":"handwritten","addedAt":"2026-08-29","identifiers":["evil@scam.tk"]}
+{"id":"adjacent-0003","type":"sms","region":"AU","content":"Call 0412 345 678 or 0412 999 111 today","label":"scam","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"adjacent-0004","type":"email","region":"AU","content":"From: \"myGov\" <noreply@evil.tk>\nReply-To: scam@other.ru\n\nVerify now.","label":"scam","source":"handwritten","addedAt":"2026-08-29","identifiers":["noreply@evil.tk","scam@other.ru"]}

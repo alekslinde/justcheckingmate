@@ -63,7 +63,12 @@ export function computeMetrics(outcomes: Outcome[]): Metrics {
 
   const recall = cScam.length > 0 ? tp / cScam.length : null;
   const fpr = cBenign.length > 0 ? fp / cBenign.length : null;
-  const precision = tp + fp > 0 ? tp / (tp + fp) : null;
+  // Gated on there being a committed scam case, not on tp+fp>0. An all-benign
+  // slice with one false positive has a defined ratio of 0, but reporting it as
+  // "0.0% precision" reads as total failure when the truth is that the slice
+  // holds nothing to be precise about — the same misreading the null guards on
+  // recall and FPR exist to prevent.
+  const precision = cScam.length > 0 && tp + fp > 0 ? tp / (tp + fp) : null;
 
   const scamScores = scoresFor(outcomes, "scam");
   const benignScores = scoresFor(outcomes, "benign");

@@ -60,6 +60,15 @@ describe("computeMetrics", () => {
     expect(m.fpr).toBeNull();
     expect(m.precision).toBeNull();
   });
+
+  it("reports null precision on an all-benign slice, not 0%", () => {
+    // The ratio is defined (0 of 1 flagged is a true positive) but meaningless:
+    // the slice holds nothing to be precise about, and "0.0%" reads as total
+    // failure rather than as no data.
+    const m = computeMetrics([outcome("benign", "flagged"), outcome("benign", "clean")]);
+    expect(m.precision).toBeNull();
+    expect(m.fpr).toBe(0.5);
+  });
 });
 
 describe("checkThresholds", () => {
@@ -98,6 +107,39 @@ describe("validateCase", () => {
     ["region", { region: "" }],
   ])("rejects a bad %s", (field, over) => {
     expect(validateCase({ ...valid, ...over }, new Set()).join()).toContain(field);
+  });
+});
+
+describe("piiHits span location", () => {
+  // Regression cover for a real hole: spans were recovered by diffing scrubbed
+  // output against the original, so two redactions closer together than the
+  // anchor width merged into one blob. Declaring that blob in `identifiers`
+  // whitelisted every address inside it — a victim's could ride along with a
+  // scammer's into the committed corpus.
+  const dir = join(process.cwd(), "eval/fixtures/adjacent-pii");
+
+  it("reports adjacent identifiers separately, not as one merged span", () => {
+    const { errors } = loadCorpus(dir);
+    const line = errors.find((e) => e.includes("adjacent-0001")) ?? "";
+    expect(line).toContain("a@victim.com");
+    expect(line).toContain("c@evil.tk");
+    expect(line).not.toContain("a@victim.com and c@evil.tk");
+  });
+
+  it("does not let a declared scam address whitelist an undeclared victim one", () => {
+    const { errors, cases } = loadCorpus(dir);
+    expect(cases.map((c) => c.id)).not.toContain("adjacent-0002");
+    expect(errors.find((e) => e.includes("adjacent-0002"))).toContain("victim@gmail.com");
+  });
+
+  it("separates two space-spanning phone numbers on one line", () => {
+    const line = loadCorpus(dir).errors.find((e) => e.includes("adjacent-0003")) ?? "";
+    expect(line).toContain("0412 345 678");
+    expect(line).toContain("0412 999 111");
+  });
+
+  it("still accepts a case whose identifiers are each declared", () => {
+    expect(loadCorpus(dir).cases.map((c) => c.id)).toContain("adjacent-0004");
   });
 });
 

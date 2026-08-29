@@ -84,6 +84,16 @@ So:
 Scam identifiers survive because someone consciously listed them; a victim's
 number pasted in by accident does not.
 
+The span-finding behind rule 2 lives in `lib/piiScrubber.ts` (`findPii`), beside
+the patterns themselves. An earlier version recovered spans out here by diffing
+scrubbed output against the original, which does not work: replacements change
+the string's length, so a span can only be re-located by guessing at
+surrounding context. Two redactions closer together than the guess width merged
+into one blob — and because the error message names the blob as the string to
+declare, an author copying it into `identifiers` silently whitelisted every
+address inside, victim's included. `__tests__/evalHarness.test.ts` and the
+`findPii` block in `__tests__/piiScrubber.test.ts` hold that shut.
+
 **Before adding cases from real reports:** only reports whose submitter
 consented to reuse may be included. The reports table does not currently record
 that consent — capturing it is a schema and form change, and a prerequisite for
@@ -103,6 +113,23 @@ required — coverage varies by region and changes what a clean result means.
 `category` is free text, because new lures appear faster than an enum can be
 maintained, and slicing recall by it is where regressions actually surface.
 
+## Thresholds
+
+`thresholds.json` gates three slice kinds — `region`, `category` and `type` —
+and every printed slice is checked against its section. Category matters most:
+overall recall can hold steady while one lure family collapses, so gating only
+by region would let that ship.
+
+**The `fpr` gates are set where the engine currently measures (0.3), not where
+they should be (0.02).** That gap is deliberate and worth understanding. A
+consumer scam checker that flags one benign message in four burns trust fast, so
+2% is the real target. But gating at the target today leaves the eval
+permanently red, which makes the baseline ratchet unusable and trains everyone
+to ignore the exit code. Holding the line at today's behaviour keeps the ratchet
+sharp: any drift worse than now fails, and every false positive is still printed
+by name on each run. Tighten toward `_fpr_target` as the `suspicious` tier is
+tuned — the sensitivity table above shows that tier carries all of them.
+
 ## Known limits
 
 - **The seed corpus is tiny (45 cases) and mostly handwritten.** Its numbers are
@@ -115,3 +142,9 @@ maintained, and slicing recall by it is where regressions actually surface.
   caught on the first run: an AusPost SMS containing a link, which the AU pack
   correctly scores as a scam under the post-2024 no-link policy. It is kept as
   `au-sms-0013` because it is a good hard case.
+- **AU false-positive rate is ~27%, and the gate reflects that rather than
+  hiding it.** Four of the five incorrect commitments on the seed corpus are
+  bare agency mentions with no scam signal ("Your myGov Inbox has a new
+  message", a Medicare appointment confirmation), all scoring 25-40 in the
+  `suspicious` tier. Whether that caution is right is a product decision the
+  eval surfaces rather than settles.

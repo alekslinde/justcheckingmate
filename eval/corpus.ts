@@ -26,52 +26,27 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { scrubPii, stripReporterHeaders } from "@/lib/piiScrubber";
+import { findPii, stripReporterHeaders } from "@/lib/piiScrubber";
 import { validateCase, type EvalCase } from "./schema";
 
 /**
- * Find the substrings scrubPii would redact.
+ * PII-shaped tokens in a case, normalised for comparison against the declared
+ * `identifiers` list.
  *
- * Works line by line rather than token by token: several PII patterns span
- * whitespace ("0412 345 678", "123 456 789", "4532 1234 5678 9012"), so a
- * word-split check would miss exactly the identifiers that matter most. Each
- * line is scrubbed, then the original and scrubbed forms are walked together to
- * recover the literal text that each redaction replaced.
+ * Span-finding lives in piiScrubber alongside the patterns themselves (see
+ * findPii). Recovering spans out here by diffing scrubbed output against the
+ * original does not work: replacements change the string's length, so a span
+ * can only be re-located by guessing at surrounding context, and two adjacent
+ * redactions then merge into a single blob. That was not cosmetic — declaring
+ * the merged blob in `identifiers` whitelisted every address inside it, so a
+ * victim's address could be committed alongside a scammer's.
  */
 function piiHits(text: string): string[] {
-  const hits: string[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const scrubbed = scrubPii(line);
-    if (scrubbed === line) continue;
-
-    // Walk both strings, matching the common prefix and suffix around each
-    // "[... removed]" marker to recover what was replaced.
-    let oi = 0;
-    let si = 0;
-    while (si < scrubbed.length) {
-      if (scrubbed[si] === "[" && /^\[[a-zA-Z]+ removed\]/.test(scrubbed.slice(si))) {
-        const marker = scrubbed.slice(si).match(/^\[[a-zA-Z]+ removed\]/)![0];
-        const after = scrubbed.slice(si + marker.length);
-        // The redacted span runs from oi to wherever the following literal text
-        // resumes in the original. Anchor on the next 8 chars of context, or the
-        // end of the line when the redaction is trailing.
-        const anchor = after.slice(0, 8);
-        const resume = anchor ? line.indexOf(anchor, oi) : line.length;
-        const end = resume === -1 ? line.length : resume;
-        const hit = line.slice(oi, end).trim();
-        if (hit) hits.push(hit);
-        oi = end;
-        si += marker.length;
-        continue;
-      }
-      oi += 1;
-      si += 1;
-    }
-  }
-  // Strip surrounding punctuation that is not part of an identifier, so
-  // "<noreply@evil.tk>" and "noreply@evil.tk" compare equal against the
-  // declared list.
-  return hits.map((h) => h.replace(/^[<("']+|[>)"',.;:]+$/g, "")).filter(Boolean);
+  // Surrounding punctuation is stripped so "<noreply@evil.tk>" and
+  // "noreply@evil.tk" compare equal against the declared list.
+  return findPii(text)
+    .map((h) => h.replace(/^[<("'\s]+|[>)"',.;:\s]+$/g, ""))
+    .filter(Boolean);
 }
 
 export interface LoadResult {
