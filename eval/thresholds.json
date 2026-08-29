@@ -1,0 +1,70 @@
+{
+  "_comment": "Gates by slice. null means ungated - an honest statement that we do not hold this slice to a number, rather than a low bar nobody checked. A slice absent from a section is ungated.",
+  "_fpr_note": "The fpr gates below sit at 0.3, which is where AU currently measures - NOT where it should sit. A consumer scam checker that flags 1 benign message in 4 burns trust fast, and the target is 0.02. Gating at the target today would leave the eval permanently red, which makes the baseline ratchet unusable and trains everyone to ignore the exit code. So these hold the line at today's behaviour: the ratchet catches any drift worse, and every false positive is printed by name on each run. Tighten toward 0.02 as the suspicious tier is tuned - see the suspicious-as sensitivity table in eval/README.md, which shows this tier carries all of the false positives.",
+  "_fpr_target": 0.02,
+  "region": {
+    "AU": {
+      "recall": 0.9,
+      "fpr": 0.3,
+      "coverage": 0.98
+    },
+    "GB": {
+      "recall": 0.85,
+      "fpr": 0.3,
+      "coverage": 0.95
+    },
+    "US": {
+      "recall": 0.85,
+      "fpr": 0.3,
+      "coverage": 0.95
+    },
+    "NZ": {
+      "recall": 0.85,
+      "fpr": 0.3,
+      "coverage": 0.95
+    },
+    "IE": {
+      "recall": 0.85,
+      "fpr": 0.3,
+      "coverage": 0.95
+    },
+    "CA": {
+      "recall": null,
+      "fpr": 0.3,
+      "coverage": null
+    }
+  },
+  "category": {
+    "parcel-delivery": {
+      "recall": 0.9,
+      "fpr": null,
+      "coverage": null
+    },
+    "tax-refund": {
+      "recall": 0.9,
+      "fpr": null,
+      "coverage": null
+    },
+    "identity-verification": {
+      "recall": 0.9,
+      "fpr": null,
+      "coverage": null
+    },
+    "toll": {
+      "recall": 0.9,
+      "fpr": null,
+      "coverage": null
+    },
+    "bank-impersonation": {
+      "recall": 0.9,
+      "fpr": null,
+      "coverage": null
+    },
+    "voice-clone": {
+      "recall": null,
+      "fpr": null,
+      "coverage": null
+    }
+  },
+  "type": {}
+}

@@ -41,6 +41,49 @@ export function scrubPii(text: string): string {
   return result;
 }
 
+/**
+ * The literal substrings scrubPii would redact, in order of appearance.
+ *
+ * Exposed for callers that must reason about *which* identifiers a text
+ * contains rather than just removing them — the eval corpus check requires each
+ * one to be declared by hand, so a victim's address can never ride along inside
+ * a case that declared only the scammer's.
+ *
+ * Reported from the patterns themselves rather than by diffing scrubbed output
+ * against the original: replacements change the string's length, so diffing can
+ * only re-locate a span by guessing at surrounding context, and two adjacent
+ * redactions then merge into one span.
+ *
+ * Later patterns are applied to text where earlier ones already matched, so a
+ * span already covered is skipped — mirroring scrubPii's sequential replace,
+ * where an IPv4 inside a mapped IPv6 is consumed by the IPv4 pass first.
+ */
+export function findPii(text: string): string[] {
+  const spans: Array<[number, number]> = [];
+  const covered = (start: number, end: number): boolean =>
+    spans.some(([s, e]) => start < e && end > s);
+
+  for (const [pattern] of PATTERNS) {
+    // Patterns are module-level and carry /g, so lastIndex must be reset before
+    // each scan or successive calls resume mid-string.
+    const re = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      if (m[0].length === 0) {
+        re.lastIndex += 1;
+        continue;
+      }
+      if (!covered(m.index, m.index + m[0].length)) {
+        spans.push([m.index, m.index + m[0].length]);
+      }
+    }
+  }
+
+  return spans
+    .sort((a, b) => a[0] - b[0])
+    .map(([start, end]) => text.slice(start, end));
+}
+
 // Headers that identify the reporter's own mailbox or expose the delivery path
 // (relay hostnames + IPs, including IPv6). Stripped before the content is shown,
 // stored, or published — none are needed to assess the scam.

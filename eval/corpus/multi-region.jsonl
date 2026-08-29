@@ -1,0 +1,12 @@
+# Non-AU regions. Thin on purpose - enough to prove region routing and the
+# coverage gate are exercised, not enough to claim these packs are measured.
+# CA cases are expected to abstain: the pack ships coverage:"partial" while it
+# has no French reviewer, so a clean verdict is correctly withheld there.
+{"id":"gb-sms-0001","type":"sms","region":"GB","content":"DVLA: your vehicle tax payment failed. Update your details at http://dvla-refund.top to avoid a fine.","label":"scam","category":"tax-refund","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"gb-sms-1001","type":"sms","region":"GB","content":"Your GP surgery appointment is confirmed for Monday at 9:40am. Reply CANCEL if you cannot attend.","label":"benign","category":"government","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"us-sms-0001","type":"sms","region":"US","content":"USPS: your package could not be delivered due to an incomplete address. Update at http://usps-redeliver.cyou/fix","label":"scam","category":"parcel-delivery","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"us-sms-1001","type":"sms","region":"US","content":"Your prescription refill is ready for pickup. Reply STOP to opt out of these reminders.","label":"benign","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"nz-sms-0001","type":"sms","region":"NZ","content":"NZ Post: your parcel is held pending a customs fee. Pay now at http://nzpost-clearance.bond/pay","label":"scam","category":"parcel-delivery","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"ca-sms-0001","type":"sms","region":"CA","content":"Canada Post: your parcel is held pending a customs fee. Pay at http://canadapost-clearance.cyou/pay","label":"scam","category":"parcel-delivery","source":"handwritten","addedAt":"2026-08-29","notes":"expected to abstain until CA has full coverage"}
+{"id":"ca-sms-1001","type":"sms","region":"CA","content":"Your library holds are ready for pickup at the Riverdale branch until Friday.","label":"benign","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"zz-sms-1001","type":"sms","region":"ZZ","content":"Hey, are we still on for coffee tomorrow morning?","label":"benign","source":"fixture:coverage.test.ts","addedAt":"2026-08-29","notes":"fallback region: must abstain, never report a confident pass"}
