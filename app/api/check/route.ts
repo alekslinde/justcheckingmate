@@ -27,7 +27,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { content, region }: { content: string; region?: string } = await req.json();
+    const { content, region, surface }: {
+      content: string;
+      region?: string;
+      surface?: string;
+    } = await req.json();
 
     if (!content?.trim()) {
       return NextResponse.json({ error: "Missing content" }, { status: 400 });
@@ -47,7 +51,13 @@ export async function POST(req: NextRequest) {
     // never the user's IP (see the transport contract in lib/urlExpander.ts).
     const results = await analyzeContent(content, blocklist, resolvedRegion, { fetcher: fetch });
 
-    incrementCheckCount("web").catch(() => {});
+    // The surface is client-supplied, so it is validated against an allowlist
+    // rather than trusted: an unchecked value would let anyone write arbitrary
+    // rows into the telemetry aggregate. Only the two surfaces that actually
+    // reach this route are accepted; anything else — including a missing value
+    // from an older client — records as `web`, which is what this endpoint
+    // served before the share target existed.
+    incrementCheckCount(surface === "share" ? "share" : "web").catch(() => {});
     return NextResponse.json({ results, region: resolvedRegion });
   } catch {
     return NextResponse.json({ error: "Something went sideways on our end" }, { status: 500 });

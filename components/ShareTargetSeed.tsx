@@ -51,7 +51,7 @@ export default function ShareTargetSeed() {
           the bottom of a long email.
         </p>
       )}
-      <CheckFlow initialContent={seed.content} />
+      <CheckFlow initialContent={seed.content} surface="share" />
     </>
   );
 }
