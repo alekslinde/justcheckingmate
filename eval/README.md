@@ -12,10 +12,10 @@ npm run eval -- --json                # machine-readable
 ## Why this is not in `__tests__/`
 
 Unit tests assert **behaviour** — "this input must raise that flag" — and a red
-one is a bug. The eval asserts **aggregate quality** — "recall ≥ 0.90 at
-FPR ≤ 0.02" — and a red one is a judgement call about a trade someone made.
-Keeping them in one suite makes both harder to read, and makes `npm test` slow
-and flaky as the corpus grows. `npm test` stays the fast gate; `npm run eval` is
+one is a bug. The eval asserts **aggregate quality** — "recall ≥ 0.90 without
+FPR getting worse" — and a red one is a judgement call about a trade someone
+made. Keeping them in one suite makes both harder to read, and makes `npm test`
+slow and flaky as the corpus grows. `npm test` stays the fast gate; `npm run eval` is
 the deliberate one.
 
 `__tests__/evalHarness.test.ts` is the exception: it unit-tests the harness
@@ -94,10 +94,32 @@ declare, an author copying it into `identifiers` silently whitelisted every
 address inside, victim's included. `__tests__/evalHarness.test.ts` and the
 `findPii` block in `__tests__/piiScrubber.test.ts` hold that shut.
 
-**Before adding cases from real reports:** only reports whose submitter
-consented to reuse may be included. The reports table does not currently record
-that consent — capturing it is a schema and form change, and a prerequisite for
-growing the corpus beyond the handwritten and fixture-derived seed.
+### Using real reports
+
+No extra consent field is needed, and an earlier draft of this file was wrong to
+call one a prerequisite. Submitters are already told at submission time that
+their report helps protect others (`report.valuable`), and the submissions feed
+publishes reports openly as "unverified, anonymised" (`subs.subtitle`). Internal
+regression testing is a narrower use than the publication they have already been
+told about, so it is covered.
+
+What does differ from the public feed is **retention shape**, and that is what
+the rules above are for. A feed row can be deleted; a corpus case is in git
+history, effectively permanently. And unlike the feed — where
+`app/api/report/route.ts` runs `scrubPii` over everything with no exceptions —
+the corpus deliberately preserves declared identifiers, because
+`emailHeaders.ts` scores on the sender pair. That is defensible for a scammer's
+address and never for a victim's, which is precisely what the per-token
+declaration gate enforces.
+
+So when drawing cases from real reports:
+
+- Keep `source: "report:<id>"`. Provenance is what makes a case auditable later,
+  and removable if a submitter ever asks.
+- Declare only the **scammer's** identifiers. If a victim's address or number is
+  in the content, remove it — never declare it to quiet the error.
+- Remember that removal means rewriting git history, not deleting a row. Treat
+  adding a case as a durable decision.
 
 ## Adding a case
 
