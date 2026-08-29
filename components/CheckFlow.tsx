@@ -116,11 +116,23 @@ function kindToType(kind: AnalyzedIdentifier["kind"], content: string): ScamType
   return detectType(content);
 }
 
-export default function CheckFlow() {
+interface CheckFlowProps {
+  /**
+   * Pre-seeds the check box. Used by the share target (app/share/page.tsx) so
+   * content arriving from the OS share sheet lands in the same box a person
+   * would have pasted into — nothing about the check itself differs.
+   *
+   * Only an initial value: the box stays fully editable, and this is not a
+   * controlled prop, so later renders do not clobber what the user has typed.
+   */
+  initialContent?: string;
+}
+
+export default function CheckFlow({ initialContent = "" }: CheckFlowProps = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [step, setStep] = useState<Step>("input");
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(initialContent);
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
   // Region the server used for the last check. Null until a check has run.
   const [region, setRegion] = useState<string | null>(null);
