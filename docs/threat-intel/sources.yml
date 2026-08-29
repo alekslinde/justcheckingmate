@@ -50,7 +50,7 @@
 # them, so one pasted into the wrong block fails the build.
 
 version: 1
-updated: 2026-08-19
+updated: 2026-08-29
 
 tiers:
   1:
@@ -351,6 +351,80 @@ tiers:
       url: https://www.biometricupdate.com
       feed: https://www.biometricupdate.com/feed
       note: Deepfake / liveness-bypass reporting. 6 citations.
+
+    # MEASUREMENT SOURCES (peer-reviewed venues and independent measurement).
+    #
+    # These sit in tier 2 because tier 1 means something specific here: named
+    # authority over a LIVE AU threat, sufficient on its own for a rule. A 2024
+    # measurement paper is not that, however rigorous. But within tier 2 they
+    # invert the usual caution — the tier-2 warning is "commercially interested,
+    # corroborate before scoring", and these have no product to sell and publish
+    # their method. For a BASE RATE (TLD abuse %, typosquat prevalence, URL
+    # lifetime) they outweigh any vendor blog here, and they are the intended
+    # corroborator for vendor-measured magic numbers such as the cscdbs.com
+    # figure behind the .monster score.
+    #
+    # Two standing caveats for anything cited from this group:
+    #   · Lag. Publication runs 6-18 months behind the threat. Use them to
+    #     calibrate or corroborate a score, never as the source for a NEW
+    #     pattern — tier 1 and the vendor feeds lead here.
+    #   · Sampling. Overwhelmingly US/EU data. An AU-specific claim still needs
+    #     an AU tier 1 source; a global base rate is what these are good for.
+    - domain: apwg.org
+      name: APWG — eCrime Research & Phishing Activity Trends
+      url: https://apwg.org/research/
+      check: manual
+      note: >-
+        Anti-Phishing Working Group. Quarterly Phishing Activity Trends Reports
+        are close to a primary source for phishing base rates, and the eCrime
+        symposium is the main peer-reviewed venue for this project's exact
+        subject. Highest-value add of this group. NB the reports themselves live
+        on docs.apwg.org, which 403s automated requests — cite the PDF, but keep
+        this reachable research index as the registry URL.
+    - domain: interisle.net
+      name: Interisle Consulting — Phishing / Malware Landscape
+      url: https://interisle.net/insights
+      check: manual
+      note: >-
+        Independent measurement with an explicit published methodology, and the
+        strongest available corroborator for the TLD-abuse scores in lib/ —
+        their Phishing Landscape reports rank abuse by TLD directly, which is
+        what the .monster and .shop/.store weights rest on. No registrar or
+        vendor interest, unlike cscdbs.com.
+    - domain: icann.org
+      name: ICANN — DAAR (Domain Abuse Activity Reporting)
+      url: https://www.icann.org/octo-ssr/daar
+      check: manual
+      note: >-
+        Registry-level abuse data straight from the DNS operator layer, so it is
+        primary rather than reported. Deliberately conservative and lagging —
+        a floor for TLD abuse rates, not a current signal. Reports as BLOCKED:
+        its WAF refuses this job's UA but answers a browser, so the checker can
+        still prove the host is up. Deliberately NOT `expect: blocked` — that
+        flag is for sources no agent can reach, and using it here would retire a
+        check that is genuinely working.
+    - domain: usenix.org
+      name: USENIX Security Symposium
+      url: https://www.usenix.org/conferences/byname/108
+      check: manual
+      note: >-
+        Peer-reviewed, open access, stable per-paper URLs — a citation here does
+        not rot. Source of record for phishing-measurement and social-engineering
+        studies.
+    - domain: ndss-symposium.org
+      name: NDSS Symposium
+      url: https://www.ndss-symposium.org/previous-ndss-symposia/
+      check: manual
+      note: >-
+        Peer-reviewed, open access. Registry URL is the per-symposium index
+        rather than a single year's accepted-papers page, which moves annually.
+    - domain: conferences.sigcomm.org
+      name: ACM Internet Measurement Conference (IMC)
+      url: https://conferences.sigcomm.org/imc/
+      check: manual
+      note: >-
+        Internet-scale measurement. Where domain-lifetime, typosquat-prevalence
+        and registration-behaviour numbers originate before vendors requote them.
 
   # Cited once or twice, unvetted. Kept as a record of what has been looked at.
   # Not evidence on its own — corroborate against tier 1/2 before scoring.

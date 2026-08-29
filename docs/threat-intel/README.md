@@ -17,11 +17,18 @@ Detection here is hardcoded keyword lists, regexes, and weighted scores — the
 kind of code that rots into unexplainable magic strings. These files are the
 provenance layer that stops that happening.
 
-1. **Evidence for every rule.** Why is `.monster` worth +30? Why is
-   `"quantum ai"` +50? Without a roadmap those are arbitrary. With one,
-   `.monster` traces to a CSC DBS >60% abuse-rate finding and `"quantum ai"` to
-   a named ASIC warning. For a tool that publicly tells people "this is a scam",
-   being able to show the working matters.
+1. **Evidence for every rule.** Why is `.bond` worth +30? Why is
+   `"quantum ai"` +50? Without a roadmap those are arbitrary. With one, `.bond`
+   traces to Interisle's measurement that it is 100% maliciously registered, and
+   `"quantum ai"` to a named ASIC warning. For a tool that publicly tells people
+   "this is a scam", being able to show the working matters.
+
+   This cuts both ways, which is the point. `.monster` was the example used here
+   until 2026-08-29, when checking it against Interisle's *Phishing Landscape
+   2025* showed the CSC DBS ">60% abuse" figure behind it has no independent
+   corroboration — `.monster` is not individually measured by anyone. It stays
+   in the list on cohort grounds, but the traceability is what surfaced the weak
+   citation. See the evidence correction in the 2026-07-26 roadmap.
 
 2. **Negative results.** The watchlist section is as valuable as the proposals.
    *SIM swap — no text-side signal, existing brand+request detection already
@@ -130,6 +137,23 @@ unaffiliated lookalike — cited beside `asic.gov.au` with nothing marking the
 difference. Open search will keep finding sites like that. Adding a source is a
 deliberate, reviewed act; tier 3 exists so a source that has already been looked
 at and found wanting is not silently rediscovered next cycle.
+
+Tier 2 holds two different kinds of source, and the distinction matters when
+you are justifying a number. Most of it is vendor and press reporting —
+commercially interested, so corroborate before it carries a score alone. The
+rest is **measurement**: peer-reviewed venues (APWG eCrime, USENIX, NDSS, IMC)
+and independent measurement bodies (Interisle, ICANN DAAR). Those have no
+product to sell and publish their methodology, so for a *base rate* — TLD abuse
+percentage, typosquat prevalence, URL lifetime — they are the strongest evidence
+in the file and the intended corroborator for vendor-measured magic numbers like
+the `cscdbs.com` figure behind the `.monster` score.
+
+They stay in tier 2 rather than tier 1 because tier 1 means authority over a
+*live AU threat*, sufficient on its own for a rule; a measurement paper is not
+that however rigorous. Two limits travel with them: publication lags the threat
+by 6-18 months, so they calibrate a score but never source a new pattern; and
+their sampling is overwhelmingly US/EU, so an AU-specific claim still needs an
+AU tier 1 source.
 
 Two conventions matter:
 

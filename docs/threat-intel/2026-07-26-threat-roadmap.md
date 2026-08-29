@@ -96,6 +96,56 @@ Ranked by **impact × ease** (all are string/regex additions to existing functio
 
 **Current gap:** `SUSPICIOUS_TLDS` in `lib/scamDetector.ts` (line 171) includes `.tk`, `.ml`, `.xyz`, `.cyou`, `.sbs`, `.cfd`, `.bar`, `.beauty`, `.hair`, `.makeup`, `.pn`, `.zip`, `.mov`, `.lat` — but not `.shop`, `.store`, `.vip`, `.lol`, or `.monster`.
 
+> **⚠️ Evidence correction — 2026-08-29.** The `>60% abuse rate at launch
+> (CSC DBS)` figure above was checked against Interisle's *Phishing Landscape
+> 2025* (May 2024 – April 2025, ~4M reports) when interisle.net was added to
+> the source registry. It does not corroborate:
+>
+> - **`.monster` is not independently measured by Interisle.** It appears once
+>   in the whole report, in a parenthetical listing the TLDs XYZ.COM operates.
+>   It is in no abuse table. The CSC DBS figure remains uncorroborated by any
+>   independent measurement source — CSC is a domain registrar and has a
+>   commercial interest in TLD risk findings.
+> - **`.vip` is likewise unmeasured** — one mention, as a registry-operator
+>   aside. The "top-10 APWG abuse charts" claim above was not verified against
+>   an APWG report and should not be relied on until it is.
+> - **`.lol` is strongly corroborated, and higher than claimed:** 96%
+>   maliciously registered (24,187 domains), 5th-highest of any gTLD.
+> - **The cohort base rate holds:** new gTLDs are 87% maliciously registered
+>   vs 67% for `.com`/`.net`, and cheap registration fees track high phishing
+>   scores across Interisle's five-year data.
+>
+> **Disposition:** `.monster` and `.vip` stay in `SUSPICIOUS_TLDS` on *cohort*
+> grounds (same registry operator and price tier as `.lol`), not on the CSC
+> per-TLD number, which should not be requoted. The code comment in
+> `lib/regions/base.ts` now says this explicitly. Anyone revisiting these two
+> entries should treat them as the weakest-evidenced in the list.
+>
+> **Two TLDs added on the strength of the same report** (shipped 2026-08-29,
+> `SUSPICIOUS_TLDS` in `lib/regions/base.ts`, +30 each). These are measured
+> per-TLD by Interisle rather than inferred from a cohort, which makes them the
+> best-evidenced entries in the list:
+>
+> | TLD | Evidence (Interisle Phishing Landscape 2025) |
+> |-----|----------------------------------------------|
+> | `.xin` | **100% maliciously registered** — 42,724 phishing domains, 42,681 malicious. Top of the 2025 phishing-score table (rank 1 by malicious registration proportion). No meaningful legitimate AU consumer use. |
+> | `.bond` | **100% maliciously registered** — 79,875 phishing domains, 79,690 malicious. Rank 2 in the 2025 table and 3rd in the five-year ranking of TLDs with the most malicious phishing domains reported. |
+>
+> Supporting base rates from the same study (May 2024 – April 2025, ~4M
+> reports): new gTLDs are **87% maliciously registered** vs **67%** for
+> `.com`/`.net`; 77% of all phishing domains were maliciously registered; and
+> cheap registration fees track high phishing scores across five years of data.
+>
+> **False-positive note:** both are also ordinary words — "bond" is core AU
+> tenancy and finance vocabulary ("rental bond", "surety bond") and "xin" is a
+> common Chinese given name and pinyin syllable. In `lib/scamDetector.ts` they
+> are therefore listed in `AMBIGUOUS_BARE_TLDS`, so a schemeless mention in
+> prose needs a path or a `www.` prefix before it raises a URL card. With a
+> scheme they score normally. This was caught in review, not at design time —
+> see the regression tests in `__tests__/scamDetector.test.ts`.
+>
+> Source: https://interisle.net/s/phishinglandscape2025.pdf
+
 **Sources:**
 - https://www.barracuda.com/reports/2026-email-threats-report
 - https://www.brandsec.com.au/top-tld-risk-and-abuse-trends-in-2025-2026/
@@ -324,8 +374,8 @@ Victims are told they must pay "security deposits", "bail bonds", or wire funds 
 | `.shop` | 10th most abused TLD globally (Brandsec 2025-26); AU fake-retail and subscription-renewal campaigns (e.g. `norton-renew.shop`, `auspost-track.shop`) |
 | `.store` | Used in fake e-commerce card-harvest stores; active in AU-targeting campaigns (Krebs, Dec 2024, still trending) |
 | `.vip` | Top-10 abuse TLDs (APWG reports); used as prestige signal in AU pig-butchering funnels |
-| `.lol` | New cheap ICANN TLD, >60% abuse rate at launch (CSC DBS); used in ClickFix-adjacent campaigns |
-| `.monster` | Same cohort as `.lol`; used in credential-harvest campaigns targeting AU users |
+| `.lol` | New cheap ICANN TLD, >60% abuse rate at launch (CSC DBS); used in ClickFix-adjacent campaigns — *superseded 2026-08-29: Interisle 2025 measures 96% maliciously registered* |
+| `.monster` | Same cohort as `.lol`; used in credential-harvest campaigns targeting AU users — *see 2026-08-29 evidence correction above; no independent per-TLD measurement exists* |
 
 **Proposed change to `lib/scamDetector.ts` — `SUSPICIOUS_TLDS` constant (near line 171):**
 

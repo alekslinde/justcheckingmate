@@ -1211,11 +1211,48 @@ const BARE_HOST_TLDS = new Set([
   "au", "uk", "nz", "ie", "ca", "us",
 ]);
 
-// Excluded despite appearing in suspiciousTlds: as bare tokens these are file
-// extensions far more often than hostnames, and a URL card on "archive.zip"
-// would be a false positive on ordinary correspondence. They are still scored
-// normally when they appear with a scheme.
-const FILE_EXTENSION_TLDS = new Set(["zip", "mov"]);
+// Excluded from the no-corroboration shortcut below despite appearing in
+// suspiciousTlds: as bare tokens these read as ordinary words far more often
+// than as hostnames, so a URL card on them would fire on innocent text. They
+// are still scored normally when they appear with a scheme, and still picked up
+// bare when a path or a www. prefix corroborates that a host was meant.
+//
+//   zip, mov   file extensions — "archive.zip", "clip.mov"
+//   bond       AU tenancy and finance vocabulary — "surety.bond", "the
+//              deposit.bond is refundable". Rental/surety/savings bonds are
+//              core subject matter for this app, so the bare form is common.
+//   xin        a very common Chinese given name and pinyin syllable, which
+//              collides with the Chinese-authority impersonation content this
+//              app explicitly handles ("the bond.Xin will follow up").
+//   icu        intensive care unit — written in caps ("Mum's in hospital.ICU
+//              visiting hours are 2-4pm"), so the sentence-boundary guard below
+//              cannot catch it without also letting shouty scam hosts through.
+//              Health-emergency messages are exactly the context where a false
+//              scam verdict does most harm.
+//
+// Both bond and xin are 100% maliciously registered per Interisle 2025, so the
+// TLD itself is genuinely high-risk — this guard is about the BARE-TOKEN form
+// in prose, not about the TLD's reputation. See docs/threat-intel/sources.yml.
+const AMBIGUOUS_BARE_TLDS = new Set(["zip", "mov", "bond", "xin", "icu"]);
+
+// English function words that turn up on the LEFT of a word-like TLD in
+// ordinary prose — "tune in.live for the announcement", "order it in store
+// or.online", "coordinates are in.lat and long format". These survive the
+// sentence-boundary guard because they are lowercase and mid-sentence, so
+// nothing about their shape distinguishes them from a real hostname.
+//
+// A closed list rather than a length rule: "a.tk" and "b.tk" are one character
+// and are perfectly good hosts, so short does not mean prose. Only a real host
+// label that IS one of these words is affected, and then only in its bare form
+// with no path or www. — "evil.work/login" and "www.evil.work" are untouched.
+// Kept deliberately small; the risk of a longer list is silencing a real host.
+const PROSE_LEFT_LABELS = new Set([
+  "a", "an", "the", "and", "or", "but", "so", "as", "at", "by", "in", "on",
+  "of", "to", "up", "for", "from", "with", "is", "are", "was", "were", "be",
+  "been", "it", "its", "we", "he", "she", "they", "you", "i", "my", "our",
+  "your", "their", "this", "that", "these", "those", "if", "then", "than",
+  "when", "while", "not", "no", "do", "does", "did", "go", "get", "got",
+]);
 
 const BARE_HOST_GLOBAL =
   /(?<![\w@.\/\\-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(\/[^\s<>"']*)?/gi;
@@ -1228,9 +1265,7 @@ const BARE_HOST_GLOBAL =
  */
 function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
   const flagged = new Set(
-    suspiciousTlds
-      .map((t) => t.replace(/^\./, "").toLowerCase())
-      .filter((t) => !FILE_EXTENSION_TLDS.has(t)),
+    suspiciousTlds.map((t) => t.replace(/^\./, "").toLowerCase()),
   );
 
   const found: string[] = [];
@@ -1238,6 +1273,30 @@ function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
     const [whole, hostname] = match;
     const labels = hostname.toLowerCase().split(".");
     const tld = labels[labels.length - 1];
+
+    // Sentence boundary with the space missing after the full stop — "the
+    // plumber came by.Work is done", "Mum's in hospital.ICU visiting hours".
+    // Missing spaces after a full stop are routine in pasted SMS, and every
+    // word-like TLD in the list (.work, .live, .online, .click, .top, .store,
+    // .icu, .loan …) can end up on the right of one.
+    //
+    // The tell is Capitalised-Then-Lowercase on the last label: that is a new
+    // sentence's first word, not a TLD. Deliberately NOT "starts uppercase" —
+    // scam SMS shout in full caps ("AUSPOST-TRACK.SHOP/verify"), so an
+    // all-uppercase label must still be treated as a host. Checked against the
+    // RAW hostname because `labels` has already been lowercased.
+    const rawTld = hostname.slice(hostname.lastIndexOf(".") + 1);
+    if (/^[A-Z][a-z]/.test(rawTld)) continue;
+
+    // Prose connective on the left ("in.live", "or.online"). Only ever skips
+    // the BARE form — a path or a www. prefix means a host was meant, and both
+    // are checked below.
+    if (
+      labels.length === 2 &&
+      PROSE_LEFT_LABELS.has(labels[0]) &&
+      !match[2] &&
+      !/^www\./i.test(hostname)
+    ) continue;
 
     const isFlaggedTld = flagged.has(tld);
     if (!BARE_HOST_TLDS.has(tld) && !isFlaggedTld) continue;
@@ -1247,9 +1306,15 @@ function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
     // prefix keeps those from raising a URL card on an innocent message, while
     // still catching "auspost.com.au/track". An abuse-prone TLD needs no such
     // corroboration: nobody mentions a .tk domain in passing.
+    //
+    // The exception is AMBIGUOUS_BARE_TLDS — TLDs that are also ordinary words
+    // ("the deposit.bond is refundable", "archive.zip"). Those are high-risk as
+    // domains but common as prose, so they need the same corroboration as a
+    // mainstream TLD rather than the abuse-prone shortcut.
+    const needsCorroboration = !isFlaggedTld || AMBIGUOUS_BARE_TLDS.has(tld);
     const hasPath = Boolean(match[2]);
     const hasWww = /^www\./i.test(hostname);
-    if (!isFlaggedTld && !hasPath && !hasWww) continue;
+    if (needsCorroboration && !hasPath && !hasWww) continue;
     // A single label plus TLD is the minimum for a real host; "e.g" and "No.5"
     // are already excluded by the TLD check, this guards the rest.
     if (labels.length < 2 || labels.some((l) => l.length === 0)) continue;
