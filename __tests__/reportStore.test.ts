@@ -372,6 +372,18 @@ describe("recordCheckEvent", () => {
     expect(call.args[0]).toBe("unknown");
   });
 
+  it("buckets an unrecognised outcome as 'unknown', never as 'analysed'", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    // Folding a bad value into `analysed` would move a miswrite into a counted
+    // population and quietly distort the email path's volume.
+    await recordCheckEvent("email", "bogus" as never, Date.UTC(2026, 7, 29));
+
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(call.args[1]).toBe("unknown");
+  });
+
   it("never throws when the database fails", async () => {
     vi.mocked(getDb).mockRejectedValue(new Error("db down") as never);
     await expect(recordCheckEvent("web", "delivered")).resolves.toBeUndefined();
@@ -384,10 +396,30 @@ describe("incrementCheckCount", () => {
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
     await incrementCheckCount("email");
+    // The aggregate write is fire-and-forget, so let its microtasks settle.
+    await new Promise((r) => setTimeout(r, 0));
 
     const sql = mockExecute.mock.calls.map((c) => (c[0] as { sql: string }).sql);
     expect(sql.some((q) => q.includes("UPDATE counters"))).toBe(true);
     expect(sql.some((q) => q.includes("INSERT INTO check_events"))).toBe(true);
+  });
+
+  it("does not make the caller wait on the aggregate write", async () => {
+    let resolveAggregate: (v: unknown) => void = () => {};
+    const mockExecute = vi.fn().mockImplementation((q: { sql: string }) => {
+      if (q.sql.includes("check_events")) {
+        return new Promise((r) => {
+          resolveAggregate = r;
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    // Resolves even though the aggregate write is still outstanding — a hung
+    // telemetry row must never hold up a user-facing request.
+    await expect(incrementCheckCount("web")).resolves.toBeUndefined();
+    resolveAggregate({ rows: [] });
   });
 
   it("still bumps the lifetime counter with no surface, touching no aggregate", async () => {

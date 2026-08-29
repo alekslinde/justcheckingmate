@@ -153,14 +153,20 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
 // an unattributed surface is indistinguishable from no traffic at all.
 export type CheckSurface = "web" | "email" | "unknown";
 
-// What became of it. `delivered` means a person has a verdict in hand; on the
-// email path that is strictly narrower than "we analysed it", because a reply
-// can still be rejected after a successful analysis. Keeping both makes the
-// "% yielding a verdict" ratio readable rather than inferred.
-export type CheckOutcome = "delivered" | "analysed";
+// What became of it.
+//
+// `delivered` means a person has a verdict in hand. `analysed` means the email
+// path produced a reply for the Worker to send; it is recorded on the inbound
+// analysis path only, and says nothing about whether the reply arrived.
+// `unknown` is the neutral bucket for an unrecognised value — deliberately NOT
+// folded into `analysed`, which would silently move a bad write into a counted
+// population.
+//
+// These are NOT two halves of one ratio. See the note on `getCheckEvents`.
+export type CheckOutcome = "delivered" | "analysed" | "unknown";
 
 const CHECK_SURFACES: readonly CheckSurface[] = ["web", "email", "unknown"];
-const CHECK_OUTCOMES: readonly CheckOutcome[] = ["delivered", "analysed"];
+const CHECK_OUTCOMES: readonly CheckOutcome[] = ["delivered", "analysed", "unknown"];
 
 // UTC day key, `YYYY-MM-DD`. UTC rather than AEST deliberately: unlike the
 // region-demand script — which buckets AU submissions at UTC+10 so a month's
@@ -184,8 +190,13 @@ export async function recordCheckEvent(
   outcome: CheckOutcome,
   at: number = Date.now(),
 ): Promise<void> {
+  // Both call sites pass literals today, so these are unreachable from inside
+  // this repo. They are kept for the surface a future client adds — a bad value
+  // arriving from a new caller should land in `unknown` and be visible as
+  // unattributed volume, never be dropped and never be quietly counted as
+  // something it wasn't.
   const safeSurface: CheckSurface = CHECK_SURFACES.includes(surface) ? surface : "unknown";
-  const safeOutcome: CheckOutcome = CHECK_OUTCOMES.includes(outcome) ? outcome : "analysed";
+  const safeOutcome: CheckOutcome = CHECK_OUTCOMES.includes(outcome) ? outcome : "unknown";
   try {
     const db = await getDb();
     await db.execute({
@@ -204,8 +215,13 @@ export async function recordCheckEvent(
  * Increment the public lifetime "scams checked" total.
  *
  * `surface` is optional so existing callers keep working unchanged; passing it
- * also records the per-surface aggregate in the same call, which is what keeps
- * the two numbers from drifting apart at the call site.
+ * also records the per-surface aggregate.
+ *
+ * The aggregate write is deliberately NOT awaited. The public counter is the
+ * source of truth and the caller is waiting on this — making the request pay
+ * for a second serial round trip (which contends on a single hot per-day row)
+ * to update a secondary number is the wrong trade. `recordCheckEvent` already
+ * swallows its own failures.
  */
 export async function incrementCheckCount(surface?: CheckSurface): Promise<void> {
   const db = await getDb();
@@ -214,7 +230,7 @@ export async function incrementCheckCount(surface?: CheckSurface): Promise<void>
     args: [],
   });
   if (surface) {
-    await recordCheckEvent(surface, "delivered");
+    void recordCheckEvent(surface, "delivered");
   }
 }
 
@@ -229,8 +245,24 @@ export interface CheckEventRow {
  * Read the per-surface aggregate, newest day first.
  *
  * `sinceDay` is an inclusive `YYYY-MM-DD` bound; omit it for everything. The
- * shape is deliberately raw — callers do their own bucketing, since a weekly
- * rate and a delivered-ratio want different groupings of the same rows.
+ * shape is deliberately raw — callers do their own bucketing.
+ *
+ * **`delivered` and `analysed` are not a numerator and denominator.** Dividing
+ * one by the other looks meaningful and is not:
+ *
+ * - They are written on different code paths, behind two independent
+ *   rate-limit budgets (`inbound:` and `delivered:`, 4 per 10 min each), so
+ *   either can be throttled while the other is not. `delivered` exceeding
+ *   `analysed` is an ordinary outcome, not a corruption.
+ * - The `web` surface never writes `analysed` at all — a web check is delivered
+ *   by definition — so any such ratio is undefined there rather than 100%.
+ * - A crash mid-analysis writes neither, so failures are absent from both
+ *   sides rather than lowering a success rate.
+ *
+ * Read them as two separate volumes: how many verdicts reached people, and how
+ * many replies the email path produced. A true delivery rate needs both
+ * outcomes written on one path under one budget, which is a schema change, not
+ * a division.
  */
 export async function getCheckEvents(sinceDay?: string): Promise<CheckEventRow[]> {
   const db = await getDb();

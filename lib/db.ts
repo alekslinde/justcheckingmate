@@ -59,15 +59,26 @@ async function setup(): Promise<void> {
   // for the published number; this table is strictly additional. The two are
   // incremented together on the delivered path, so they can drift only for
   // checks that predate this table.
+  //
+  // `day` leads the primary key so a range scan over `WHERE day >= ?` — the only
+  // way this table is read — uses the PK prefix instead of scanning everything.
+  // `value` has no DEFAULT: every row is created by an upsert that sets it to 1,
+  // and a zero row would mean "something happened zero times", which is not a
+  // thing this table can record.
+  //
+  // Failure is swallowed for the same reason the ALTER migrations below are:
+  // `getDb` memoises `setup()`, so letting this reject would poison
+  // initialisation for `reports`, `counters` and `bug_reports` too. Telemetry
+  // must never be able to take the app down.
   await db.execute(`
     CREATE TABLE IF NOT EXISTS check_events (
+      day      TEXT    NOT NULL,
       surface  TEXT    NOT NULL,
       outcome  TEXT    NOT NULL,
-      day      TEXT    NOT NULL,
-      value    INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (surface, outcome, day)
+      value    INTEGER NOT NULL,
+      PRIMARY KEY (day, surface, outcome)
     )
-  `);
+  `).catch(() => {});
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('checks', 0)`);
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('reports', 0)`);
   // Migrations — ALTER TABLE ignores silently if column already exists

@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { getStats, getCheckEvents, type CheckSurface } from "@/lib/reportStore";
+import { getStats, getCheckEvents, type CheckSurface, type CheckOutcome } from "@/lib/reportStore";
 
 // Days of history the breakdown covers when `?days=` is omitted. Four weeks is
-// enough to read a weekly rate and see a trend without returning a payload that
-// grows without bound as the table fills.
+// enough to read a weekly rate and see a trend.
 const DEFAULT_DAYS = 28;
-const MAX_DAYS = 365;
+// Bounds the range scan and the response size on an unauthenticated route.
+const MAX_DAYS = 90;
+// Hard cap on returned rows regardless of the window. With three surfaces and
+// three outcomes a day tops out at ~9 rows, so this is far above any honest
+// payload while still bounding a table that has grown unexpectedly.
+const MAX_DAILY_ROWS = 1000;
 
 function dayKey(at: number): string {
   return new Date(at).toISOString().slice(0, 10);
@@ -13,11 +17,12 @@ function dayKey(at: number): string {
 
 interface SurfaceSummary {
   surface: CheckSurface;
+  // Verdicts that reached a person.
   delivered: number;
+  // Forwards the email path accepted and tried to analyse. Recorded before
+  // analysis runs, so this counts attempts, not successes. Always 0 for `web`.
   analysed: number;
-  // Share of analysed checks that reached a person. Null rather than 0 when
-  // nothing was analysed, so "no data" is not rendered as "0% success".
-  deliveredRate: number | null;
+  unknown: number;
 }
 
 /**
@@ -26,9 +31,15 @@ interface SurfaceSummary {
  * Default response is unchanged and public: `{ checks, reports }` — the
  * lifetime totals StatsBar renders in the hero.
  *
- * `?breakdown=1` adds the per-surface aggregate. It is opt-in specifically so
- * the public component cannot start emitting operational detail by accident,
- * and so this route's default payload stays the same shape it has always been.
+ * `?breakdown=1` adds the per-surface aggregate. Opt-in so the public component
+ * cannot start emitting operational detail by accident.
+ *
+ * **No rate is computed from these counts, deliberately.** `delivered` and
+ * `analysed` are separate volumes written on different code paths under
+ * independent rate-limit budgets — `delivered` exceeding `analysed` is normal,
+ * and `web` never writes `analysed` at all. See `getCheckEvents` in
+ * lib/reportStore.ts for why dividing them produces a number that looks
+ * meaningful and isn't.
  */
 export async function GET(request: Request) {
   const stats = await getStats();
@@ -38,11 +49,21 @@ export async function GET(request: Request) {
     return NextResponse.json(stats);
   }
 
-  const requested = Number(url.searchParams.get("days"));
-  const days =
-    Number.isFinite(requested) && requested >= 1
-      ? Math.min(Math.floor(requested), MAX_DAYS)
-      : DEFAULT_DAYS;
+  const rawDays = url.searchParams.get("days");
+  let days = DEFAULT_DAYS;
+  if (rawDays !== null) {
+    const parsed = Number(rawDays);
+    // Reject rather than silently substitute: a caller asking for `days=0` or
+    // `days=1.5` has a wrong assumption, and quietly returning 28 days of data
+    // would hide it behind a plausible-looking response.
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_DAYS) {
+      return NextResponse.json(
+        { error: `days must be an integer between 1 and ${MAX_DAYS}` },
+        { status: 400 },
+      );
+    }
+    days = parsed;
+  }
 
   // Inclusive lower bound: `days = 1` means today only.
   const since = dayKey(Date.now() - (days - 1) * 86_400_000);
@@ -54,18 +75,20 @@ export async function GET(request: Request) {
       surface: row.surface,
       delivered: 0,
       analysed: 0,
-      deliveredRate: null,
+      unknown: 0,
     };
-    if (row.outcome === "delivered") entry.delivered += row.value;
-    else entry.analysed += row.value;
+    const outcome: CheckOutcome = row.outcome;
+    if (outcome === "delivered") entry.delivered += row.value;
+    else if (outcome === "analysed") entry.analysed += row.value;
+    else entry.unknown += row.value;
     bySurface.set(row.surface, entry);
   }
 
-  const surfaces = [...bySurface.values()].map((s) => ({
-    ...s,
-    deliveredRate: s.analysed > 0 ? s.delivered / s.analysed : null,
-  }));
-  surfaces.sort((a, b) => b.delivered - a.delivered || a.surface.localeCompare(b.surface));
+  const surfaces = [...bySurface.values()].sort(
+    (a, b) => b.delivered - a.delivered || a.surface.localeCompare(b.surface),
+  );
+
+  const daily = rows.slice(0, MAX_DAILY_ROWS);
 
   return NextResponse.json({
     ...stats,
@@ -76,8 +99,10 @@ export async function GET(request: Request) {
       days,
       surfaces,
       // Raw rows so a caller can bucket by week itself; the summary above
-      // deliberately collapses the day axis.
-      daily: rows,
+      // collapses the day axis. `truncated` says the cap was hit, so a short
+      // list is never mistaken for a quiet period.
+      daily,
+      truncated: rows.length > daily.length,
     },
   });
 }
