@@ -219,6 +219,14 @@ export interface RegionDefinition {
   identityReregFlag: string;
 
   /**
+   * Address-correction phrases that score only alongside a parcel/delivery
+   * signal. Optional: a region defines it when its carrier's dominant lure is
+   * address-shaped, which today is AU only. Ordinary retail commerce uses these
+   * words, so they must never score flat — see PARCEL_ADDRESS_PHRASES in au.ts.
+   */
+  parcelAddressPhrases?: string[];
+
+  /**
    * Copy for the named-fraudulent-platform flag. A function because the flag
    * embeds the matched platform name, and the sentence names this region's
    * regulator — both vary per region.
@@ -362,6 +370,8 @@ export interface RegionPack {
   bankIdentifiers: string[];
   identityRereg: string[];
   identityReregFlag: string;
+  /** Gated address-correction phrases; empty for regions that define none. */
+  parcelAddressPhrases: string[];
   fakeInvestmentPlatformFlag: (platform: string) => string;
   legitDomains: string[];
   authorityOwnDomains: string[];

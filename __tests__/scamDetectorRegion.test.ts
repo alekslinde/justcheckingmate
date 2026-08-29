@@ -206,3 +206,90 @@ describe("display-name masking cannot lower a verdict", () => {
     expect(masked.verdict).not.toBe("safe");
   });
 });
+
+// AU parcel address-correction lure (D1 / 2026-08-29 sweep). Australia Post's
+// own scam-alert page names address correction as the dominant live AU parcel
+// campaign — six of its eight parcel alerts are address-shaped — while the AU
+// pack, the largest of the six, carried nothing for it. Ten phrasings taken
+// verbatim from those alerts scored 0/safe before this.
+//
+// The phrases split in two, and the split is the whole design. Some have no
+// clean use in a consumer delivery SMS and score flat. The rest are ordinary
+// retail commerce ("please confirm your address for our records before we
+// ship") and are GATED on a delivery context, because the scam signal is not
+// the address request — it is the address request as the thing blocking a
+// delivery. See docs/threat-intel/2026-08-29-threat-roadmap.md.
+describe("AU parcel address-correction lure", () => {
+  // Verbatim from auspost.com.au scam alerts, with the alert date.
+  const scamPhrasings: [string, string][] = [
+    ["update your address (2024-07-08)", "Your parcel is waiting. Update your address to complete delivery"],
+    ["confirm your address (2024-11-13)", "We could not complete delivery. Confirm your address to receive your parcel"],
+    ["update your correct address (2026-02-25)", "Update your correct address to release your shipment"],
+    ["schedule redelivery (2025-02-27)", "StarTrack: schedule redelivery to prevent your package being returned"],
+    ["missing house number (2026-02-25)", "Shipment has been suspended due to missing house number"],
+    ["verify your postcode (2026-03-18)", "Please verify your postcode within 48 hours to complete delivery"],
+    ["delivery attempt unsuccessful (2026-07-01)", "Your delivery attempt was unsuccessful. Act within 24 hours or your parcel is returned"],
+  ];
+
+  for (const [name, text] of scamPhrasings) {
+    it(`no longer scores safe: ${name}`, () => {
+      expect(checkSms(text).verdict).not.toBe("safe");
+    });
+  }
+
+  // The FP half. Each of these is a message a real retailer or courier sends,
+  // and each was measured at 0 before and after the change. The first is the
+  // one that decided the design: a flat "confirm your address" entry would
+  // flag it.
+  const legitimate = [
+    "Please confirm your address for our records before we ship",
+    "Thanks for updating your address with us",
+    "Your redelivery is booked for Thursday",
+    "Hi, the courier will deliver between 9 and 11 tomorrow",
+    "Your order has shipped. Tracking: AP123456789AU",
+    "We tried to deliver today and left a card. Collect from the post office",
+    "Your parcel was delivered and left in a safe place",
+    "Your Woolworths order is on its way, track it in the app",
+  ];
+
+  for (const text of legitimate) {
+    it(`stays safe: ${text.slice(0, 46)}`, () => {
+      expect(checkSms(text).verdict).toBe("safe");
+    });
+  }
+
+  it("does not fire on an address phrase with no delivery context", () => {
+    // The gate's whole purpose. "Confirm your address" is a shipping formality
+    // until something says a delivery is being held up by it.
+    const result = checkSms("Please confirm your address for our records");
+    expect(result.flags.some((f) => f.includes("release a delivery"))).toBe(false);
+  });
+
+  it("fires on the same phrase once a delivery context is present", () => {
+    const result = checkSms("Your parcel is waiting. Please confirm your address");
+    expect(result.flags.some((f) => f.includes("release a delivery"))).toBe(true);
+  });
+
+  it("does not fire on a delivery context with no address phrase", () => {
+    // Both halves are required. "Your redelivery is booked" carries the
+    // delivery noun and is a perfectly ordinary courier message.
+    const result = checkSms("Your redelivery is booked for Thursday");
+    expect(result.flags.some((f) => f.includes("release a delivery"))).toBe(false);
+  });
+
+  it("scores the gated pairing short of likely_scam on its own", () => {
+    // +20 reaches "suspicious" (20-44) without reaching "likely_scam" (45+),
+    // which is the right ceiling for a signal whose two halves are each
+    // individually innocent.
+    const result = checkSms("Your parcel is waiting. Update your address to complete delivery");
+    expect(result.verdict).toBe("suspicious");
+  });
+
+  // D2 — "parcel held" was already listed, but entries match as literal
+  // substrings, so the inflected form missed it entirely and scored 0. This is
+  // the miss that prompted the sweep.
+  it("matches the inflected form of a held parcel", () => {
+    const result = checkSms("Your parcel is held. Pay the fee now");
+    expect(result.flags.some((f) => f.toLowerCase().includes("parcel is held"))).toBe(true);
+  });
+});

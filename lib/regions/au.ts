@@ -32,6 +32,43 @@ const URGENCY_PARCEL = [
   "import duty", "duty and handling", "clearance fee",
   "held at customs", "held at border", "held by customs",
   "release your parcel",
+  // Address-correction framing (D1 / 2026-08-29 sweep / auspost.com.au scam
+  // alerts). AusPost's own alert page names this as the dominant live AU
+  // variant — six of its eight parcel alerts are address-shaped — while this
+  // list, the largest of the six packs, carried nothing for it. Ten phrasings
+  // taken verbatim from those alerts scored 0/safe before this.
+  //
+  // These are the half with no clean use in a consumer delivery SMS: a real
+  // carrier reports a delivery problem, it does not ask you to fix a postcode
+  // or a house number to release goods. The address phrases a legitimate
+  // retailer DOES send ("confirm your address for our records") are gated
+  // instead — see PARCEL_ADDRESS_PHRASES below.
+  "correct address label", "verify your postcode", "missing house number",
+  "shipment has been suspended", "delivery attempt was unsuccessful",
+  "package held",
+  // Inflected forms of "parcel held" above. Entries are matched as literal
+  // substrings, so "your parcel is held" missed the existing entry entirely and
+  // scored 0 — the miss that prompted this sweep. (D2)
+  "parcel is held", "package is being held", "held pending payment",
+  "release fee",
+];
+
+// The gated half of D1 (2026-08-29 sweep). "Confirm your address" is ordinary
+// commerce — a retailer checking a shipping address before dispatch says
+// exactly this, and measuring confirmed it: "Please confirm your address for
+// our records before we ship" is a legitimate message that a flat entry would
+// flag.
+//
+// The scam signal is not the address request. It is the address request
+// presented as the thing BLOCKING a delivery. So these score only alongside an
+// existing parcel/delivery signal, following the KEYS_BY_POST_PHRASES
+// precedent (D3 / #180) — a flat urgencyWords entry could not express this,
+// since every urgency group is flattened into one union and scored by hit
+// count.
+export const PARCEL_ADDRESS_PHRASES = [
+  "update your address", "confirm your address", "correct your address",
+  "update your correct address", "confirm delivery address",
+  "schedule redelivery", "arrange redelivery", "reschedule your delivery",
 ];
 
 // NBN Co disconnection-threat smishing (D7 / #67).
@@ -447,6 +484,7 @@ export const AU: RegionDefinition = {
 
   bankIdentifiers: ["bsb"],
 
+  parcelAddressPhrases: PARCEL_ADDRESS_PHRASES,
   identityRereg: IDENTITY_REREG,
   identityReregFlag:
     "myID/digital-identity re-registration lure — Services Australia and myID never send unsolicited requests to 're-verify' or 'set up' your digital identity. Go to my.gov.au directly, never via a message link.",

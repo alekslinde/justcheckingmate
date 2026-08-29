@@ -461,6 +461,38 @@ export function checkSms(
     score += Math.min(urgencyHits.length * 10, 35);
   }
 
+  // Address correction presented as blocking a delivery (D1 / 2026-08-29
+  // sweep). AusPost names this as the dominant live AU parcel lure, but the
+  // phrases are ordinary retail commerce on their own — "please confirm your
+  // address for our records before we ship" is a legitimate dispatch message.
+  //
+  // So the phrase never scores alone: it needs a parcel/delivery signal
+  // already present, which is what turns "confirm your address" from a
+  // shipping formality into the thing standing between you and your goods.
+  // Same shape as the keys-by-post gate below, and for the same reason — a flat
+  // urgencyWords entry cannot express a condition, since every urgency group is
+  // flattened into one union and scored by hit count.
+  //
+  // Scored at +20 rather than the +10 an urgency hit carries: on its own the
+  // pairing is the complete lure, and the delivery half has usually contributed
+  // only a single generic hit. It reaches "suspicious" (20-44) without reaching
+  // "likely_scam" (45+), which is the right ceiling for a signal whose
+  // components are each individually innocent.
+  // The context is a plain delivery noun, not a hit in the parcel urgency list.
+  // Gating on the latter was the first attempt and it almost never fired: these
+  // messages are engineered to sound routine, so they carry no urgency phrase
+  // at all — "Your parcel is waiting. Update your address to complete delivery"
+  // produces zero urgency hits. Requiring one meant the gate could only open
+  // for messages that were already scoring, which is precisely backwards.
+  const hasDeliveryContext = /\b(parcels?|packages?|shipments?|deliver\w*|courier|consignment|tracking)\b/i.test(text);
+  const addressPhraseHit = PACK.parcelAddressPhrases.find((p) => mentions(lower, p));
+  if (addressPhraseHit && hasDeliveryContext) {
+    flags.push(
+      `Asks you to fix an address to release a delivery ("${addressPhraseHit}") — Australia Post warns this is the most common parcel scam. A real carrier tells you about a delivery problem; it doesn't need your address again to hand over goods it already has.`,
+    );
+    score += 20;
+  }
+
   const rewardHits = REWARD_WORDS.filter((w) => mentions(lower, w));
   if (rewardHits.length > 0) {
     flags.push(`Prize/reward language: "${rewardHits.slice(0, 2).join('", "')}"`);
