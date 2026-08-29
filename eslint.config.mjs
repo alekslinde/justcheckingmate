@@ -41,7 +41,18 @@ const eslintConfig = defineConfig([
   // decision about the privacy contract and should be argued in review, not
   // silenced with an inline disable.
   {
-    files: ["lib/**/*.{ts,tsx}", "app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+    // packages/** is listed because the engine moved there. Leaving it out was
+    // a real regression during the extraction: lint kept passing while the
+    // rules silently stopped covering the one module they exist for. A scope
+    // that no longer matches the code is indistinguishable from a scope that
+    // finds nothing — which is why __tests__/engineNetworkImports.test.ts
+    // probes the engine's own path rather than trusting this list.
+    files: [
+      "lib/**/*.{ts,tsx}",
+      "app/**/*.{ts,tsx}",
+      "components/**/*.{ts,tsx}",
+      "packages/**/*.{ts,tsx}",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -58,7 +69,7 @@ const eslintConfig = defineConfig([
             name,
             message:
               "Network access from the detector would break the never-visit-a-submitted-URL invariant. " +
-              "Outbound calls go through the injected transport (see lib/urlExpander.ts) or an explicit " +
+              "Outbound calls go through the injected transport (see packages/engine/src/urlExpander.ts) or an explicit " +
               "fetch to a fixed endpoint we chose. See __tests__/privacyInvariant.test.ts.",
           })),
         },

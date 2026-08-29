@@ -8,8 +8,18 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "workers/**"],
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "."),
-    },
+    alias: [
+      // Longest-first: "@justcheckingmate/engine" also starts with "@", so a
+      // bare "@" alias declared first would swallow it.
+      {
+        find: /^@justcheckingmate\/engine$/,
+        replacement: path.resolve(__dirname, "packages/engine/src/index.ts"),
+      },
+      {
+        find: /^@justcheckingmate\/engine\/(.*)$/,
+        replacement: path.resolve(__dirname, "packages/engine/src") + "/$1",
+      },
+      { find: /^@\/(.*)$/, replacement: path.resolve(__dirname, ".") + "/$1" },
+    ],
   },
 });

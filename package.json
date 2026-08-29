@@ -2,6 +2,9 @@
   "name": "justcheckingmate",
   "version": "0.4.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "predev": "node scripts/copy-ocr-assets.mjs",
     "dev": "next dev",

@@ -30,7 +30,7 @@ import {
   type ScamSeason,
   type CivilDate,
 } from "@/lib/scamCalendar";
-import type { RegionCode } from "@/lib/regions";
+import type { RegionCode } from "@justcheckingmate/engine/regions";
 
 // Matches the card styling used across Learn and About.
 const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";

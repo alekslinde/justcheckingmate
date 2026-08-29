@@ -8,7 +8,7 @@ import {
   defangEmail,
   defangPhone,
   extractIdentifiers,
-} from "@/lib/urlSanitizer";
+} from "@justcheckingmate/engine/urlSanitizer";
 
 describe("defang", () => {
   it("converts https to hxxps", () => {

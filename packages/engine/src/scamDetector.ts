@@ -1,16 +1,16 @@
-import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "@/lib/emailHeaders";
-import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged } from "@/lib/urlSanitizer";
-import { detectType } from "@/lib/detectType";
-import { analysePhone, PhoneIntel } from "@/lib/phoneIntel";
-import { isShortened, expandUrl, type ExpandFetch } from "@/lib/urlExpander";
-import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "@/lib/regions";
-import { KEYS_BY_POST_PHRASES } from "@/lib/regions/base";
-import type { CheckResult } from "@/lib/engineTypes";
+import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "./emailHeaders";
+import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged } from "./urlSanitizer";
+import { detectType } from "./detectType";
+import { analysePhone, PhoneIntel } from "./phoneIntel";
+import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
+import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "./regions";
+import { KEYS_BY_POST_PHRASES } from "./regions/base";
+import type { CheckResult } from "./engineTypes";
 
 // ScamType and CheckResult live in engineTypes.ts to break the import cycle
 // with detectType (see the note there). Re-exported here so every existing
 // consumer keeps importing them from the scorer.
-export type { ScamType, CheckResult } from "@/lib/engineTypes";
+export type { ScamType, CheckResult } from "./engineTypes";
 export type { PhoneIntel };
 
 // ────────────────────────────────────────────────────────────────────────────

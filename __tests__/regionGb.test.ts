@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, checkUrl, checkEmail, checkPhone } from "@/lib/scamDetector";
-import { analysePhone } from "@/lib/phoneIntel";
-import { resolveRegionPack } from "@/lib/regions";
-import { GB } from "@/lib/regions/gb";
-import { AU } from "@/lib/regions/au";
+import { checkSms, checkUrl, checkEmail, checkPhone } from "@justcheckingmate/engine/scamDetector";
+import { analysePhone } from "@justcheckingmate/engine/phoneIntel";
+import { resolveRegionPack } from "@justcheckingmate/engine/regions";
+import { GB } from "@justcheckingmate/engine/regions/gb";
+import { AU } from "@justcheckingmate/engine/regions/au";
 
 // Phase 5 — the UK pack. Two jobs here:
 //

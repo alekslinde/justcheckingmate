@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveRegionPack, supportedRegions } from "@/lib/regions";
-import { checkSms } from "@/lib/scamDetector";
+import { resolveRegionPack, supportedRegions } from "@justcheckingmate/engine/regions";
+import { checkSms } from "@justcheckingmate/engine/scamDetector";
 
 // Guards the substring-collision failure mode above the WORD_MATCH_MAX_LEN
 // threshold (#196).

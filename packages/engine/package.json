@@ -1,0 +1,22 @@
+{
+  "name": "@justcheckingmate/engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rule-based scam detection engine. No framework, no ambient network access.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./detectType": "./src/detectType.ts",
+    "./emailHeaders": "./src/emailHeaders.ts",
+    "./engineTypes": "./src/engineTypes.ts",
+    "./phoneIntel": "./src/phoneIntel.ts",
+    "./regions": "./src/regions/index.ts",
+    "./regions/*": "./src/regions/*.ts",
+    "./scamDetector": "./src/scamDetector.ts",
+    "./urlExpander": "./src/urlExpander.ts",
+    "./urlSanitizer": "./src/urlSanitizer.ts"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.11"
+  }
+}

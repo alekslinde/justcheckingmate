@@ -9,8 +9,8 @@
 //
 // Nothing here imports the scoring engine. Types and pure mapping only.
 
-import type { CheckResult } from "@/lib/engineTypes";
-import type { RegionCode } from "@/lib/regions";
+import type { CheckResult } from "@justcheckingmate/engine/engineTypes";
+import type { RegionCode } from "@justcheckingmate/engine/regions";
 import { REPORT_TYPES, type ReportType } from "@/lib/reportTypes";
 
 /**

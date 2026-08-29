@@ -18,8 +18,8 @@
 // per-region number-plan semantics carried on the region pack's phonePlan.
 
 import { parsePhoneNumberFromString, isSupportedCountry, type PhoneNumber } from "libphonenumber-js/max";
-import { resolveRegionPack, DEFAULT_REGION, FALLBACK_REGION, type RegionInput } from "@/lib/regions";
-import type { PhonePlan } from "@/lib/regions/types";
+import { resolveRegionPack, DEFAULT_REGION, FALLBACK_REGION, type RegionInput } from "./regions";
+import type { PhonePlan } from "./regions/types";
 
 export interface PhoneIntel {
   lineType: "mobile" | "fixed" | "voip_likely" | "premium" | "freecall" | "shared_cost" | "emergency" | "unknown";

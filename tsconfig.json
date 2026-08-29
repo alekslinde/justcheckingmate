@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@justcheckingmate/engine": [
+        "./packages/engine/src/index.ts"
+      ],
+      "@justcheckingmate/engine/*": [
+        "./packages/engine/src/*"
       ]
     }
   },

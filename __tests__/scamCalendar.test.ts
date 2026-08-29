@@ -20,7 +20,7 @@ import {
   authoredCalendarRegions,
   type ScamSeason,
 } from "@/lib/scamCalendar";
-import { supportedRegions } from "@/lib/regions";
+import { supportedRegions } from "@justcheckingmate/engine/regions";
 
 // Local dates throughout: isActiveOn reads getMonth/getDate, so constructing
 // with new Date(y, m, d) keeps the test independent of the runner's timezone.

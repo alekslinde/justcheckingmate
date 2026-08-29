@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent } from "@/lib/scamDetector";
+import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent } from "@justcheckingmate/engine/scamDetector";
 import { overallCoverage, isClean, formatVerdictEmail } from "@/lib/verdictSummary";
-import { FALLBACK_REGION } from "@/lib/regions";
+import { FALLBACK_REGION } from "@justcheckingmate/engine/regions";
 
 // The Phase 3 guarantee: a "safe" verdict asserts we looked and found nothing.
 // Where we have no rules to look with, that assertion isn't available — a clean

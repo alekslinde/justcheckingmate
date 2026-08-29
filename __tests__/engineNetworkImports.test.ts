@@ -206,3 +206,66 @@ describe("the rule explains itself and does not over-reach", () => {
     expect(privacyViolations(messages)).toEqual([]);
   });
 });
+
+// ── Scope, not just rule bodies ───────────────────────────────────────────────
+//
+// Everything above re-declares the rules against a temp path, which proves the
+// rule *bodies* behave but says nothing about whether the project config still
+// points them at the engine. Extracting the engine to packages/engine broke
+// exactly that: the `files` globs listed lib/, app/ and components/, so the
+// rules silently stopped covering the one module they exist for, and lint went
+// on passing. A scope that no longer matches the code is indistinguishable from
+// a scope that finds nothing.
+//
+// These run the *real* project config against a probe written into the engine's
+// own directory, so the assertion is "the shipped configuration protects this
+// path" rather than "the rule works somewhere".
+describe("the project config covers the engine's real location", () => {
+  const ENGINE_SRC = path.join(process.cwd(), "packages/engine/src");
+
+  function lintInPlace(source: string): LintMessage[] {
+    // Written into the engine dir because that is the path under test. Named
+    // with a leading underscore and removed in `finally` — an interrupted run
+    // strands a file that would break the next lint, so cleanup is not optional.
+    const probe = path.join(ENGINE_SRC, "__scope_probe.ts");
+    writeFileSync(probe, source);
+    try {
+      let stdout = "";
+      try {
+        stdout = execFileSync(
+          "npx",
+          ["eslint", "--format", "json", probe],
+          { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+        );
+      } catch (err) {
+        // eslint exits non-zero when it reports errors; the JSON is still on stdout.
+        stdout = (err as { stdout?: string }).stdout ?? "";
+      }
+      const results = JSON.parse(stdout) as Array<{ messages: LintMessage[] }>;
+      return results.flatMap((r) => r.messages);
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }
+
+  it("flags a network import inside packages/engine", () => {
+    const found = privacyViolations(lintInPlace(`import dns from "node:dns";\nexport const x = dns;\n`));
+    expect(
+      found.length,
+      "the privacy rules do not cover packages/engine — check the `files` globs in eslint.config.mjs",
+    ).toBeGreaterThan(0);
+  });
+
+  it("flags a dynamic network import inside packages/engine", () => {
+    const found = privacyViolations(
+      lintInPlace(`export async function f() { return import("node:net"); }\n`),
+    );
+    expect(found.length).toBeGreaterThan(0);
+  });
+
+  it("leaves legitimate imports in the engine alone", () => {
+    expect(
+      privacyViolations(lintInPlace(`import { parsePhoneNumber } from "libphonenumber-js/max";\nexport const x = parsePhoneNumber;\n`)),
+    ).toEqual([]);
+  });
+});

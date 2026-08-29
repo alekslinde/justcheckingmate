@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent } from "@/lib/scamDetector";
-import { DEFAULT_REGION } from "@/lib/regions";
-import { normaliseForAnalysis } from "@/lib/urlSanitizer";
+import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent } from "@justcheckingmate/engine/scamDetector";
+import { DEFAULT_REGION } from "@justcheckingmate/engine/regions";
+import { normaliseForAnalysis } from "@justcheckingmate/engine/urlSanitizer";
 
 // Phase 2 threads an optional region through every checker. These assert the
 // plumbing: omitting it must be identical to today's behaviour, and an

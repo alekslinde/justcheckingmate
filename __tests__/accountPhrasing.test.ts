@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSms } from "@/lib/scamDetector";
+import { checkSms } from "@justcheckingmate/engine/scamDetector";
 
 // Regression cover for two false-positive sources found via the pack-shadowing
 // guard (#196), both of which flagged ordinary service messages.
