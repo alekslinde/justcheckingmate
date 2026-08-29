@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { toPrediction, validateCase } from "@/eval/schema";
-import { computeMetrics, type Outcome } from "@/eval/metrics";
+import { computeMetrics, wilson, type Outcome } from "@/eval/metrics";
 import { checkThresholds } from "@/eval/report";
 import { loadCorpus } from "@/eval/corpus";
 import { join } from "node:path";
@@ -71,6 +71,86 @@ describe("computeMetrics", () => {
   });
 });
 
+describe("wilson", () => {
+  const round = (v: number) => Math.round(v * 1000) / 10;
+
+  it("returns null for an empty denominator", () => {
+    expect(wilson(0, 0)).toBeNull();
+    expect(wilson(0, -1)).toBeNull();
+  });
+
+  it("matches known values", () => {
+    const r = wilson(24, 25)!;
+    expect(round(r.value)).toBe(96);
+    expect(round(r.low)).toBeCloseTo(80.5, 0);
+    expect(round(r.high)).toBeCloseTo(99.3, 0);
+    expect(r.n).toBe(25);
+  });
+
+  it("never claims certainty from a perfect small sample", () => {
+    // The normal approximation gives [1, 1] here — twelve observations
+    // presented as proof. Wilson is why we use it.
+    const r = wilson(12, 12)!;
+    expect(r.value).toBe(1);
+    expect(r.low).toBeLessThan(0.8);
+    expect(r.high).toBe(1);
+  });
+
+  it("stays within [0, 1] at both extremes", () => {
+    for (const [k, n] of [[0, 12], [12, 12], [0, 1], [1, 1]] as const) {
+      const r = wilson(k, n)!;
+      expect(r.low).toBeGreaterThanOrEqual(0);
+      expect(r.high).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("narrows as n grows at a fixed proportion", () => {
+    const widths = [10, 100, 1000].map((n) => {
+      const r = wilson(n * 0.9, n)!;
+      return r.high - r.low;
+    });
+    expect(widths[0]).toBeGreaterThan(widths[1]);
+    expect(widths[1]).toBeGreaterThan(widths[2]);
+  });
+
+  it("brackets the point estimate", () => {
+    for (const [k, n] of [[3, 10], [7, 9], [50, 200]] as const) {
+      const r = wilson(k, n)!;
+      expect(r.low).toBeLessThanOrEqual(r.value);
+      expect(r.high).toBeGreaterThanOrEqual(r.value);
+    }
+  });
+});
+
+describe("metric intervals", () => {
+  it("attaches an interval to each rate over its own denominator", () => {
+    const m = computeMetrics([
+      outcome("scam", "flagged"), outcome("scam", "clean"),
+      outcome("benign", "clean"), outcome("benign", "clean"), outcome("benign", "abstain"),
+    ]);
+    expect(m.recallCi!.n).toBe(2);     // committed scam
+    expect(m.fprCi!.n).toBe(2);        // committed benign
+    expect(m.coverageCi!.n).toBe(5);   // every case in the slice
+    expect(m.recallCi!.value).toBe(m.recall);
+    expect(m.fprCi!.value).toBe(m.fpr);
+  });
+
+  it("nulls the interval exactly where the point estimate is null", () => {
+    const m = computeMetrics([outcome("scam", "abstain")]);
+    expect(m.recall).toBeNull();
+    expect(m.recallCi).toBeNull();
+    expect(m.fpr).toBeNull();
+    expect(m.fprCi).toBeNull();
+    expect(m.precisionCi).toBeNull();
+  });
+
+  it("keeps precision and its interval consistent on an all-benign slice", () => {
+    const m = computeMetrics([outcome("benign", "flagged")]);
+    expect(m.precision).toBeNull();
+    expect(m.precisionCi).toBeNull();
+  });
+});
+
 describe("checkThresholds", () => {
   const t = { recall: 0.9, fpr: 0.02, coverage: 0.98 };
 
@@ -81,6 +161,31 @@ describe("checkThresholds", () => {
 
   it("never breaches on a null metric — nothing to judge", () => {
     expect(checkThresholds("CA", computeMetrics([outcome("scam", "abstain")]), { ...t, coverage: null })).toEqual([]);
+  });
+
+  it("marks a breach inconclusive when the limit sits inside the interval", () => {
+    // 1 of 2 caught against a 0.9 bar: a real breach, but the sample cannot
+    // distinguish it from meeting the bar.
+    const m = computeMetrics([outcome("scam", "flagged"), outcome("scam", "clean")]);
+    const [breach] = checkThresholds("AU", m, { recall: 0.9, fpr: null, coverage: null });
+    expect(breach.inconclusive).toBe(true);
+  });
+
+  it("does not mark a well-evidenced breach inconclusive", () => {
+    const many = Array.from({ length: 100 }, (_, i) =>
+      outcome("scam", i < 50 ? "flagged" : "clean"),
+    );
+    const [breach] = checkThresholds("AU", computeMetrics(many), {
+      recall: 0.9, fpr: null, coverage: null,
+    });
+    expect(breach.inconclusive).toBe(false);
+  });
+
+  it("still fails the run on an inconclusive breach", () => {
+    // A gate that ignored what it could not prove would pass everything at
+    // small n — the opposite of a ratchet.
+    const m = computeMetrics([outcome("scam", "clean")]);
+    expect(checkThresholds("AU", m, { recall: 0.9, fpr: null, coverage: null })).toHaveLength(1);
   });
 
   it("treats a null threshold as ungated", () => {

@@ -48,6 +48,44 @@ A run is therefore a pure function of (corpus, region packs, engine).
 | Coverage rate | Share of cases where the engine committed rather than abstaining. |
 | Score p50/p90 | Verdicts are thresholded, so a change can erode margin with no metric movement and then flip many cases at once. This gives warning. |
 
+### Confidence intervals
+
+Every rate is printed with a 95% Wilson interval and the denominator it came
+from. This is not decoration: at corpus sizes in the tens the sampling error
+dwarfs the differences the thresholds try to police.
+
+```
+recall    96.0%   95% CI [80.5, 99.3]  n=  25   ±9pp
+FPR       23.5%   95% CI [9.6, 47.3]   n=  17   ±19pp
+```
+
+A recall of 96% that could plausibly be 80% is not a measurement, and the
+interval is what makes that impossible to miss. In the slice tables the effect
+is starker still — a region with one scam case reports `100.0% [21-100]`, which
+reads correctly as "we know nothing about this region".
+
+Wilson rather than the textbook normal approximation because the corpus lives
+exactly where the normal one fails: small n and proportions near 0 or 1. At
+12/12 the normal interval is [1.0, 1.0] — certainty from twelve observations —
+while Wilson gives roughly [0.76, 1.0].
+
+The headline block ends with the widest gated interval and what it supports.
+Rough guide, **per slice** rather than per corpus:
+
+| Cases per class | Half-width | Supports |
+|---|---|---|
+| 45 | ±15pp | Nothing quantitative |
+| 150 | ±7pp | Coarse gating |
+| 400 | ±4pp | Real thresholds |
+| 1000+ | ±2pp | Detecting small regressions |
+
+Gating still compares **point estimates** against the thresholds, and a breach
+still fails the run even when the interval is wide — a gate that ignored what it
+could not prove would pass everything at small n, which is the opposite of what
+a ratchet is for. But a breach whose limit falls inside the interval is marked
+`inconclusive` and says so in the output, which tells you whether to investigate
+the detector or add cases to that slice.
+
 ### Abstention
 
 `toPrediction` returns three values, not two. Under `coverage: "partial"` or
@@ -155,8 +193,14 @@ tuned — the sensitivity table above shows that tier carries all of them.
 ## Known limits
 
 - **The seed corpus is tiny (45 cases) and mostly handwritten.** Its numbers are
-  a smoke test, not a measurement. The thresholds in `thresholds.json` are
+  a smoke test, not a measurement — the widest gated interval is ±19pp, and the
+  run says so on every invocation. The thresholds in `thresholds.json` are
   placeholders until the corpus is large enough to support them.
+- **Intervals describe sampling error only.** They assume cases are drawn
+  independently from the population being measured, and the seed corpus is
+  hand-picked rather than sampled — so the true uncertainty is *wider* than the
+  interval, by an amount nothing here can estimate. Mechanical sampling from
+  real reports is what would make the interval mean what it says.
 - **Hand-labelled corpora inherit the labeller's blind spots.** This is good for
   catching regressions and close to useless for discovering novel lure types. A
   recall figure means "against scams we already thought to collect".

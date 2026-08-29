@@ -18,6 +18,7 @@ import { runCorpus } from "@/eval/runner";
 import { computeMetrics, sliceBy, type Metrics } from "@/eval/metrics";
 import {
   checkThresholds,
+  formatOverall,
   formatSliceTable,
   formatMisses,
   formatAbstentions,
@@ -173,12 +174,7 @@ async function main(): Promise<void> {
   } else {
     console.log(`\nCorpus: ${cases.length} cases from ${corpusDir}`);
     console.log(`Suspicious counted as: ${suspiciousAs}`);
-    console.log(
-      `\nOverall  recall ${overall.recall === null ? "-" : (overall.recall * 100).toFixed(1) + "%"}` +
-        `  FPR ${overall.fpr === null ? "-" : (overall.fpr * 100).toFixed(1) + "%"}` +
-        `  coverage ${(overall.coverageRate * 100).toFixed(1)}%` +
-        `  (committed ${overall.committedScam} scam / ${overall.committedBenign} benign)`,
-    );
+    console.log(formatOverall(overall));
     console.log(formatSliceTable("By region", byRegion));
     console.log(formatSliceTable("By region/type", byType));
     console.log(formatSliceTable("By category", byCategory));
@@ -190,7 +186,10 @@ async function main(): Promise<void> {
       for (const b of breaches) {
         const dir = b.metric === "fpr" ? "above" : "below";
         console.log(
-          `  ${b.slice}: ${b.metric} ${(b.actual * 100).toFixed(1)}% is ${dir} the limit of ${(b.limit * 100).toFixed(1)}%`,
+          `  ${b.slice}: ${b.metric} ${(b.actual * 100).toFixed(1)}% is ${dir} the limit of ${(b.limit * 100).toFixed(1)}%` +
+            (b.inconclusive
+              ? " — but the limit is inside the 95% interval, so this slice may just be too small to tell"
+              : ""),
         );
       }
     }
