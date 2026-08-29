@@ -89,8 +89,37 @@ const handler = {
       // Cloudflare rejects the reply when the incoming forward itself failed
       // DMARC (a documented constraint) — we can't reply on that transaction.
       // Log it so this isn't a silent black hole; there's nothing else to do
-      // on the inbound transaction.
+      // on the inbound transaction. No delivery confirmation is sent, so this
+      // forward is (correctly) never counted as a check.
       console.warn("reply rejected (likely incoming DMARC failure):", err);
+      return;
+    }
+
+    // The reply is out — only now has someone actually received a verdict, so
+    // this is what increments the public counter. Best-effort: a failed
+    // confirmation costs us a count, which is the right way to be wrong for a
+    // number we publish. `from` lets the API rate-limit confirmations per
+    // sender; no `raw` is sent, which is how the API tells the two request
+    // kinds apart.
+    try {
+      const res = await fetch(env.INBOUND_WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-inbound-secret": env.INBOUND_SECRET,
+        },
+        body: JSON.stringify({ delivered: true, from: message.from }),
+      });
+      // A non-2xx resolves rather than throwing, so without this a rotated
+      // secret (401) or a 500 would silently stop counting every delivered
+      // reply — the same black hole the DMARC warn above exists to prevent.
+      if (!res.ok) {
+        console.warn("delivery confirmation rejected:", res.status);
+      }
+    } catch (err) {
+      // Undercounting is acceptable; retrying is not worth a second failure
+      // mode. Still log it so a persistent outage is visible.
+      console.warn("delivery confirmation failed:", err);
     }
   },
 };

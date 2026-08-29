@@ -5,10 +5,13 @@ import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
 import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
+import { SITE_URL } from "@/lib/siteUrl";
 
 // Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (see
 // workers/inbound-email/) receives a forwarded suspicious email, POSTs the raw
-// RFC822 here, and sends the verdict we return back to the forwarder.
+// RFC822 here, and sends the verdict we return back to the forwarder. It then
+// POSTs `{ delivered: true }` here once that reply has actually gone out, which
+// is what increments the public "scams checked" counter — see that branch.
 //
 // PRIVACY: we analyse the raw email entirely in memory and return a verdict.
 // The raw email is NEVER stored — only an anonymous aggregate counter is
@@ -39,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { raw?: string; from?: string };
+  let body: { raw?: string; from?: string; delivered?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -48,6 +51,33 @@ export async function POST(req: NextRequest) {
 
   const raw = typeof body.raw === "string" ? body.raw : "";
   const from = typeof body.from === "string" ? body.from.trim().toLowerCase() : "";
+
+  // Delivery confirmation. The Worker calls back here once message.reply() has
+  // actually succeeded, and that — not the analysis — is when a person has a
+  // verdict in hand. Counting at analysis time would inflate "scams checked"
+  // with replies Cloudflare rejected (it refuses to reply on a transaction whose
+  // incoming forward failed DMARC), so the increment lives here instead.
+  //
+  // A confirmation carries ONLY `delivered` and `from`. Rejecting a body that
+  // also carries `raw` keeps the two request kinds unambiguous: piggybacking a
+  // confirmation onto an analysis POST would otherwise count the check while
+  // returning no reply, so the Worker would send nothing and the counter would
+  // climb anyway. Fail loudly here rather than let that be a silent trap.
+  if (body.delivered === true) {
+    if (raw) {
+      return NextResponse.json({ ok: true, skip: "delivered-with-raw" });
+    }
+    // Rate-limited on the same per-sender budget as the analysis path, under
+    // its own key namespace so the two don't starve each other. Without this
+    // the increment is unbounded: the analysis path's limiter used to bound it
+    // structurally, and a secret-holder (or a Cloudflare retry of email() after
+    // a successful reply) could otherwise inflate a number we publish.
+    if (from && !checkAndRecordRateLimit(`delivered:${from}`)) {
+      return NextResponse.json({ ok: true, skip: "rate-limited" });
+    }
+    await incrementCheckCount().catch(() => {});
+    return NextResponse.json({ ok: true, counted: true });
+  }
 
   if (!raw || raw.length > MAX_RAW_BYTES) {
     return NextResponse.json({ ok: true, skip: "empty-or-too-large" });
@@ -63,7 +93,7 @@ export async function POST(req: NextRequest) {
   try {
     // Reach the ORIGINAL scam inside the forward and run the shared analysis —
     // the top-level headers belong to the forwarder, not the scammer.
-    const { source, original, identityFlags, tracking } = analyseEmailSource(raw);
+    const { source, original, headers, identityFlags, tracking } = analyseEmailSource(raw);
 
     const blocklist = await getUrlhausBlocklist();
     // No region argument: this request originates from the inbound-email
@@ -82,9 +112,16 @@ export async function POST(req: NextRequest) {
       emailFlags: identityFlags,
       pixelReport,
       trackingFindings: tracking.findings,
+      // Lets the reply end with a one-tap link to a prefilled report form. Only
+      // the extracted identifiers travel in that link — the raw email is still
+      // discarded with this request. See lib/reportPrefill.ts.
+      siteUrl: SITE_URL,
+      senderAddress: headers.fromAddress,
+      replyToAddress: headers.replyTo,
     });
 
-    incrementCheckCount().catch(() => {});
+    // NOT counted here: the Worker confirms delivery with a `delivered` POST
+    // once the reply is actually sent. See the branch at the top of this route.
 
     // Return the formatted reply for the Worker to send. `source` lets the
     // Worker (or logs) know whether we got a high-fidelity attachment or a

@@ -10,6 +10,7 @@ import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
+import { bold } from "@/lib/richText";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
@@ -54,6 +55,15 @@ function EmailFileIcon() {
   );
 }
 
+function ForwardIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M3 17v-2a6 6 0 0 1 6-6h11" />
+      <path d="m16 5 4 4-4 4" />
+    </svg>
+  );
+}
+
 function SpinnerIcon() {
   return (
     <svg {...ICON} className="w-6 h-6 animate-spin">
@@ -74,6 +84,21 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
 // advertises a dead inbox. Address is overridable for staging/other domains.
 const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
 const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.com";
+
+// Shared chrome for the four capture options (take photo / upload image /
+// upload .eml / forward). One constant rather than the same 200-character class
+// string repeated four times, so the row styling can only change in lockstep.
+// Grid placement and the disabled states are per-option and stay at the call
+// site — the forward option is an <a> and is never disabled.
+// Icon beside the text on a phone (one full-width row per option, so there is
+// plenty of horizontal room), and icon above centred text from sm up, where
+// three columns leave each option only ~200px and a side-by-side layout would
+// squeeze the description into a narrow ragged column.
+const CAPTURE_OPTION =
+  "flex items-center gap-3 text-left px-4 py-3.5 min-h-[64px] " +
+  "sm:flex-col sm:items-center sm:justify-center sm:gap-2 sm:text-center sm:px-3 sm:py-5 sm:min-h-[112px] " +
+  "border-2 border-dashed border-gray-600 rounded-xl text-gray-400 " +
+  "hover:border-emerald-500 hover:text-emerald-400 transition-colors";
 
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply
@@ -104,6 +129,10 @@ export default function CheckFlow() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  // Forward-address copy confirmation. Copying is the one part of forwarding the
+  // web can actually do for someone — the forward itself happens in their mail
+  // app, which no page can reach into.
+  const [addressCopied, setAddressCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Full email-source analysis (unwrap → headers → identity flags → tracking),
   // populated in runCheck. null until a check runs. Everything the result page
@@ -309,6 +338,18 @@ export default function CheckFlow() {
       setTimeout(() => setShareCopied(false), 2500);
     } catch {
       // Clipboard unavailable (rare) — nothing sensible to do.
+    }
+  }
+
+  async function copyInboundAddress() {
+    try {
+      await navigator.clipboard.writeText(INBOUND_ADDRESS);
+      setAddressCopied(true);
+      setTimeout(() => setAddressCopied(false), 2500);
+    } catch {
+      // Clipboard unavailable (older browser, insecure origin) — the address is
+      // rendered as selectable text right beside the button, so there is still
+      // a way through without it.
     }
   }
 
@@ -597,42 +638,50 @@ export default function CheckFlow() {
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      {/* On mobile: camera is full-width (primary action), image+eml share the row.
-          On sm+: equal three columns. Per-field capture help (good photo, best
-          image, getting the email source) lives on the Learn page so this stays
-          uncluttered — linked just below. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* Ways to hand this page something to check, most-direct first: take a
+          photo, upload an image, upload an .eml. One column on a phone (full-
+          width tap targets, and the descriptions need the room); all three
+          across in one row from sm up. Forwarding is deliberately NOT here —
+          see the block below the submit button. Per-field capture help lives on
+          the Learn page, linked below. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
           disabled={busy}
-          className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          <CameraIcon />
-          <span className="font-medium text-sm text-center">{t("check.takePhoto")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.takePhotoDesc")}</span>
+          <span className="shrink-0"><CameraIcon /></span>
+          <span className="min-w-0 sm:w-full">
+            <span className="block font-medium text-sm">{t("check.takePhoto")}</span>
+            <span className="block text-xs text-gray-500 leading-tight">{t("check.takePhotoDesc")}</span>
+          </span>
         </button>
         <button
           type="button"
           onClick={() => imageRef.current?.click()}
           disabled={busy}
           aria-busy={uploadLoading}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {uploadLoading ? <SpinnerIcon /> : <ImageIcon />}
-          <span className="font-medium text-sm text-center">{t("check.uploadImage")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadImageDesc")}</span>
+          <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
+          <span className="min-w-0 sm:w-full">
+            <span className="block font-medium text-sm">{t("check.uploadImage")}</span>
+            <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadImageDesc")}</span>
+          </span>
         </button>
         {/* .eml upload — labelled for clarity; described as advanced to de-prioritise for most users */}
         <button
           type="button"
           onClick={() => emlRef.current?.click()}
           disabled={busy}
-          className="flex flex-col items-center justify-center gap-2 px-3 py-5 min-h-[80px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          <EmailFileIcon />
-          <span className="font-medium text-sm text-center">{t("check.uploadEml")}</span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{t("check.uploadEmlDesc")}</span>
+          <span className="shrink-0"><EmailFileIcon /></span>
+          <span className="min-w-0 sm:w-full">
+            <span className="block font-medium text-sm">{t("check.uploadEml")}</span>
+            <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadEmlDesc")}</span>
+          </span>
         </button>
       </div>
 
@@ -653,28 +702,6 @@ export default function CheckFlow() {
       )}
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
-
-      {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
-          Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED). */}
-      {INBOUND_ENABLED && (
-        <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-4 py-3 space-y-2">
-          <p className="text-sm font-semibold text-emerald-400 flex items-center gap-1.5">
-            <span aria-hidden="true">📨</span> {t("check.forward.heading")}
-          </p>
-          <p className="text-xs text-gray-400">
-            {t("check.forward.body", { address: INBOUND_ADDRESS })}
-          </p>
-          <p className="text-[11px] text-gray-500">
-            {t("check.forward.note")}
-          </p>
-          <a
-            href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-semibold text-white transition-colors"
-          >
-            <span aria-hidden="true">↪</span> {t("check.forward.cta", { address: INBOUND_ADDRESS })}
-          </a>
-        </div>
-      )}
 
       <div className="flex items-center gap-3" aria-hidden="true">
         <div className="flex-1 h-px bg-gray-700" />
@@ -733,6 +760,58 @@ export default function CheckFlow() {
       {checkError && (
         <div role="alert" className="bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
           {checkError}
+        </div>
+      )}
+
+      {/* Forward-to-us. Deliberately below the submit button and visually set
+          apart, because it is not another way to fill in the box above — it is a
+          different route entirely: you act in your MAIL APP, not on this page,
+          and the verdict comes back by email rather than appearing here.
+          Grouping it with the upload options implied an equivalence that misled.
+
+          There is no mailto here on purpose. A mailto opens a blank compose
+          window, but forwarding is an action taken on a message the user already
+          has in their mailbox — no web API can reach in and do that. A button
+          promising "Forward" that opens an empty email is worse than no button,
+          so we do the one thing the page genuinely can (copy the address) and
+          state plainly where the rest happens. */}
+      {INBOUND_ENABLED && (
+        <div className="border-t border-gray-800 pt-5 space-y-2">
+          {/* Heading and payoff on one line — the payoff is four words and does
+              not earn a paragraph of its own. */}
+          <p className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <span className="shrink-0 text-gray-500"><ForwardIcon /></span>
+            <span>
+              {t("check.forward.heading")}{" "}
+              <span className="font-normal text-gray-400">{t("check.forward.body")}</span>
+            </span>
+          </p>
+
+          {/* The app flags tracking pixels as a red flag, so it must not tell
+              people to trigger one. Opening a scam email loads its pixel and
+              confirms the address is live; forwarding from the message list
+              doesn't. Guidance, not a prerequisite — someone who already opened
+              it still needs the check. */}
+          <p className="text-xs text-amber-300/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+            {bold(t("check.forward.noopen"))}
+          </p>
+
+          <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2">
+            {/* Selectable text, so the address is usable even when the clipboard
+                API isn't (insecure origin, older browser, denied permission). */}
+            <code className="flex-1 min-w-0 truncate text-sm text-emerald-400 select-all">
+              {INBOUND_ADDRESS}
+            </code>
+            <button
+              type="button"
+              onClick={copyInboundAddress}
+              className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+            >
+              {addressCopied ? t("check.forward.copied") : t("check.forward.copy")}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-gray-500">{t("check.forward.note")}</p>
         </div>
       )}
     </div>
