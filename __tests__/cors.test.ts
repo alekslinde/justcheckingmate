@@ -74,6 +74,30 @@ describe("allowlist composition", () => {
     expect(isAllowedOrigin("https://app.example")).toBe(true);
     expect(isAllowedOrigin("https://app.example/")).toBe(true);
   });
+
+  it("echoes the normalised origin, never the caller's raw string", async () => {
+    // A lenient match that answers with the raw value is worse than no match at
+    // all: the browser compares Allow-Origin against its own serialised origin,
+    // which never carries a trailing slash, so the request is silently blocked
+    // after appearing to be allowed.
+    const { corsHeaders } = await loadCors({ allowed: "https://app.example" });
+    expect(corsHeaders("https://app.example/")["Access-Control-Allow-Origin"]).toBe(
+      "https://app.example",
+    );
+  });
+
+  it("reflects a runtime change to the allowlist", async () => {
+    // CORS_ALLOWED_ORIGINS has no NEXT_PUBLIC_ prefix, so it is a runtime
+    // variable a deployment can set without rebuilding. Capturing the set at
+    // module load also baked in whatever SITE_URL resolved to at build time —
+    // http://localhost:3000 when the build had no NEXT_PUBLIC_SITE_URL, which
+    // made the documented "the site's own origin is always allowed" false in
+    // production while every test still passed.
+    const { isAllowedOrigin } = await loadCors({});
+    expect(isAllowedOrigin("https://late.example")).toBe(false);
+    process.env.CORS_ALLOWED_ORIGINS = "https://late.example";
+    expect(isAllowedOrigin("https://late.example")).toBe(true);
+  });
 });
 
 describe("origin matching is exact", () => {
@@ -134,12 +158,31 @@ describe("response headers", () => {
     expect(corsPreflightHeaders(EXT, ["POST"])["Access-Control-Allow-Credentials"]).toBeUndefined();
   });
 
-  it("returns nothing at all for a disallowed origin", async () => {
+  it("withholds Allow-Origin for a disallowed origin", async () => {
     // This is the enforcement mechanism: a response with no
     // Access-Control-Allow-Origin is one the browser refuses to expose.
     const { corsHeaders, corsPreflightHeaders } = await loadCors({ allowed: EXT });
-    expect(corsHeaders("https://evil.example")).toEqual({});
-    expect(corsPreflightHeaders("https://evil.example", ["POST"])).toEqual({});
+    expect(corsHeaders("https://evil.example")["Access-Control-Allow-Origin"]).toBeUndefined();
+    expect(
+      corsPreflightHeaders("https://evil.example", ["POST"])["Access-Control-Allow-Origin"],
+    ).toBeUndefined();
+    // Nor any of the preflight permissions.
+    expect(corsPreflightHeaders("https://evil.example", ["POST"])["Access-Control-Allow-Methods"])
+      .toBeUndefined();
+  });
+
+  it("still sends Vary: Origin when the origin is refused", async () => {
+    // Vary describes the route, not the response. A CORS-enabled URL whose
+    // output depends on Origin must say so on *every* response — a cache that
+    // never sees Vary may serve the allowed origin's response, Allow-Origin
+    // header included, to a different origin.
+    //
+    // The previous version of this test asserted an empty object here, which
+    // locked the omission in rather than catching it.
+    const { corsHeaders, corsPreflightHeaders } = await loadCors({ allowed: EXT });
+    expect(corsHeaders("https://evil.example")["Vary"]).toBe("Origin");
+    expect(corsPreflightHeaders("https://evil.example", ["POST"])["Vary"]).toBe("Origin");
+    expect(corsHeaders(null)["Vary"]).toBe("Origin");
   });
 
   it("names only the methods and headers actually needed", async () => {

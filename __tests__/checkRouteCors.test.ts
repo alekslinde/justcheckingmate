@@ -35,6 +35,19 @@ function req(body: unknown, origin?: string, ip?: string): NextRequest {
   });
 }
 
+/**
+ * Load the route with a specific CORS configuration.
+ *
+ * Environment is set *before* the import, and lib/cors now reads it per call
+ * rather than capturing it at module load — so these tests no longer depend on
+ * vi.resetModules() reaching lib/cors transitively through the route's import
+ * graph. That dependency was invisible and fragile: a future top-level
+ * `@/lib/cors` import somewhere else in the graph would have left a stale
+ * allowlist in place and made the disallowed-origin assertions pass vacuously
+ * while proving nothing.
+ *
+ * resetModules() is still called, for the route's own module state.
+ */
 async function loadRoute(allowed?: string) {
   vi.resetModules();
   process.env.NEXT_PUBLIC_SITE_URL = SITE;
@@ -119,6 +132,20 @@ describe("/api/check responses carry CORS on every exit path", () => {
     const res = await POST(req({ content: "hello there" }));
     expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+});
+
+describe("the allowlist is read at request time", () => {
+  it("does not depend on module-reset ordering to see the configured origins", () => {
+    // The guard for the fragility described on loadRoute. If lib/cors ever goes
+    // back to capturing its allowlist in a module-level const, this fails: the
+    // value set here arrives after the module has already been imported by the
+    // suite above.
+    process.env.NEXT_PUBLIC_SITE_URL = SITE;
+    process.env.CORS_ALLOWED_ORIGINS = "https://configured-late.example";
+    return import("@/lib/cors").then(({ isAllowedOrigin }) => {
+      expect(isAllowedOrigin("https://configured-late.example")).toBe(true);
+    });
   });
 });
 

@@ -41,6 +41,11 @@ import { SITE_URL } from "@/lib/siteUrl";
  * change between requests, and re-parsing per request would be wasted work on
  * the hot path.
  */
+/** Serialised-origin form: no trailing slash, which is what a browser sends. */
+function normalise(origin: string): string {
+  return origin.replace(/\/+$/, "");
+}
+
 function parseAllowedOrigins(): Set<string> {
   const configured = (process.env.CORS_ALLOWED_ORIGINS ?? "")
     .split(",")
@@ -50,16 +55,46 @@ function parseAllowedOrigins(): Set<string> {
     // it never matches: browsers send the serialised origin with no path.
     // Normalising is friendlier than silently refusing a plausible-looking
     // config value.
-    .map((o) => o.replace(/\/+$/, ""));
+    .map(normalise);
 
-  return new Set([SITE_URL.replace(/\/+$/, ""), ...configured]);
+  return new Set([normalise(SITE_URL), ...configured]);
 }
 
-const ALLOWED_ORIGINS = parseAllowedOrigins();
+/**
+ * Resolved per call rather than captured at module load.
+ *
+ * CORS_ALLOWED_ORIGINS is a runtime variable (no NEXT_PUBLIC_ prefix), so a
+ * deployment can legitimately set it without a rebuild — and SITE_URL resolves
+ * from the environment too. Freezing the set at import time meant a build that
+ * ran without NEXT_PUBLIC_SITE_URL baked `http://localhost:3000` in as the
+ * "site's own origin", making the documented guarantee false in production
+ * while every test still passed. The parse is a split over a short string; a
+ * cache keyed on the env value would cost more complexity than it saves.
+ */
+function allowlist(): Set<string> {
+  return parseAllowedOrigins();
+}
 
 /** The configured allowlist. Exported for tests and for the health check. */
 export function allowedOrigins(): ReadonlySet<string> {
-  return ALLOWED_ORIGINS;
+  return allowlist();
+}
+
+/**
+ * The allowlist entry matching `origin`, or null.
+ *
+ * Returns the *stored* entry rather than a boolean so callers echo back the
+ * normalised form. Echoing the caller's raw value instead reintroduces
+ * whatever it was normalised away from — a request from "https://app.example/"
+ * matched the allowlist and was then answered with a trailing-slash
+ * Access-Control-Allow-Origin, which no browser matches against its own
+ * serialised origin. The lenient match produced a silently blocked request,
+ * which is worse than an honest refusal.
+ */
+function matchOrigin(origin: string | null | undefined): string | null {
+  if (!origin) return null;
+  const candidate = normalise(origin);
+  return allowlist().has(candidate) ? candidate : null;
 }
 
 /**
@@ -71,8 +106,7 @@ export function allowedOrigins(): ReadonlySet<string> {
  * a header-less cross-origin request.
  */
 export function isAllowedOrigin(origin: string | null | undefined): boolean {
-  if (!origin) return false;
-  return ALLOWED_ORIGINS.has(origin.replace(/\/+$/, ""));
+  return matchOrigin(origin) !== null;
 }
 
 /**
@@ -87,14 +121,20 @@ export function isAllowedOrigin(origin: string | null | undefined): boolean {
  * that must not be reachable by a non-browser client needs a different control.
  */
 export function corsHeaders(origin: string | null | undefined): Record<string, string> {
-  if (!isAllowedOrigin(origin)) return {};
+  const matched = matchOrigin(origin);
+
+  // Vary is unconditional, and that is the point: it describes the *route*, not
+  // this response. A route whose output depends on Origin must say so on every
+  // response, including the ones carrying no Allow-Origin — otherwise a shared
+  // cache has no signal that the URL varies, and may hand an allowed origin's
+  // cached response, Allow-Origin header included, to a different origin.
+  if (matched === null) return { Vary: "Origin" };
+
   return {
-    // Echoing the specific origin rather than "*" keeps the response
-    // uncacheable across origins by proxies that key on Vary, and is required
-    // for the allowlist to mean anything.
-    "Access-Control-Allow-Origin": origin as string,
-    // Without this, a shared cache could serve a response containing one
-    // origin's Allow-Origin header to a different origin.
+    // The matched entry, not the caller's raw string: see matchOrigin. Echoing
+    // a specific origin rather than "*" is what makes the allowlist mean
+    // anything.
+    "Access-Control-Allow-Origin": matched,
     Vary: "Origin",
   };
 }
@@ -112,7 +152,10 @@ export function corsPreflightHeaders(
   methods: string[],
 ): Record<string, string> {
   const base = corsHeaders(origin);
-  if (Object.keys(base).length === 0) return {};
+  // Keyed on the Allow-Origin header rather than on the object being empty:
+  // corsHeaders always returns at least Vary now, so an emptiness check would
+  // silently start authorising every preflight.
+  if (!base["Access-Control-Allow-Origin"]) return base;
   return {
     ...base,
     "Access-Control-Allow-Methods": [...methods, "OPTIONS"].join(", "),
