@@ -131,6 +131,23 @@ difference. Open search will keep finding sites like that. Adding a source is a
 deliberate, reviewed act; tier 3 exists so a source that has already been looked
 at and found wanting is not silently rediscovered next cycle.
 
+Tier 2 holds two different kinds of source, and the distinction matters when
+you are justifying a number. Most of it is vendor and press reporting —
+commercially interested, so corroborate before it carries a score alone. The
+rest is **measurement**: peer-reviewed venues (APWG eCrime, USENIX, NDSS, IMC)
+and independent measurement bodies (Interisle, ICANN DAAR). Those have no
+product to sell and publish their methodology, so for a *base rate* — TLD abuse
+percentage, typosquat prevalence, URL lifetime — they are the strongest evidence
+in the file and the intended corroborator for vendor-measured magic numbers like
+the `cscdbs.com` figure behind the `.monster` score.
+
+They stay in tier 2 rather than tier 1 because tier 1 means authority over a
+*live AU threat*, sufficient on its own for a rule; a measurement paper is not
+that however rigorous. Two limits travel with them: publication lags the threat
+by 6-18 months, so they calibrate a score but never source a new pattern; and
+their sampling is overwhelmingly US/EU, so an AU-specific claim still needs an
+AU tier 1 source.
+
 Two conventions matter:
 
 - **`indicators:`** at the bottom of the file is *not* a source list. Those are
