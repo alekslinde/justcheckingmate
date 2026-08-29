@@ -1224,11 +1224,16 @@ const BARE_HOST_TLDS = new Set([
 //   xin        a very common Chinese given name and pinyin syllable, which
 //              collides with the Chinese-authority impersonation content this
 //              app explicitly handles ("the bond.Xin will follow up").
+//   icu        intensive care unit — written in caps ("Mum's in hospital.ICU
+//              visiting hours are 2-4pm"), so the sentence-boundary guard below
+//              cannot catch it without also letting shouty scam hosts through.
+//              Health-emergency messages are exactly the context where a false
+//              scam verdict does most harm.
 //
 // Both bond and xin are 100% maliciously registered per Interisle 2025, so the
 // TLD itself is genuinely high-risk — this guard is about the BARE-TOKEN form
 // in prose, not about the TLD's reputation. See docs/threat-intel/sources.yml.
-const AMBIGUOUS_BARE_TLDS = new Set(["zip", "mov", "bond", "xin"]);
+const AMBIGUOUS_BARE_TLDS = new Set(["zip", "mov", "bond", "xin", "icu"]);
 
 const BARE_HOST_GLOBAL =
   /(?<![\w@.\/\\-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(\/[^\s<>"']*)?/gi;
@@ -1249,6 +1254,20 @@ function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
     const [whole, hostname] = match;
     const labels = hostname.toLowerCase().split(".");
     const tld = labels[labels.length - 1];
+
+    // Sentence boundary with the space missing after the full stop — "the
+    // plumber came by.Work is done", "Mum's in hospital.ICU visiting hours".
+    // Missing spaces after a full stop are routine in pasted SMS, and every
+    // word-like TLD in the list (.work, .live, .online, .click, .top, .store,
+    // .icu, .loan …) can end up on the right of one.
+    //
+    // The tell is Capitalised-Then-Lowercase on the last label: that is a new
+    // sentence's first word, not a TLD. Deliberately NOT "starts uppercase" —
+    // scam SMS shout in full caps ("AUSPOST-TRACK.SHOP/verify"), so an
+    // all-uppercase label must still be treated as a host. Checked against the
+    // RAW hostname because `labels` has already been lowercased.
+    const rawTld = hostname.slice(hostname.lastIndexOf(".") + 1);
+    if (/^[A-Z][a-z]/.test(rawTld)) continue;
 
     const isFlaggedTld = flagged.has(tld);
     if (!BARE_HOST_TLDS.has(tld) && !isFlaggedTld) continue;

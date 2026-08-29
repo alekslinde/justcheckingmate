@@ -1633,6 +1633,40 @@ describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
     }
   });
 
+  // The .bond finding turned out to be one instance of a wider bug, present on
+  // main before any of this: extractBareHosts lets abuse-prone TLDs skip the
+  // "needs a path or www." check, and MOST of SUSPICIOUS_TLDS is ordinary
+  // English (.work, .live, .online, .click, .top, .store, .loan, .shop …). A
+  // missing space after a full stop — routine in pasted SMS — then synthesises
+  // a host from two unrelated sentences and shows a scam card for it.
+  it("does not raise a URL card across a missing space after a full stop", async () => {
+    const benign = [
+      "Hi love, the plumber came by.Work is done, cost $340 all up.",
+      "Centrelink says my payment is delayed.Online claim still shows pending.",
+      "Got a call about my car insurance.Click bait probably, I hung up.",
+      "The real estate agent wants the bond.Store the receipt somewhere safe.",
+      "Nan got a text about her super.Loan sharks target pensioners apparently.",
+      "I'm at the shops.Shop closes at 5 so hurry.",
+      // All-caps TLD, so the sentence-boundary guard cannot catch this one —
+      // .icu is in AMBIGUOUS_BARE_TLDS instead. A health emergency is the worst
+      // possible place to show a false scam verdict.
+      "Mum's in hospital.ICU visiting hours are 2-4pm.",
+    ];
+    for (const text of benign) {
+      const cards = (await analyzeContent(text)).filter((i) => i.kind === "url");
+      expect(cards, `expected no URL card for: ${text}`).toHaveLength(0);
+    }
+  });
+
+  // The guard keys on Capitalised-then-lowercase, NOT on "starts uppercase",
+  // because scam SMS shout. An all-caps host must still be caught.
+  it("still detects an all-caps schemeless scam host (shouty SMS)", async () => {
+    const cards = (await analyzeContent("Visit AUSPOST-TRACK.SHOP/verify")).filter(
+      (i) => i.kind === "url",
+    );
+    expect(cards.length).toBeGreaterThan(0);
+  });
+
   it("still detects a schemeless .bond/.xin host when a path or www. corroborates it", async () => {
     for (const text of [
       "Verify now at auspost-redelivery.bond/pay",
