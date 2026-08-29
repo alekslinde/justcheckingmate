@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { execFileSync } from "child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 
@@ -221,51 +221,80 @@ describe("the rule explains itself and does not over-reach", () => {
 // own directory, so the assertion is "the shipped configuration protects this
 // path" rather than "the rule works somewhere".
 describe("the project config covers the engine's real location", () => {
-  const ENGINE_SRC = path.join(process.cwd(), "packages/engine/src");
+  // The probe goes in a scratch directory *beside* the package, never inside
+  // packages/engine/src. That directory is walked by
+  // engineDependencies.test.ts (readdirSync then readFileSync on each entry),
+  // and vitest runs test files in parallel by default — a probe that exists at
+  // listing time and is deleted before the read throws ENOENT there. The first
+  // version of this block did exactly that, so the guard against one config
+  // mistake introduced a flake in an unrelated suite.
+  //
+  // Placing it under packages/ still exercises what matters: the eslint `files`
+  // glob is "packages/**/*.{ts,tsx}", so this path is covered if and only if
+  // the engine's is. Any path the scope test could use that is *not* covered by
+  // the same glob would prove nothing.
+  const PROBE_DIR = path.join(process.cwd(), "packages", "__lint_scope_probe");
 
   function lintInPlace(source: string): LintMessage[] {
-    // Written into the engine dir because that is the path under test. Named
-    // with a leading underscore and removed in `finally` — an interrupted run
-    // strands a file that would break the next lint, so cleanup is not optional.
-    const probe = path.join(ENGINE_SRC, "__scope_probe.ts");
+    mkdirSync(PROBE_DIR, { recursive: true });
+    const probe = path.join(PROBE_DIR, "probe.ts");
     writeFileSync(probe, source);
     try {
       let stdout = "";
       try {
-        stdout = execFileSync(
-          "npx",
-          ["eslint", "--format", "json", probe],
-          { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-        );
+        stdout = execFileSync("npx", ["eslint", "--format", "json", probe], {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
       } catch (err) {
         // eslint exits non-zero when it reports errors; the JSON is still on stdout.
         stdout = (err as { stdout?: string }).stdout ?? "";
       }
+
+      // Same guard the helpers above carry. Without it a harness failure — npx
+      // unresolved, config error, eslint crash — surfaces as "Unexpected end of
+      // JSON input" from the one test proving the privacy rules still reach the
+      // engine, which is the worst place to have to guess at a cause.
+      if (!stdout.trim()) throw new Error("eslint produced no output — the probe did not run");
+
       const results = JSON.parse(stdout) as Array<{ messages: LintMessage[] }>;
       return results.flatMap((r) => r.messages);
     } finally {
-      rmSync(probe, { force: true });
+      // Remove the whole directory: an interrupted run must not strand a
+      // rule-violating file that breaks the next lint and is committable.
+      rmSync(PROBE_DIR, { recursive: true, force: true });
     }
   }
 
-  it("flags a network import inside packages/engine", () => {
+  it("covers the same glob that covers the engine", () => {
+    // Asserts the premise the other two rest on. If the probe path stopped
+    // matching the same `files` entry as packages/engine/src, those tests would
+    // pass or fail for reasons unrelated to the engine's protection.
+    const config = readFileSync(path.join(process.cwd(), "eslint.config.mjs"), "utf8");
+    expect(config).toContain('"packages/**/*.{ts,tsx}"');
+  });
+
+  it("flags a network import inside packages/", () => {
     const found = privacyViolations(lintInPlace(`import dns from "node:dns";\nexport const x = dns;\n`));
     expect(
       found.length,
-      "the privacy rules do not cover packages/engine — check the `files` globs in eslint.config.mjs",
+      "the privacy rules do not cover packages/ — check the `files` globs in eslint.config.mjs",
     ).toBeGreaterThan(0);
   });
 
-  it("flags a dynamic network import inside packages/engine", () => {
+  it("flags a dynamic network import inside packages/", () => {
     const found = privacyViolations(
       lintInPlace(`export async function f() { return import("node:net"); }\n`),
     );
     expect(found.length).toBeGreaterThan(0);
   });
 
-  it("leaves legitimate imports in the engine alone", () => {
+  it("leaves legitimate imports alone", () => {
     expect(
-      privacyViolations(lintInPlace(`import { parsePhoneNumber } from "libphonenumber-js/max";\nexport const x = parsePhoneNumber;\n`)),
+      privacyViolations(
+        lintInPlace(`import { parsePhoneNumber } from "libphonenumber-js/max";\nexport const x = parsePhoneNumber;\n`),
+      ),
     ).toEqual([]);
   });
 });

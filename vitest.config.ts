@@ -8,18 +8,15 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "workers/**"],
   },
   resolve: {
-    alias: [
-      // Longest-first: "@justcheckingmate/engine" also starts with "@", so a
-      // bare "@" alias declared first would swallow it.
-      {
-        find: /^@justcheckingmate\/engine$/,
-        replacement: path.resolve(__dirname, "packages/engine/src/index.ts"),
-      },
-      {
-        find: /^@justcheckingmate\/engine\/(.*)$/,
-        replacement: path.resolve(__dirname, "packages/engine/src") + "/$1",
-      },
-      { find: /^@\/(.*)$/, replacement: path.resolve(__dirname, ".") + "/$1" },
-    ],
+    // Only the app's own "@/" alias is declared here.
+    //
+    // @justcheckingmate/engine is deliberately NOT aliased: it resolves through
+    // the workspace symlink in node_modules, which means Vite consults the
+    // package's own `exports` map. Aliasing it by file path would resolve
+    // around that map, so a subpath the package does not export — or one it
+    // later stops exporting — would keep working in tests and under tsc while
+    // failing for any real consumer. The map is only a boundary if the tooling
+    // is made to honour it. __tests__/engineExports.test.ts asserts that it is.
+    alias: [{ find: /^@\/(.*)$/, replacement: path.resolve(__dirname, ".") + "/$1" }],
   },
 });
