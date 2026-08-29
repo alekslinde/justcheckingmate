@@ -776,19 +776,22 @@ export default function CheckFlow() {
           so we do the one thing the page genuinely can (copy the address) and
           state plainly where the rest happens. */}
       {INBOUND_ENABLED && (
-        <div className="border-t border-gray-800 pt-5 space-y-2.5">
+        <div className="border-t border-gray-800 pt-5 space-y-2">
+          {/* Heading and payoff on one line — the payoff is four words and does
+              not earn a paragraph of its own. */}
           <p className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <span className="text-gray-500"><ForwardIcon /></span>
-            {t("check.forward.heading")}
+            <span className="shrink-0 text-gray-500"><ForwardIcon /></span>
+            <span>
+              {t("check.forward.heading")}{" "}
+              <span className="font-normal text-gray-400">{t("check.forward.body")}</span>
+            </span>
           </p>
-          <p className="text-xs text-gray-400">{t("check.forward.body")}</p>
 
           {/* The app flags tracking pixels as a red flag, so it must not tell
               people to trigger one. Opening a scam email loads its pixel and
               confirms the address is live; forwarding from the message list
-              doesn't. Stated as guidance rather than a prerequisite — someone
-              who already opened it still needs the check, and the reassurance
-              stops the warning reading as "too late now". */}
+              doesn't. Guidance, not a prerequisite — someone who already opened
+              it still needs the check. */}
           <p className="text-xs text-amber-300/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
             {bold(t("check.forward.noopen"))}
           </p>
