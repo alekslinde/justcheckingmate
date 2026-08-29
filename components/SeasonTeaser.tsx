@@ -15,7 +15,7 @@
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { activeSeasons, type CivilDate } from "@/lib/scamCalendar";
-import type { RegionCode } from "@/lib/regions";
+import type { RegionCode } from "@justcheckingmate/engine/regions";
 
 export default function SeasonTeaser({
   region,

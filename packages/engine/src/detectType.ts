@@ -1,4 +1,4 @@
-import type { ScamType } from "@/lib/engineTypes";
+import type { ScamType } from "./engineTypes";
 
 // Heuristic classifier mapping pasted/extracted content to a scam type.
 // Order matters: URL and phone patterns are checked before the email-header

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
-import { analyzeContent, checkUrl, checkSms, checkEmail, checkCustom } from "@/lib/scamDetector";
-import { SHORTENER_HOSTS } from "@/lib/urlExpander";
+import { analyzeContent, checkUrl, checkSms, checkEmail, checkCustom } from "@justcheckingmate/engine/scamDetector";
+import { SHORTENER_HOSTS } from "@justcheckingmate/engine/urlExpander";
 
 // The app's core promise to users is that submitting a suspicious link does not
 // visit it. Fetching a scam URL tells the scammer's infrastructure their link is

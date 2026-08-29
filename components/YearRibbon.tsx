@@ -17,7 +17,7 @@
 
 import { useLang } from "@/lib/lang";
 import { seasonBands, yearFraction, isActiveOn, type CivilDate } from "@/lib/scamCalendar";
-import type { RegionCode } from "@/lib/regions";
+import type { RegionCode } from "@justcheckingmate/engine/regions";
 
 // Single letters, January-first. Deliberately not localised: the ribbon is a
 // glance-level graphic and these are initials, not prose — a locale needing

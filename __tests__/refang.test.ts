@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { refang, isDefanged, defang } from "@/lib/urlSanitizer";
-import { analyzeContent } from "@/lib/scamDetector";
+import { refang, isDefanged, defang } from "@justcheckingmate/engine/urlSanitizer";
+import { analyzeContent } from "@justcheckingmate/engine/scamDetector";
 
 // Defanging is how security-aware people share a suspicious link without making
 // it clickable, so "hxxp://evil[.]tk" is ordinary input — not an edge case.

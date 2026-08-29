@@ -8,7 +8,7 @@ import {
   formatVerdictEmail,
   VERDICT_RANK,
 } from "@/lib/verdictSummary";
-import { AnalyzedIdentifier, CheckResult } from "@/lib/scamDetector";
+import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 
 // Minimal builders — these mirror the shapes the real analysers emit, kept

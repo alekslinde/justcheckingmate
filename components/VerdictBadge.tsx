@@ -1,7 +1,7 @@
 "use client";
 
-import { CheckResult, PhoneIntel } from "@/lib/scamDetector";
-import { defangText } from "@/lib/urlSanitizer";
+import { CheckResult, PhoneIntel } from "@justcheckingmate/engine/scamDetector";
+import { defangText } from "@justcheckingmate/engine/urlSanitizer";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 

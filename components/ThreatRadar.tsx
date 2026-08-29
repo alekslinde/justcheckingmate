@@ -27,7 +27,7 @@ import {
   type ThreatEntry,
   type RadarCoverage,
 } from "@/lib/threatRadar";
-import { resolveRegionPack, type RegionCode } from "@/lib/regions";
+import { resolveRegionPack, type RegionCode } from "@justcheckingmate/engine/regions";
 
 // Matches the card styling used across Learn, About and the calendar.
 const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";

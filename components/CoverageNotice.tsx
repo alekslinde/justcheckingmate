@@ -1,7 +1,7 @@
 "use client";
 
 import { useLang } from "@/lib/lang";
-import { REGION_OPTIONS, type RegionCoverage } from "@/lib/regions";
+import { REGION_OPTIONS, type RegionCoverage } from "@justcheckingmate/engine/regions";
 
 // Shown when the region pack that ran has less than full detection coverage.
 //

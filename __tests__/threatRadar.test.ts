@@ -14,7 +14,7 @@ import {
   radarSummary,
   type ThreatEntry,
 } from "@/lib/threatRadar";
-import { supportedRegions } from "@/lib/regions";
+import { supportedRegions } from "@justcheckingmate/engine/regions";
 import enNormal from "@/messages/en.normal.json";
 import enRegional from "@/messages/en.regional.json";
 
@@ -341,7 +341,7 @@ describe("coverage claims match the shipped detector", () => {
   ];
 
   it("covers every sampled entry with a live signal", async () => {
-    const { checkEmail } = await import("@/lib/scamDetector");
+    const { checkEmail } = await import("@justcheckingmate/engine/scamDetector");
     for (const { id, text, flag } of SAMPLES) {
       const entry = AU.find((t) => t.id === id);
       expect(entry, `${id} missing from the radar`).toBeDefined();
@@ -358,7 +358,7 @@ describe("coverage claims match the shipped detector", () => {
     // is a failing test if it ever changes rather than a comment nobody reads.
     // If one of these starts scoring, the rule shipped and the badge should be
     // upgraded — that is a pass-worthy change, so the assertion is the prompt.
-    const { checkSms } = await import("@/lib/scamDetector");
+    const { checkSms } = await import("@justcheckingmate/engine/scamDetector");
 
     // "Hi Mum" opener: base.ts covers the money stage, not the first contact.
     expect(checkSms("Hi Mum, this is my new number, my phone broke").score).toBe(0);
@@ -373,7 +373,7 @@ describe("coverage claims match the shipped detector", () => {
   it("keeps n/a entries genuinely undetectable in text", async () => {
     // The other direction: an `n/a` entry that started scoring would mean the
     // badge is now understating us, which is how the quishing entry went wrong.
-    const { checkEmail } = await import("@/lib/scamDetector");
+    const { checkEmail } = await import("@justcheckingmate/engine/scamDetector");
     const samples: Record<string, string> = {
       "sim-swap": "We have received a request to port your number to another carrier",
     };
@@ -394,7 +394,7 @@ describe("scoring independence", () => {
     // __dirname-relative for the same reason as the roadmap check: read from the
     // wrong cwd this throws rather than passing vacuously, so the guarantee
     // can't quietly stop being enforced.
-    const detector = readFileSync(resolve(__dirname, "../lib/scamDetector.ts"), "utf8");
+    const detector = readFileSync(resolve(__dirname, "../packages/engine/src/scamDetector.ts"), "utf8");
     expect(detector).not.toContain("threatRadar");
   });
 });

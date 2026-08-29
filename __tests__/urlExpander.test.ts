@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { isShortened, expandUrl, SHORTENER_HOSTS } from "@/lib/urlExpander";
+import { isShortened, expandUrl, SHORTENER_HOSTS } from "@justcheckingmate/engine/urlExpander";
 
 // ── Feature: isShortened ──────────────────────────────────────────────────────
 

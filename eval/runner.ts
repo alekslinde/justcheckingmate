@@ -12,7 +12,7 @@
 //     network call on the same footing; a case that depends on expansion
 //     should say so in its notes rather than silently hitting the wire.
 
-import { analyzeContent, type AnalyzedIdentifier } from "@/lib/scamDetector";
+import { analyzeContent, type AnalyzedIdentifier } from "@justcheckingmate/engine/scamDetector";
 import { toPrediction, type EvalCase, type SuspiciousPolicy } from "./schema";
 import type { Outcome } from "./metrics";
 

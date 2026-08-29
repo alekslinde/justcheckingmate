@@ -37,7 +37,7 @@
 // not lead to a sentence starting "so when you get one of these, …", it is
 // research and it stays in docs/.
 
-import type { RegionCode } from "@/lib/regions";
+import type { RegionCode } from "@justcheckingmate/engine/regions";
 
 /**
  * Whether the detector actually catches this campaign today.

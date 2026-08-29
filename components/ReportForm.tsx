@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ScamType } from "@/lib/scamDetector";
-import { summariseAuth } from "@/lib/emailHeaders";
+import { ScamType } from "@justcheckingmate/engine/scamDetector";
+import { summariseAuth } from "@justcheckingmate/engine/emailHeaders";
 import { EmailTrackingReport } from "@/lib/emailTracking";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";

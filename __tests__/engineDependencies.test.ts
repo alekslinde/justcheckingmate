@@ -1,15 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import path from "path";
 
 // Guards the import structure that makes the detection engine extractable into
 // its own package (roadmap Phase 0). Both invariants held by construction once
 // and regressed silently, so they are asserted rather than assumed.
 
-const LIB = path.join(process.cwd(), "lib");
+// The engine now lives in its own workspace package. These invariants are what
+// made that extraction possible, so they follow it rather than being relaxed.
+const ENGINE = path.join(process.cwd(), "packages/engine/src");
 
 function importsOf(file: string): string[] {
-  const src = readFileSync(path.join(LIB, file), "utf8");
+  const src = readFileSync(path.join(ENGINE, file), "utf8");
   return [...src.matchAll(/^import\s[^;]*?from\s+["']([^"']+)["']/gm)].map((m) => m[1]);
 }
 
@@ -28,12 +30,12 @@ describe("engine import structure", () => {
 
   it("keeps Next.js out of the engine's module closure", () => {
     // The engine must stay portable — a Next import anywhere in this closure is
-    // what would block bundling it into an extension or a worker.
-    const closure = [
-      "scamDetector.ts", "detectType.ts", "engineTypes.ts", "urlSanitizer.ts",
-      "emailHeaders.ts", "phoneIntel.ts", "urlExpander.ts",
-      "regions/index.ts", "regions/base.ts", "regions/types.ts",
-    ];
+    // what would block bundling it into an extension or a worker. Now enforced
+    // for the whole package rather than a hand-listed closure: anything added
+    // to packages/engine/src is covered automatically.
+    const closure = readdirSync(ENGINE, { recursive: true, encoding: "utf8" })
+      .filter((f) => f.endsWith(".ts"));
+    expect(closure.length).toBeGreaterThan(10); // guard against a silent empty glob
     for (const file of closure) {
       const offenders = importsOf(file).filter((i) => i === "next" || i.startsWith("next/"));
       expect(offenders, `${file} imports Next.js`).toEqual([]);

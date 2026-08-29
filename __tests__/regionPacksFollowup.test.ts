@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, checkUrl, checkEmail, checkPhone } from "@/lib/scamDetector";
-import { analysePhone } from "@/lib/phoneIntel";
-import { resolveRegionPack, supportedRegions } from "@/lib/regions";
-import { US } from "@/lib/regions/us";
-import { NZ } from "@/lib/regions/nz";
-import { CA } from "@/lib/regions/ca";
-import { IE } from "@/lib/regions/ie";
-import { AU } from "@/lib/regions/au";
-import { GB } from "@/lib/regions/gb";
+import { checkSms, checkUrl, checkEmail, checkPhone } from "@justcheckingmate/engine/scamDetector";
+import { analysePhone } from "@justcheckingmate/engine/phoneIntel";
+import { resolveRegionPack, supportedRegions } from "@justcheckingmate/engine/regions";
+import { US } from "@justcheckingmate/engine/regions/us";
+import { NZ } from "@justcheckingmate/engine/regions/nz";
+import { CA } from "@justcheckingmate/engine/regions/ca";
+import { IE } from "@justcheckingmate/engine/regions/ie";
+import { AU } from "@justcheckingmate/engine/regions/au";
+import { GB } from "@justcheckingmate/engine/regions/gb";
 
 // The US / NZ / CA / IE follow-up packs — the cheap, data-only regions the
 // Phase 5 sequencing calls for once the interface stabilised.

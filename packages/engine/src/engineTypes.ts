@@ -9,8 +9,8 @@
 // Types only — no logic, no imports. Anything with behaviour belongs in the
 // module that owns it.
 
-import type { PhoneIntel } from "@/lib/phoneIntel";
-import type { RegionCoverage } from "@/lib/regions";
+import type { PhoneIntel } from "./phoneIntel";
+import type { RegionCoverage } from "./regions";
 
 /** What kind of thing the user submitted. */
 export type ScamType = "url" | "sms" | "email" | "phone" | "qr" | "custom";

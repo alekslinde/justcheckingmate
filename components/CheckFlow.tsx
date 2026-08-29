@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AnalyzedIdentifier, ScamType } from "@/lib/scamDetector";
-import { detectType } from "@/lib/detectType";
-import { extractIdentifiers, defangEmail } from "@/lib/urlSanitizer";
-import { parseEmailHeaders, summariseAuth } from "@/lib/emailHeaders";
+import { AnalyzedIdentifier, ScamType } from "@justcheckingmate/engine/scamDetector";
+import { detectType } from "@justcheckingmate/engine/detectType";
+import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSanitizer";
+import { parseEmailHeaders, summariseAuth } from "@justcheckingmate/engine/emailHeaders";
 import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";

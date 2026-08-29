@@ -6,14 +6,14 @@ import {
   checkPhone,
   checkCustom,
   analyzeContent,
-} from "@/lib/scamDetector";
-import { expandUrl } from "@/lib/urlExpander";
+} from "@justcheckingmate/engine/scamDetector";
+import { expandUrl } from "@justcheckingmate/engine/urlExpander";
 
 // Keep isShortened from the real module so shortener-detection tests stay valid.
 // Replace expandUrl with a controllable spy that returns null by default so
 // existing tests are unaffected by network I/O.
-vi.mock("@/lib/urlExpander", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/urlExpander")>();
+vi.mock("@justcheckingmate/engine/urlExpander", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@justcheckingmate/engine/urlExpander")>();
   return { ...actual, expandUrl: vi.fn().mockResolvedValue({ expandedUrl: null, hops: [], status: "failed" }) };
 });
 
