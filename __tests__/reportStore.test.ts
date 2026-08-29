@@ -372,6 +372,18 @@ describe("recordCheckEvent", () => {
     expect(call.args[0]).toBe("unknown");
   });
 
+  it("accepts the share surface", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await recordCheckEvent("share", "delivered", Date.UTC(2026, 7, 29));
+
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    // Must not fall through to `unknown` — share volume is the reason Phase 2a
+    // is measurable at all.
+    expect(call.args[0]).toBe("share");
+  });
+
   it("buckets an unrecognised outcome as 'unknown', never as 'analysed'", async () => {
     const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);

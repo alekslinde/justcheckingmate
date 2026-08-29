@@ -151,7 +151,13 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
 // Which entry point a check came through. Add a member when a new surface
 // ships (extension, telegram, …) so its volume is attributable from day one —
 // an unattributed surface is indistinguishable from no traffic at all.
-export type CheckSurface = "web" | "email" | "unknown";
+//
+// `share` is the OS share sheet (app/share/page.tsx). It reaches the same
+// /api/check as `web` and is analysed identically, so it is NOT a separate
+// code path — but it is a separate *product surface*, and rolling it into
+// `web` would make it impossible to tell whether the share target is used at
+// all. That question is the whole reason Phase 2a shipped.
+export type CheckSurface = "web" | "share" | "email" | "unknown";
 
 // What became of it.
 //
@@ -165,7 +171,7 @@ export type CheckSurface = "web" | "email" | "unknown";
 // These are NOT two halves of one ratio. See the note on `getCheckEvents`.
 export type CheckOutcome = "delivered" | "analysed" | "unknown";
 
-const CHECK_SURFACES: readonly CheckSurface[] = ["web", "email", "unknown"];
+const CHECK_SURFACES: readonly CheckSurface[] = ["web", "share", "email", "unknown"];
 const CHECK_OUTCOMES: readonly CheckOutcome[] = ["delivered", "analysed", "unknown"];
 
 // UTC day key, `YYYY-MM-DD`. UTC rather than AEST deliberately: unlike the
