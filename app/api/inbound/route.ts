@@ -9,7 +9,9 @@ import { SITE_URL } from "@/lib/siteUrl";
 
 // Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (see
 // workers/inbound-email/) receives a forwarded suspicious email, POSTs the raw
-// RFC822 here, and sends the verdict we return back to the forwarder.
+// RFC822 here, and sends the verdict we return back to the forwarder. It then
+// POSTs `{ delivered: true }` here once that reply has actually gone out, which
+// is what increments the public "scams checked" counter — see that branch.
 //
 // PRIVACY: we analyse the raw email entirely in memory and return a verdict.
 // The raw email is NEVER stored — only an anonymous aggregate counter is
@@ -40,11 +42,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { raw?: string; from?: string };
+  let body: { raw?: string; from?: string; delivered?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ ok: true, skip: "bad-json" });
+  }
+
+  // Delivery confirmation. The Worker calls back here once message.reply() has
+  // actually succeeded, and that — not the analysis — is when a person has a
+  // verdict in hand. Counting at analysis time would inflate "scams checked"
+  // with replies Cloudflare rejected (it refuses to reply on a transaction whose
+  // incoming forward failed DMARC), so the increment lives here instead.
+  if (body.delivered === true) {
+    await incrementCheckCount().catch(() => {});
+    return NextResponse.json({ ok: true, counted: true });
   }
 
   const raw = typeof body.raw === "string" ? body.raw : "";
@@ -91,7 +103,8 @@ export async function POST(req: NextRequest) {
       replyToAddress: headers.replyTo,
     });
 
-    incrementCheckCount().catch(() => {});
+    // NOT counted here: the Worker confirms delivery with a `delivered` POST
+    // once the reply is actually sent. See the branch at the top of this route.
 
     // Return the formatted reply for the Worker to send. `source` lets the
     // Worker (or logs) know whether we got a high-fidelity attachment or a

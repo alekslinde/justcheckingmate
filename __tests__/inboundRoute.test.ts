@@ -5,9 +5,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/urlhausBlocklist", () => ({
   getUrlhausBlocklist: async () => new Set<string>(),
 }));
+const incrementCheckCount = vi.fn(async () => {});
 vi.mock("@/lib/reportStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/reportStore")>();
-  return { ...actual, incrementCheckCount: async () => {} };
+  return { ...actual, incrementCheckCount: () => incrementCheckCount() };
 });
 
 import { POST, GET } from "@/app/api/inbound/route";
@@ -121,6 +122,43 @@ describe("POST /api/inbound — rate limit", () => {
     // The limiter allows a handful, then no-ops — at least one later call is skipped.
     expect(replies.filter(Boolean).length).toBeLessThan(replies.length);
     expect(replies.at(-1)).toBe(false);
+  });
+});
+
+describe("POST /api/inbound — check counter", () => {
+  // The public "scams checked" number must mean "a person received a verdict",
+  // not "we ran an analysis". Cloudflare refuses to send the reply when the
+  // incoming forward failed DMARC, so analysing and delivering are genuinely
+  // different events and only the second one counts.
+  it("does not count a check at analysis time", async () => {
+    incrementCheckCount.mockClear();
+    const res = await POST(inbound({ raw: SCAM_FORWARD, from: "victim@gmail.com" }));
+    const body = await res.json();
+    expect(body.reply).toBeTruthy();
+    expect(incrementCheckCount).not.toHaveBeenCalled();
+  });
+
+  it("counts a check when the Worker confirms the reply was delivered", async () => {
+    incrementCheckCount.mockClear();
+    const res = await POST(inbound({ delivered: true }));
+    expect(await res.json()).toMatchObject({ ok: true, counted: true });
+    expect(incrementCheckCount).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires the shared secret to confirm a delivery", async () => {
+    // Otherwise the public counter would be writable by anyone.
+    incrementCheckCount.mockClear();
+    const res = await POST(inbound({ delivered: true }, "wrong-secret"));
+    expect(res.status).toBe(401);
+    expect(incrementCheckCount).not.toHaveBeenCalled();
+  });
+
+  it("ignores a non-true delivered value rather than counting it", async () => {
+    incrementCheckCount.mockClear();
+    const res = await POST(inbound({ delivered: "yes" }));
+    const body = await res.json();
+    expect(body.counted).toBeUndefined();
+    expect(incrementCheckCount).not.toHaveBeenCalled();
   });
 });
 
