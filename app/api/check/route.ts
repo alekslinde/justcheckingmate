@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     // never the user's IP (see the transport contract in lib/urlExpander.ts).
     const results = await analyzeContent(content, blocklist, resolvedRegion, { fetcher: fetch });
 
-    incrementCheckCount().catch(() => {});
+    incrementCheckCount("web").catch(() => {});
     return NextResponse.json({ results, region: resolvedRegion });
   } catch {
     return NextResponse.json({ error: "Something went sideways on our end" }, { status: 500 });

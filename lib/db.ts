@@ -48,6 +48,37 @@ async function setup(): Promise<void> {
       submitted_at  INTEGER NOT NULL
     )
   `);
+  // Per-surface check telemetry. Deliberately an AGGREGATE, not an event log:
+  // one row per (surface, outcome, UTC day), incremented in place. This answers
+  // "which surfaces get used" and "what share of forwards yield a verdict"
+  // without recording anything about an individual check — no timestamp beyond
+  // the day, no content, no sender, nothing joinable back to a person. The raw
+  // email is still never stored (see app/api/inbound/route.ts).
+  //
+  // `counters.checks` remains the public lifetime total and the source of truth
+  // for the published number; this table is strictly additional. The two are
+  // incremented together on the delivered path, so they can drift only for
+  // checks that predate this table.
+  //
+  // `day` leads the primary key so a range scan over `WHERE day >= ?` — the only
+  // way this table is read — uses the PK prefix instead of scanning everything.
+  // `value` has no DEFAULT: every row is created by an upsert that sets it to 1,
+  // and a zero row would mean "something happened zero times", which is not a
+  // thing this table can record.
+  //
+  // Failure is swallowed for the same reason the ALTER migrations below are:
+  // `getDb` memoises `setup()`, so letting this reject would poison
+  // initialisation for `reports`, `counters` and `bug_reports` too. Telemetry
+  // must never be able to take the app down.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS check_events (
+      day      TEXT    NOT NULL,
+      surface  TEXT    NOT NULL,
+      outcome  TEXT    NOT NULL,
+      value    INTEGER NOT NULL,
+      PRIMARY KEY (day, surface, outcome)
+    )
+  `).catch(() => {});
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('checks', 0)`);
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('reports', 0)`);
   // Migrations — ALTER TABLE ignores silently if column already exists
