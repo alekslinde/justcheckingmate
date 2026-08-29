@@ -42,8 +42,11 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
    nameservers to Cloudflare first (Vercel still serves the site via its records;
    only DNS hosting moves). **Nothing below works until this is done.**
 
-1. **Enable Email Routing.** Cloudflare dashboard → the domain → Email → Email
-   Routing → enable. This auto-adds the **MX** and **SPF (TXT)** records. Then go
+1. **Enable Email Routing.** Cloudflare dashboard → **Compute → Email Service →
+   Email Routing** → select the domain → enable. (This setting used to live under
+   the domain itself, at *the domain → Email → Email Routing*; Cloudflare has
+   since moved it to account level. Older guides still cite the domain path.)
+   Enabling auto-adds the **MX** and **SPF (TXT)** records. Then go
    to its DNS/authentication settings and **publish the DKIM and DMARC records it
    offers** — these are what make the verdict reply pass authentication and reach
    the inbox (see *Deliverability* below). Verify all records are live. While here,
@@ -77,8 +80,9 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
      npm run deploy
      ```
 
-6. **Bind the address.** Email Routing → Routing rules → add a custom address
-   `check@justcheckingmate.com` → action **Send to a Worker → jcm-inbound-email**.
+6. **Bind the address.** Email Routing (Compute → Email Service, as in step 1) →
+   Routing rules → add a custom address `check@justcheckingmate.com` → action
+   **Send to a Worker → jcm-inbound-email**.
 
 7. **Verify end-to-end.** Forward a known scam email to `check@<domain>` from a
    normal account (Gmail/iCloud). Within a few seconds you should get a threaded
@@ -91,6 +95,12 @@ Do these in order. Steps 0–1 are the prerequisites people miss.
 8. **Flip the UI flag.** Only once step 7 passes: set
    `NEXT_PUBLIC_INBOUND_ENABLED=true` on Vercel and redeploy, so the
    "forward it to us" address is shown to users. Never advertise a dead inbox.
+
+   > **Vercel will refuse to save this one until you classify it as Config.**
+   > Any `NEXT_PUBLIC_`-prefixed variable is inlined into the client bundle, so
+   > Vercel blocks saving it as a (secret) Environment Variable and the dialog
+   > does not make the fix obvious. Set its type to **Config** — sensitive values
+   > like `INBOUND_SECRET` in step 3 stay as normal env vars.
 
 ### Rotating the secret later
 
