@@ -122,6 +122,10 @@ export default function CheckFlow() {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  // Forward-address copy confirmation. Copying is the one part of forwarding the
+  // web can actually do for someone — the forward itself happens in their mail
+  // app, which no page can reach into.
+  const [addressCopied, setAddressCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Full email-source analysis (unwrap → headers → identity flags → tracking),
   // populated in runCheck. null until a check runs. Everything the result page
@@ -327,6 +331,18 @@ export default function CheckFlow() {
       setTimeout(() => setShareCopied(false), 2500);
     } catch {
       // Clipboard unavailable (rare) — nothing sensible to do.
+    }
+  }
+
+  async function copyInboundAddress() {
+    try {
+      await navigator.clipboard.writeText(INBOUND_ADDRESS);
+      setAddressCopied(true);
+      setTimeout(() => setAddressCopied(false), 2500);
+    } catch {
+      // Clipboard unavailable (older browser, insecure origin) — the address is
+      // rendered as selectable text right beside the button, so there is still
+      // a way through without it.
     }
   }
 
@@ -615,13 +631,12 @@ export default function CheckFlow() {
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      {/* Capture options, most-direct first: take a photo, upload an image,
-          upload an .eml, forward it to us. One column on a phone (full-width tap
-          targets, and the descriptions need the room); two per row from sm up,
-          where full-width rows would just be stripes of empty space. Forwarding
-          is last because it is the only option that sends the email through a
-          mail provider — see its note below. Per-field capture help lives on the
-          Learn page, linked just below. */}
+      {/* Ways to hand this page something to check, most-direct first: take a
+          photo, upload an image, upload an .eml. One column on a phone (full-
+          width tap targets, and the descriptions need the room); two per row
+          from sm up, where full-width rows would just be stripes of empty space.
+          Forwarding is deliberately NOT here — see the block below the submit
+          button. Per-field capture help lives on the Learn page, linked below. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <button
           type="button"
@@ -661,31 +676,7 @@ export default function CheckFlow() {
             <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadEmlDesc")}</span>
           </span>
         </button>
-        {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
-            Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED).
-            It leaves the device, so the privacy trade-off is stated inline
-            rather than being left to the Learn page. When hidden, the .eml
-            option is left alone on the second row — acceptable, and better than
-            reordering the options based on a build flag. */}
-        {INBOUND_ENABLED && (
-          <a
-            href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
-            className={CAPTURE_OPTION}
-          >
-            <span className="shrink-0"><ForwardIcon /></span>
-            <span className="min-w-0">
-              <span className="block font-medium text-sm">{t("check.forwardEmail")}</span>
-              <span className="block text-xs text-gray-500 leading-tight">
-                {t("check.forwardEmailDesc", { address: INBOUND_ADDRESS })}
-              </span>
-            </span>
-          </a>
-        )}
       </div>
-
-      {INBOUND_ENABLED && (
-        <p className="text-[11px] text-gray-500">{t("check.forward.note")}</p>
-      )}
 
       {/* Quiet pointer to the full capture guide on Learn — replaces the inline
           expandables that crowded this flow. */}
@@ -762,6 +753,45 @@ export default function CheckFlow() {
       {checkError && (
         <div role="alert" className="bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
           {checkError}
+        </div>
+      )}
+
+      {/* Forward-to-us. Deliberately below the submit button and visually set
+          apart, because it is not another way to fill in the box above — it is a
+          different route entirely: you act in your MAIL APP, not on this page,
+          and the verdict comes back by email rather than appearing here.
+          Grouping it with the upload options implied an equivalence that misled.
+
+          There is no mailto here on purpose. A mailto opens a blank compose
+          window, but forwarding is an action taken on a message the user already
+          has in their mailbox — no web API can reach in and do that. A button
+          promising "Forward" that opens an empty email is worse than no button,
+          so we do the one thing the page genuinely can (copy the address) and
+          state plainly where the rest happens. */}
+      {INBOUND_ENABLED && (
+        <div className="border-t border-gray-800 pt-5 space-y-2.5">
+          <p className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <span className="text-gray-500"><ForwardIcon /></span>
+            {t("check.forward.heading")}
+          </p>
+          <p className="text-xs text-gray-400">{t("check.forward.body")}</p>
+
+          <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2">
+            {/* Selectable text, so the address is usable even when the clipboard
+                API isn't (insecure origin, older browser, denied permission). */}
+            <code className="flex-1 min-w-0 truncate text-sm text-emerald-400 select-all">
+              {INBOUND_ADDRESS}
+            </code>
+            <button
+              type="button"
+              onClick={copyInboundAddress}
+              className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+            >
+              {addressCopied ? t("check.forward.copied") : t("check.forward.copy")}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-gray-500">{t("check.forward.note")}</p>
         </div>
       )}
     </div>
