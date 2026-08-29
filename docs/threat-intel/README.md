@@ -17,11 +17,18 @@ Detection here is hardcoded keyword lists, regexes, and weighted scores — the
 kind of code that rots into unexplainable magic strings. These files are the
 provenance layer that stops that happening.
 
-1. **Evidence for every rule.** Why is `.monster` worth +30? Why is
-   `"quantum ai"` +50? Without a roadmap those are arbitrary. With one,
-   `.monster` traces to a CSC DBS >60% abuse-rate finding and `"quantum ai"` to
-   a named ASIC warning. For a tool that publicly tells people "this is a scam",
-   being able to show the working matters.
+1. **Evidence for every rule.** Why is `.bond` worth +30? Why is
+   `"quantum ai"` +50? Without a roadmap those are arbitrary. With one, `.bond`
+   traces to Interisle's measurement that it is 100% maliciously registered, and
+   `"quantum ai"` to a named ASIC warning. For a tool that publicly tells people
+   "this is a scam", being able to show the working matters.
+
+   This cuts both ways, which is the point. `.monster` was the example used here
+   until 2026-08-29, when checking it against Interisle's *Phishing Landscape
+   2025* showed the CSC DBS ">60% abuse" figure behind it has no independent
+   corroboration — `.monster` is not individually measured by anyone. It stays
+   in the list on cohort grounds, but the traceability is what surfaced the weak
+   citation. See the evidence correction in the 2026-07-26 roadmap.
 
 2. **Negative results.** The watchlist section is as valuable as the proposals.
    *SIM swap — no text-side signal, existing brand+request detection already

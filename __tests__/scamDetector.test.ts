@@ -1582,6 +1582,33 @@ describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
     expect(result.flags.some((f) => f.includes("Dodgy top-level domain"))).toBe(false);
   });
 
+  // ── Interisle Phishing Landscape 2025 re-sourcing (2026-08-29) ─────────────
+  // .XIN and .BOND are both 100% maliciously registered in Interisle's 2025
+  // study — the strongest per-TLD evidence available for any entry in the list.
+  it("flags .xin and .bond, both 100% maliciously registered (Interisle 2025)", () => {
+    for (const host of ["mygov-verify.xin", "auspost-redelivery.bond"]) {
+      const result = checkUrl(`https://${host}/login`);
+      expect(result.flags.some((f) => f.includes("Dodgy top-level domain"))).toBe(true);
+    }
+  });
+
+  it("reaches a scam verdict when .bond compounds with other signals (Interisle 2025)", () => {
+    const result = checkSms(
+      "URGENT: your AusPost parcel is held pending a fee. Pay now at https://auspost-redelivery.bond/pay"
+    );
+    expect(result.verdict).toBe("likely_scam");
+  });
+
+  // Guards the suffix match: .bond must not swallow a legitimate host that
+  // merely ends in those letters. endsWith(".bond") is the reason this is safe,
+  // and this test is what keeps it that way.
+  it("does not flag a legitimate domain merely containing the new TLD strings", () => {
+    for (const host of ["www.jamesbond.com.au", "vixin.com.au"]) {
+      const result = checkUrl(`https://${host}/`);
+      expect(result.flags.some((f) => f.includes("Dodgy top-level domain"))).toBe(false);
+    }
+  });
+
   // ── #103: foreign authority impersonation ───────────────────────────────────
   it("flags a Chinese police impersonation SMS (D3 / #103)", () => {
     const result = checkSms(

@@ -217,10 +217,24 @@ const SUSPICIOUS_TLDS = [
   // are top-10 globally abused TLDs (Brandsec AU 2025-2026) seen in
   // fake-retail and subscription-renewal campaigns; .vip appears in the APWG
   // top-10 and in pig-butchering funnels; .lol and .monster are cheap ICANN
-  // TLDs that launched with >60% abuse rates. .shop/.store carry some
-  // legitimate e-commerce use, so they lean on compound scoring rather than
-  // reaching a scam verdict alone.
+  // TLDs from the same XYZ.COM stable. .shop/.store carry some legitimate
+  // e-commerce use, so they lean on compound scoring rather than reaching a
+  // scam verdict alone.
+  //
+  // Evidence re-sourced 2026-08-29 to Interisle Phishing Landscape 2025
+  // (May 2024 - April 2025, ~4M reports): .LOL is 96% maliciously registered
+  // (24,187 domains, 5th highest of any gTLD) and new gTLDs as a class are 87%
+  // maliciously registered vs 67% for .com/.net. .shop is Top-20 most-reported
+  // in all five annual studies. NB .monster and .vip are NOT individually
+  // measured by Interisle — they ride on the cohort base rate, not a per-TLD
+  // figure. See docs/threat-intel/sources.yml (interisle.net).
   ".shop", ".store", ".vip", ".lol", ".monster",
+  // Highest-confidence additions from Interisle 2025: both 100% maliciously
+  // registered, i.e. essentially no legitimate registrations observed. .BOND
+  // is 3rd in the five-year malicious-phishing ranking (79,875 domains) and
+  // .XIN tops the 2025 phishing-score table (42,724 domains). Neither has
+  // meaningful legitimate AU consumer use.
+  ".xin", ".bond",
 ];
 
 // Public IPFS gateways — decentralised hosting used for takedown-resistant
