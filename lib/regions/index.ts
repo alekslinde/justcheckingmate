@@ -100,6 +100,9 @@ function buildPack(region: RegionDefinition): RegionPack {
     bankIdentifiers: region.bankIdentifiers,
     identityRereg: region.identityRereg,
     identityReregFlag: region.identityReregFlag,
+    // Defaults to empty: only regions whose carrier lure is address-shaped
+    // define these, and an absent list must mean "never gated in", not undefined.
+    parcelAddressPhrases: region.parcelAddressPhrases ?? [],
     fakeInvestmentPlatformFlag: region.fakeInvestmentPlatformFlag,
     legitDomains: region.legitDomains,
     legitDomainFlag: region.legitDomainFlag,
