@@ -84,6 +84,15 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
 const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
 const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.com";
 
+// Shared chrome for the four capture options (take photo / upload image /
+// upload .eml / forward). One constant rather than the same 200-character class
+// string repeated four times, so the row styling can only change in lockstep.
+// Grid placement and the disabled states are per-option and stay at the call
+// site — the forward option is an <a> and is never disabled.
+const CAPTURE_OPTION =
+  "flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 " +
+  "rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 transition-colors text-left";
+
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply
 // shares the exact same rules — see that module.
@@ -606,19 +615,19 @@ export default function CheckFlow() {
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      {/* One vertical stack of capture options, most-direct first: take a photo,
-          upload an image, upload an .eml, forward it to us. A stack (rather than
-          the old 2/3-column grid) gives every option the same weight and a full-
-          width tap target, and lets each carry a one-line description that stays
-          readable on a phone. Forwarding is last because it is the only option
-          that sends the email through a mail provider — see its note. Per-field
-          capture help lives on the Learn page, linked just below. */}
-      <div className="space-y-2">
+      {/* Capture options, most-direct first: take a photo, upload an image,
+          upload an .eml, forward it to us. One column on a phone (full-width tap
+          targets, and the descriptions need the room); two per row from sm up,
+          where full-width rows would just be stripes of empty space. Forwarding
+          is last because it is the only option that sends the email through a
+          mail provider — see its note below. Per-field capture help lives on the
+          Learn page, linked just below. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
           disabled={busy}
-          className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
+          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span className="shrink-0"><CameraIcon /></span>
           <span className="min-w-0">
@@ -631,7 +640,7 @@ export default function CheckFlow() {
           onClick={() => imageRef.current?.click()}
           disabled={busy}
           aria-busy={uploadLoading}
-          className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
+          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
           <span className="min-w-0">
@@ -644,7 +653,7 @@ export default function CheckFlow() {
           type="button"
           onClick={() => emlRef.current?.click()}
           disabled={busy}
-          className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
+          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span className="shrink-0"><EmailFileIcon /></span>
           <span className="min-w-0">
@@ -655,11 +664,13 @@ export default function CheckFlow() {
         {/* Forward-to-us — the lowest-friction mobile path: no export, no paste.
             Only shown once inbound mail is live (NEXT_PUBLIC_INBOUND_ENABLED).
             It leaves the device, so the privacy trade-off is stated inline
-            rather than being left to the Learn page. */}
+            rather than being left to the Learn page. When hidden, the .eml
+            option is left alone on the second row — acceptable, and better than
+            reordering the options based on a build flag. */}
         {INBOUND_ENABLED && (
           <a
             href={`mailto:${INBOUND_ADDRESS}?subject=${encodeURIComponent("Is this a scam?")}`}
-            className="w-full flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 transition-colors text-left"
+            className={CAPTURE_OPTION}
           >
             <span className="shrink-0"><ForwardIcon /></span>
             <span className="min-w-0">
