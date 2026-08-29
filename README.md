@@ -89,6 +89,29 @@ The schema is created automatically on first run — no migrations to run.
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Cross-origin access (`CORS_ALLOWED_ORIGINS`)
+
+`/api/check` is the only route that answers cross-origin requests, and only from
+origins named in `CORS_ALLOWED_ORIGINS` (comma-separated). The site's own origin
+is always allowed and does not need listing.
+
+**Leave it unset unless a non-web client exists.** Empty is the safe default and
+matches the behaviour before CORS existed. The variable is where a browser
+extension's origin goes once the extension is published — the id is assigned at
+packaging time, so it cannot be committed ahead of time.
+
+```bash
+CORS_ALLOWED_ORIGINS=chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef
+```
+
+Two things it deliberately will not do, both in [`lib/cors.ts`](lib/cors.ts):
+there is **no wildcard and no scheme-only matching** — allowing "any
+`chrome-extension://`" would let every extension on a user's machine call the
+API with that user's IP and rate budget — and **credentials are never allowed**,
+since the API is unauthenticated and should not imply otherwise.
+
+The write paths (`/api/report`, `/api/bug`, `/api/ocr`) stay same-origin.
+
 ### Versioning
 
 The app version in `package.json` is bumped in the PR that makes the change.
