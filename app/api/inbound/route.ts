@@ -4,7 +4,7 @@ import { analyzeContent } from "@/lib/scamDetector";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
-import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
+import { checkAndRecordRateLimit, incrementCheckCount, recordCheckEvent } from "@/lib/reportStore";
 import { SITE_URL } from "@/lib/siteUrl";
 
 // Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (see
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     if (from && !checkAndRecordRateLimit(`delivered:${from}`)) {
       return NextResponse.json({ ok: true, skip: "rate-limited" });
     }
-    await incrementCheckCount().catch(() => {});
+    await incrementCheckCount("email").catch(() => {});
     return NextResponse.json({ ok: true, counted: true });
   }
 
@@ -91,6 +91,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Record the attempt BEFORE the work that can throw. Recording after a
+    // successful analysis would drop every crash from the `analysed` volume,
+    // making the email path look healthiest exactly when it is failing most.
+    // This counts forwards we accepted and tried to analyse — not successes.
+    void recordCheckEvent("email", "analysed");
+
     // Reach the ORIGINAL scam inside the forward and run the shared analysis —
     // the top-level headers belong to the forwarder, not the scammer.
     const { source, original, headers, identityFlags, tracking } = analyseEmailSource(raw);

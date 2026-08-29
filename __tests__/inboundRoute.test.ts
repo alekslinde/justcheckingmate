@@ -6,9 +6,14 @@ vi.mock("@/lib/urlhausBlocklist", () => ({
   getUrlhausBlocklist: async () => new Set<string>(),
 }));
 const incrementCheckCount = vi.fn(async () => {});
+const recordCheckEvent = vi.fn(async () => {});
 vi.mock("@/lib/reportStore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/reportStore")>();
-  return { ...actual, incrementCheckCount: () => incrementCheckCount() };
+  return {
+    ...actual,
+    incrementCheckCount: () => incrementCheckCount(),
+    recordCheckEvent: (...args: unknown[]) => recordCheckEvent(...(args as [])),
+  };
 });
 
 import { POST, GET } from "@/app/api/inbound/route";
@@ -136,6 +141,30 @@ describe("POST /api/inbound — check counter", () => {
     const body = await res.json();
     expect(body.reply).toBeTruthy();
     expect(incrementCheckCount).not.toHaveBeenCalled();
+  });
+
+  it("records the analysis attempt even when analysis then throws", async () => {
+    // Recording after a successful analysis would drop every crash from the
+    // `analysed` volume, making the path look healthiest when it fails most.
+    recordCheckEvent.mockClear();
+    const blocklist = await import("@/lib/urlhausBlocklist");
+    const spy = vi
+      .spyOn(blocklist, "getUrlhausBlocklist")
+      .mockRejectedValueOnce(new Error("boom") as never);
+
+    const res = await POST(inbound({ raw: SCAM_FORWARD, from: "crash-probe@gmail.com" }));
+    expect(await res.json()).toMatchObject({ skip: "analysis-error" });
+    expect(recordCheckEvent).toHaveBeenCalledWith("email", "analysed");
+
+    spy.mockRestore();
+  });
+
+  it("records the analysis attempt under the analysed outcome, not delivered", async () => {
+    // A fresh sender: the per-sender limiter is 4 per 10 min and its state is
+    // shared across every test in this file.
+    recordCheckEvent.mockClear();
+    await POST(inbound({ raw: SCAM_FORWARD, from: "outcome-probe@gmail.com" }));
+    expect(recordCheckEvent).toHaveBeenCalledWith("email", "analysed");
   });
 
   it("counts a check when the Worker confirms the reply was delivered", async () => {

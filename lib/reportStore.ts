@@ -148,12 +148,140 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
   }
 }
 
-export async function incrementCheckCount(): Promise<void> {
+// Which entry point a check came through. Add a member when a new surface
+// ships (extension, telegram, …) so its volume is attributable from day one —
+// an unattributed surface is indistinguishable from no traffic at all.
+export type CheckSurface = "web" | "email" | "unknown";
+
+// What became of it.
+//
+// `delivered` means a person has a verdict in hand. `analysed` means the email
+// path produced a reply for the Worker to send; it is recorded on the inbound
+// analysis path only, and says nothing about whether the reply arrived.
+// `unknown` is the neutral bucket for an unrecognised value — deliberately NOT
+// folded into `analysed`, which would silently move a bad write into a counted
+// population.
+//
+// These are NOT two halves of one ratio. See the note on `getCheckEvents`.
+export type CheckOutcome = "delivered" | "analysed" | "unknown";
+
+const CHECK_SURFACES: readonly CheckSurface[] = ["web", "email", "unknown"];
+const CHECK_OUTCOMES: readonly CheckOutcome[] = ["delivered", "analysed", "unknown"];
+
+// UTC day key, `YYYY-MM-DD`. UTC rather than AEST deliberately: unlike the
+// region-demand script — which buckets AU submissions at UTC+10 so a month's
+// first hours don't fall into the previous one — this is read as a weekly rate
+// across surfaces, where a fixed, machine-independent boundary matters more
+// than aligning to an Australian calendar day.
+function utcDay(at: number): string {
+  return new Date(at).toISOString().slice(0, 10);
+}
+
+/**
+ * Record one check against the per-surface aggregate.
+ *
+ * Never throws: telemetry must not be able to fail a user-facing request, and
+ * both call sites already treat counting as best-effort. An unknown surface is
+ * bucketed as "unknown" rather than dropped, so a miswired new client shows up
+ * as unattributed volume instead of vanishing.
+ */
+export async function recordCheckEvent(
+  surface: CheckSurface,
+  outcome: CheckOutcome,
+  at: number = Date.now(),
+): Promise<void> {
+  // Both call sites pass literals today, so these are unreachable from inside
+  // this repo. They are kept for the surface a future client adds — a bad value
+  // arriving from a new caller should land in `unknown` and be visible as
+  // unattributed volume, never be dropped and never be quietly counted as
+  // something it wasn't.
+  const safeSurface: CheckSurface = CHECK_SURFACES.includes(surface) ? surface : "unknown";
+  const safeOutcome: CheckOutcome = CHECK_OUTCOMES.includes(outcome) ? outcome : "unknown";
+  try {
+    const db = await getDb();
+    await db.execute({
+      sql: `INSERT INTO check_events (surface, outcome, day, value)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(surface, outcome, day)
+            DO UPDATE SET value = value + 1`,
+      args: [safeSurface, safeOutcome, utcDay(at)],
+    });
+  } catch {
+    // Aggregate is best-effort; the lifetime counter is the source of truth.
+  }
+}
+
+/**
+ * Increment the public lifetime "scams checked" total.
+ *
+ * `surface` is optional so existing callers keep working unchanged; passing it
+ * also records the per-surface aggregate.
+ *
+ * The aggregate write is deliberately NOT awaited. The public counter is the
+ * source of truth and the caller is waiting on this — making the request pay
+ * for a second serial round trip (which contends on a single hot per-day row)
+ * to update a secondary number is the wrong trade. `recordCheckEvent` already
+ * swallows its own failures.
+ */
+export async function incrementCheckCount(surface?: CheckSurface): Promise<void> {
   const db = await getDb();
   await db.execute({
     sql: `UPDATE counters SET value = value + 1 WHERE name = 'checks'`,
     args: [],
   });
+  if (surface) {
+    void recordCheckEvent(surface, "delivered");
+  }
+}
+
+export interface CheckEventRow {
+  surface: CheckSurface;
+  outcome: CheckOutcome;
+  day: string;
+  value: number;
+}
+
+/**
+ * Read the per-surface aggregate, newest day first.
+ *
+ * `sinceDay` is an inclusive `YYYY-MM-DD` bound; omit it for everything. The
+ * shape is deliberately raw — callers do their own bucketing.
+ *
+ * **`delivered` and `analysed` are not a numerator and denominator.** Dividing
+ * one by the other looks meaningful and is not:
+ *
+ * - They are written on different code paths, behind two independent
+ *   rate-limit budgets (`inbound:` and `delivered:`, 4 per 10 min each), so
+ *   either can be throttled while the other is not. `delivered` exceeding
+ *   `analysed` is an ordinary outcome, not a corruption.
+ * - The `web` surface never writes `analysed` at all — a web check is delivered
+ *   by definition — so any such ratio is undefined there rather than 100%.
+ * - A crash mid-analysis writes neither, so failures are absent from both
+ *   sides rather than lowering a success rate.
+ *
+ * Read them as two separate volumes: how many verdicts reached people, and how
+ * many replies the email path produced. A true delivery rate needs both
+ * outcomes written on one path under one budget, which is a schema change, not
+ * a division.
+ */
+export async function getCheckEvents(sinceDay?: string): Promise<CheckEventRow[]> {
+  const db = await getDb();
+  const result = sinceDay
+    ? await db.execute({
+        sql: `SELECT surface, outcome, day, value FROM check_events
+              WHERE day >= ? ORDER BY day DESC, surface, outcome`,
+        args: [sinceDay],
+      })
+    : await db.execute(
+        `SELECT surface, outcome, day, value FROM check_events
+         ORDER BY day DESC, surface, outcome`,
+      );
+  return result.rows.map((r) => ({
+    surface: r.surface as CheckSurface,
+    outcome: r.outcome as CheckOutcome,
+    day: r.day as string,
+    value: Number(r.value),
+  }));
 }
 
 export async function getStats(): Promise<{ checks: number; reports: number }> {
