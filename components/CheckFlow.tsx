@@ -10,6 +10,7 @@ import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
+import { bold } from "@/lib/richText";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
@@ -781,6 +782,16 @@ export default function CheckFlow() {
             {t("check.forward.heading")}
           </p>
           <p className="text-xs text-gray-400">{t("check.forward.body")}</p>
+
+          {/* The app flags tracking pixels as a red flag, so it must not tell
+              people to trigger one. Opening a scam email loads its pixel and
+              confirms the address is live; forwarding from the message list
+              doesn't. Stated as guidance rather than a prerequisite — someone
+              who already opened it still needs the check, and the reassurance
+              stops the warning reading as "too late now". */}
+          <p className="text-xs text-amber-300/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+            {bold(t("check.forward.noopen"))}
+          </p>
 
           <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2">
             {/* Selectable text, so the address is usable even when the clipboard
