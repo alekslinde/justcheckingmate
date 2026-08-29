@@ -1,0 +1,9 @@
+{
+  "_comment": "Per-region gates. null means ungated - an honest statement that we do not hold this region to a number, rather than a low bar nobody checked. Regions absent here are ungated entirely.",
+  "AU": { "recall": 0.9, "fpr": 0.02, "coverage": 0.98 },
+  "GB": { "recall": 0.85, "fpr": 0.02, "coverage": 0.95 },
+  "US": { "recall": 0.85, "fpr": 0.02, "coverage": 0.95 },
+  "NZ": { "recall": 0.85, "fpr": 0.02, "coverage": 0.95 },
+  "IE": { "recall": 0.85, "fpr": 0.02, "coverage": 0.95 },
+  "CA": { "recall": null, "fpr": 0.02, "coverage": null }
+}

@@ -1,0 +1,2 @@
+{"id":"bad-0001","type":"email","region":"AU","content":"Delivered-To: victim@example.com\nFrom: \"myGov\" <noreply@evil.tk>\n\nVerify now.","label":"scam","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"bad-0002","type":"sms","region":"AU","content":"Call me back on 0412 345 678 about the parcel","label":"scam","source":"handwritten","addedAt":"2026-08-29"}

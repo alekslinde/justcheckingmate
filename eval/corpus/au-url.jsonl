@@ -1,0 +1,13 @@
+# AU URLs and QR payloads. Scam hosts here are impersonation lookalikes on
+# abused TLDs; benign hosts are the real domains from the AU pack allowlist.
+{"id":"au-url-0001","type":"url","region":"AU","content":"http://auspost-clearance.cyou/pay","label":"scam","category":"parcel-delivery","source":"fixture:scamDetector.test.ts","addedAt":"2026-08-29"}
+{"id":"au-url-0002","type":"url","region":"AU","content":"https://auspost-track.shop/verify","label":"scam","category":"parcel-delivery","source":"fixture:scamDetector.test.ts","addedAt":"2026-08-29"}
+{"id":"au-url-0003","type":"url","region":"AU","content":"https://mygov-verify.xin/login","label":"scam","category":"identity-verification","source":"fixture:scamDetector.test.ts","addedAt":"2026-08-29"}
+{"id":"au-url-0004","type":"url","region":"AU","content":"https://fake-ato.xyz/login","label":"scam","category":"tax-refund","source":"fixture:scamDetector.test.ts","addedAt":"2026-08-29"}
+{"id":"au-url-0005","type":"url","region":"AU","content":"http://mygovid-verify.top","label":"scam","category":"identity-verification","source":"fixture:scamDetector.test.ts","addedAt":"2026-08-29"}
+{"id":"au-url-0006","type":"qr","region":"AU","content":"https://auspost-redelivery.bond/pay","label":"scam","category":"parcel-delivery","source":"fixture:scamDetector.test.ts","addedAt":"2026-08-29","notes":"decoded QR payload"}
+{"id":"au-url-1001","type":"url","region":"AU","content":"https://auspost.com.au/mypost/track","label":"benign","category":"parcel-delivery","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"au-url-1002","type":"url","region":"AU","content":"https://my.gov.au/en/","label":"benign","category":"government","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"au-url-1003","type":"url","region":"AU","content":"https://www.ato.gov.au/individuals-and-families","label":"benign","category":"government","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"au-url-1004","type":"url","region":"AU","content":"https://www.linkt.com.au/account","label":"benign","category":"toll","source":"handwritten","addedAt":"2026-08-29"}
+{"id":"au-url-1005","type":"url","region":"AU","content":"https://example.com/about","label":"benign","source":"fixture:coverage.test.ts","addedAt":"2026-08-29"}

@@ -16,7 +16,8 @@
     "check-calendar": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/check-calendar-sources.ts",
     "check-promotion": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/check-promotion-freshness.ts",
     "icons": "node scripts/generate-icons.mjs",
-    "ocr-assets": "node scripts/copy-ocr-assets.mjs"
+    "ocr-assets": "node scripts/copy-ocr-assets.mjs",
+    "eval": "NODE_OPTIONS=--disable-warning=DEP0205 npx tsx scripts/eval.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
