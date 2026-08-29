@@ -1599,13 +1599,47 @@ describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
     expect(result.verdict).toBe("likely_scam");
   });
 
-  // Guards the suffix match: .bond must not swallow a legitimate host that
-  // merely ends in those letters. endsWith(".bond") is the reason this is safe,
-  // and this test is what keeps it that way.
+  // Guards the suffix match in checkUrl: .bond must not swallow a legitimate
+  // host that merely ends in those letters.
   it("does not flag a legitimate domain merely containing the new TLD strings", () => {
     for (const host of ["www.jamesbond.com.au", "vixin.com.au"]) {
       const result = checkUrl(`https://${host}/`);
       expect(result.flags.some((f) => f.includes("Dodgy top-level domain"))).toBe(false);
+    }
+  });
+
+  // The real risk of adding .bond and .xin is not checkUrl's suffix match — it
+  // is extractBareHosts, which scans PROSE for schemeless hosts and lets
+  // abuse-prone TLDs skip the "needs a path or www." corroboration on the
+  // rationale that nobody mentions a .tk domain in passing. That rationale
+  // fails for .bond and .xin: "bond" is core AU tenancy/finance vocabulary and
+  // "xin" is a common Chinese given name, so both occur as ordinary words.
+  // Without the AMBIGUOUS_BARE_TLDS guard these raise a scam URL card on
+  // innocent messages. checkUrl-only tests pass either way, so these are the
+  // ones that matter.
+  it("does not raise a URL card for .bond/.xin used as ordinary words", async () => {
+    const benign = [
+      "Ask about our surety.bond options before signing.",
+      "Your rental deposit.bond is refundable at the end of the lease.",
+      "Check your savings.bond statement online.",
+      // No space after the full stop — routine in pasted SMS, and enough to
+      // synthesise a host out of two unrelated sentences.
+      "I paid the bond.Bond receipt is attached.",
+      "Thanks for the bond.Xin will follow up tomorrow.",
+    ];
+    for (const text of benign) {
+      const cards = (await analyzeContent(text)).filter((i) => i.kind === "url");
+      expect(cards, `expected no URL card for: ${text}`).toHaveLength(0);
+    }
+  });
+
+  it("still detects a schemeless .bond/.xin host when a path or www. corroborates it", async () => {
+    for (const text of [
+      "Verify now at auspost-redelivery.bond/pay",
+      "Go to www.mygov-verify.xin today",
+    ]) {
+      const cards = (await analyzeContent(text)).filter((i) => i.kind === "url");
+      expect(cards.length, `expected a URL card for: ${text}`).toBeGreaterThan(0);
     }
   });
 
