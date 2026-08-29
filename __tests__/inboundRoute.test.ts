@@ -153,6 +153,44 @@ describe("POST /api/inbound — check counter", () => {
     expect(incrementCheckCount).not.toHaveBeenCalled();
   });
 
+  it("rate-limits repeated confirmations from the same sender", async () => {
+    // The analysis path's limiter used to bound the increment structurally.
+    // Without its own limit a secret-holder — or a Cloudflare retry of email()
+    // after a successful reply — could inflate a number we publish.
+    incrementCheckCount.mockClear();
+    const sender = `flood-${Date.now()}@gmail.com`;
+    for (let i = 0; i < 40; i++) {
+      await POST(inbound({ delivered: true, from: sender }));
+    }
+    const counted = incrementCheckCount.mock.calls.length;
+    expect(counted).toBeGreaterThan(0);
+    expect(counted).toBeLessThan(40);
+  });
+
+  it("counts confirmations from different senders independently", async () => {
+    // The per-sender budget must not let one forwarder starve another.
+    incrementCheckCount.mockClear();
+    const stamp = Date.now();
+    for (let i = 0; i < 5; i++) {
+      await POST(inbound({ delivered: true, from: `solo-${stamp}-${i}@gmail.com` }));
+    }
+    expect(incrementCheckCount).toHaveBeenCalledTimes(5);
+  });
+
+  it("refuses a confirmation that also carries raw, rather than counting it", async () => {
+    // Piggybacking the confirmation onto the analysis POST would count the check
+    // but return no reply, so the Worker would send nothing while the counter
+    // climbed. Reject the ambiguous shape instead of silently trapping it.
+    incrementCheckCount.mockClear();
+    const res = await POST(
+      inbound({ delivered: true, raw: SCAM_FORWARD, from: "victim@gmail.com" }),
+    );
+    const body = await res.json();
+    expect(body.counted).toBeUndefined();
+    expect(body.reply).toBeUndefined();
+    expect(incrementCheckCount).not.toHaveBeenCalled();
+  });
+
   it("ignores a non-true delivered value rather than counting it", async () => {
     incrementCheckCount.mockClear();
     const res = await POST(inbound({ delivered: "yes" }));

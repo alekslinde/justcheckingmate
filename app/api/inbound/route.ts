@@ -49,18 +49,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skip: "bad-json" });
   }
 
+  const raw = typeof body.raw === "string" ? body.raw : "";
+  const from = typeof body.from === "string" ? body.from.trim().toLowerCase() : "";
+
   // Delivery confirmation. The Worker calls back here once message.reply() has
   // actually succeeded, and that — not the analysis — is when a person has a
   // verdict in hand. Counting at analysis time would inflate "scams checked"
   // with replies Cloudflare rejected (it refuses to reply on a transaction whose
   // incoming forward failed DMARC), so the increment lives here instead.
+  //
+  // A confirmation carries ONLY `delivered` and `from`. Rejecting a body that
+  // also carries `raw` keeps the two request kinds unambiguous: piggybacking a
+  // confirmation onto an analysis POST would otherwise count the check while
+  // returning no reply, so the Worker would send nothing and the counter would
+  // climb anyway. Fail loudly here rather than let that be a silent trap.
   if (body.delivered === true) {
+    if (raw) {
+      return NextResponse.json({ ok: true, skip: "delivered-with-raw" });
+    }
+    // Rate-limited on the same per-sender budget as the analysis path, under
+    // its own key namespace so the two don't starve each other. Without this
+    // the increment is unbounded: the analysis path's limiter used to bound it
+    // structurally, and a secret-holder (or a Cloudflare retry of email() after
+    // a successful reply) could otherwise inflate a number we publish.
+    if (from && !checkAndRecordRateLimit(`delivered:${from}`)) {
+      return NextResponse.json({ ok: true, skip: "rate-limited" });
+    }
     await incrementCheckCount().catch(() => {});
     return NextResponse.json({ ok: true, counted: true });
   }
-
-  const raw = typeof body.raw === "string" ? body.raw : "";
-  const from = typeof body.from === "string" ? body.from.trim().toLowerCase() : "";
 
   if (!raw || raw.length > MAX_RAW_BYTES) {
     return NextResponse.json({ ok: true, skip: "empty-or-too-large" });
