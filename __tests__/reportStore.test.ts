@@ -11,6 +11,8 @@ import {
   generateReportId,
   storeReport,
   incrementCheckCount,
+  recordCheckEvent,
+  getCheckEvents,
   getStats,
   getPublicReports,
   getPublicReportsCount,
@@ -334,22 +336,95 @@ describe("storeReport", () => {
   });
 });
 
-// ── incrementCheckCount ───────────────────────────────────────────────────────
+// ── recordCheckEvent / getCheckEvents ─────────────────────────────────────────
+
+describe("recordCheckEvent", () => {
+  it("upserts one row per (surface, outcome, UTC day)", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await recordCheckEvent("email", "delivered", Date.UTC(2026, 7, 29, 3, 0, 0));
+
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(call.sql).toContain("INSERT INTO check_events");
+    expect(call.sql).toContain("ON CONFLICT");
+    expect(call.args).toEqual(["email", "delivered", "2026-08-29"]);
+  });
+
+  it("buckets by UTC, not local time", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    // 23:30 UTC on the 29th is already the 30th in AEST. The bucket must not move.
+    await recordCheckEvent("web", "delivered", Date.UTC(2026, 7, 29, 23, 30, 0));
+
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(call.args[2]).toBe("2026-08-29");
+  });
+
+  it("buckets an unrecognised surface as 'unknown' rather than dropping it", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await recordCheckEvent("telegram" as never, "delivered", Date.UTC(2026, 7, 29));
+
+    const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
+    expect(call.args[0]).toBe("unknown");
+  });
+
+  it("never throws when the database fails", async () => {
+    vi.mocked(getDb).mockRejectedValue(new Error("db down") as never);
+    await expect(recordCheckEvent("web", "delivered")).resolves.toBeUndefined();
+  });
+});
 
 describe("incrementCheckCount", () => {
-  it("executes an UPDATE on the checks counter", async () => {
+  it("records the per-surface aggregate when given a surface", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await incrementCheckCount("email");
+
+    const sql = mockExecute.mock.calls.map((c) => (c[0] as { sql: string }).sql);
+    expect(sql.some((q) => q.includes("UPDATE counters"))).toBe(true);
+    expect(sql.some((q) => q.includes("INSERT INTO check_events"))).toBe(true);
+  });
+
+  it("still bumps the lifetime counter with no surface, touching no aggregate", async () => {
     const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
     vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
 
     await incrementCheckCount();
 
-    expect(mockExecute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sql: expect.stringContaining("UPDATE counters"),
-      })
-    );
+    const sql = mockExecute.mock.calls.map((c) => (c[0] as { sql: string }).sql);
+    expect(sql.some((q) => q.includes("UPDATE counters"))).toBe(true);
+    expect(sql.some((q) => q.includes("checks"))).toBe(true);
+    expect(sql.some((q) => q.includes("check_events"))).toBe(false);
+  });
+});
+
+describe("getCheckEvents", () => {
+  it("returns rows with numeric values", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      rows: [{ surface: "email", outcome: "delivered", day: "2026-08-29", value: "7" }],
+    });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    const rows = await getCheckEvents();
+    expect(rows).toEqual([
+      { surface: "email", outcome: "delivered", day: "2026-08-29", value: 7 },
+    ]);
+  });
+
+  it("passes an inclusive sinceDay bound through to the query", async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ rows: [] });
+    vi.mocked(getDb).mockResolvedValue({ execute: mockExecute } as never);
+
+    await getCheckEvents("2026-08-01");
+
     const call = mockExecute.mock.calls[0][0] as { sql: string; args: unknown[] };
-    expect(call.sql).toContain("checks");
+    expect(call.sql).toContain("day >=");
+    expect(call.args).toEqual(["2026-08-01"]);
   });
 });
 

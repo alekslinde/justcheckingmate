@@ -148,12 +148,108 @@ export async function storeReport(report: Report, suspect: boolean): Promise<voi
   }
 }
 
-export async function incrementCheckCount(): Promise<void> {
+// Which entry point a check came through. Add a member when a new surface
+// ships (extension, telegram, …) so its volume is attributable from day one —
+// an unattributed surface is indistinguishable from no traffic at all.
+export type CheckSurface = "web" | "email" | "unknown";
+
+// What became of it. `delivered` means a person has a verdict in hand; on the
+// email path that is strictly narrower than "we analysed it", because a reply
+// can still be rejected after a successful analysis. Keeping both makes the
+// "% yielding a verdict" ratio readable rather than inferred.
+export type CheckOutcome = "delivered" | "analysed";
+
+const CHECK_SURFACES: readonly CheckSurface[] = ["web", "email", "unknown"];
+const CHECK_OUTCOMES: readonly CheckOutcome[] = ["delivered", "analysed"];
+
+// UTC day key, `YYYY-MM-DD`. UTC rather than AEST deliberately: unlike the
+// region-demand script — which buckets AU submissions at UTC+10 so a month's
+// first hours don't fall into the previous one — this is read as a weekly rate
+// across surfaces, where a fixed, machine-independent boundary matters more
+// than aligning to an Australian calendar day.
+function utcDay(at: number): string {
+  return new Date(at).toISOString().slice(0, 10);
+}
+
+/**
+ * Record one check against the per-surface aggregate.
+ *
+ * Never throws: telemetry must not be able to fail a user-facing request, and
+ * both call sites already treat counting as best-effort. An unknown surface is
+ * bucketed as "unknown" rather than dropped, so a miswired new client shows up
+ * as unattributed volume instead of vanishing.
+ */
+export async function recordCheckEvent(
+  surface: CheckSurface,
+  outcome: CheckOutcome,
+  at: number = Date.now(),
+): Promise<void> {
+  const safeSurface: CheckSurface = CHECK_SURFACES.includes(surface) ? surface : "unknown";
+  const safeOutcome: CheckOutcome = CHECK_OUTCOMES.includes(outcome) ? outcome : "analysed";
+  try {
+    const db = await getDb();
+    await db.execute({
+      sql: `INSERT INTO check_events (surface, outcome, day, value)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(surface, outcome, day)
+            DO UPDATE SET value = value + 1`,
+      args: [safeSurface, safeOutcome, utcDay(at)],
+    });
+  } catch {
+    // Aggregate is best-effort; the lifetime counter is the source of truth.
+  }
+}
+
+/**
+ * Increment the public lifetime "scams checked" total.
+ *
+ * `surface` is optional so existing callers keep working unchanged; passing it
+ * also records the per-surface aggregate in the same call, which is what keeps
+ * the two numbers from drifting apart at the call site.
+ */
+export async function incrementCheckCount(surface?: CheckSurface): Promise<void> {
   const db = await getDb();
   await db.execute({
     sql: `UPDATE counters SET value = value + 1 WHERE name = 'checks'`,
     args: [],
   });
+  if (surface) {
+    await recordCheckEvent(surface, "delivered");
+  }
+}
+
+export interface CheckEventRow {
+  surface: CheckSurface;
+  outcome: CheckOutcome;
+  day: string;
+  value: number;
+}
+
+/**
+ * Read the per-surface aggregate, newest day first.
+ *
+ * `sinceDay` is an inclusive `YYYY-MM-DD` bound; omit it for everything. The
+ * shape is deliberately raw — callers do their own bucketing, since a weekly
+ * rate and a delivered-ratio want different groupings of the same rows.
+ */
+export async function getCheckEvents(sinceDay?: string): Promise<CheckEventRow[]> {
+  const db = await getDb();
+  const result = sinceDay
+    ? await db.execute({
+        sql: `SELECT surface, outcome, day, value FROM check_events
+              WHERE day >= ? ORDER BY day DESC, surface, outcome`,
+        args: [sinceDay],
+      })
+    : await db.execute(
+        `SELECT surface, outcome, day, value FROM check_events
+         ORDER BY day DESC, surface, outcome`,
+      );
+  return result.rows.map((r) => ({
+    surface: r.surface as CheckSurface,
+    outcome: r.outcome as CheckOutcome,
+    day: r.day as string,
+    value: Number(r.value),
+  }));
 }
 
 export async function getStats(): Promise<{ checks: number; reports: number }> {

@@ -48,6 +48,26 @@ async function setup(): Promise<void> {
       submitted_at  INTEGER NOT NULL
     )
   `);
+  // Per-surface check telemetry. Deliberately an AGGREGATE, not an event log:
+  // one row per (surface, outcome, UTC day), incremented in place. This answers
+  // "which surfaces get used" and "what share of forwards yield a verdict"
+  // without recording anything about an individual check — no timestamp beyond
+  // the day, no content, no sender, nothing joinable back to a person. The raw
+  // email is still never stored (see app/api/inbound/route.ts).
+  //
+  // `counters.checks` remains the public lifetime total and the source of truth
+  // for the published number; this table is strictly additional. The two are
+  // incremented together on the delivered path, so they can drift only for
+  // checks that predate this table.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS check_events (
+      surface  TEXT    NOT NULL,
+      outcome  TEXT    NOT NULL,
+      day      TEXT    NOT NULL,
+      value    INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (surface, outcome, day)
+    )
+  `);
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('checks', 0)`);
   await db.execute(`INSERT OR IGNORE INTO counters (name, value) VALUES ('reports', 0)`);
   // Migrations — ALTER TABLE ignores silently if column already exists

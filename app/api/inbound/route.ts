@@ -4,7 +4,7 @@ import { analyzeContent } from "@/lib/scamDetector";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { formatVerdictEmail } from "@/lib/verdictSummary";
-import { checkAndRecordRateLimit, incrementCheckCount } from "@/lib/reportStore";
+import { checkAndRecordRateLimit, incrementCheckCount, recordCheckEvent } from "@/lib/reportStore";
 import { SITE_URL } from "@/lib/siteUrl";
 
 // Inbound webhook for the forward-to-us flow. A Cloudflare Email Worker (see
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     if (from && !checkAndRecordRateLimit(`delivered:${from}`)) {
       return NextResponse.json({ ok: true, skip: "rate-limited" });
     }
-    await incrementCheckCount().catch(() => {});
+    await incrementCheckCount("email").catch(() => {});
     return NextResponse.json({ ok: true, counted: true });
   }
 
@@ -122,6 +122,15 @@ export async function POST(req: NextRequest) {
 
     // NOT counted here: the Worker confirms delivery with a `delivered` POST
     // once the reply is actually sent. See the branch at the top of this route.
+    //
+    // The per-surface aggregate DOES record the analysis, under the `analysed`
+    // outcome rather than `delivered`. That is the denominator of "% of
+    // forwards yielding a verdict" — without it the ratio is unreadable, since
+    // the delivered count alone cannot show the forwards that analysed fine but
+    // whose reply Cloudflare then refused. It does not touch `counters.checks`,
+    // so the published total keeps meaning "verdicts actually in a person's
+    // hands".
+    recordCheckEvent("email", "analysed").catch(() => {});
 
     // Return the formatted reply for the Worker to send. `source` lets the
     // Worker (or logs) know whether we got a high-fidelity attachment or a
