@@ -11,11 +11,49 @@ was new rather than the cadence being due.*
 
 | Finding | Severity | Shipped in | Status |
 |---|---|---|---|
-| P4 — Sentence-break guard blind to a lowercase new sentence | **HIGH** | — | ⬜ Outstanding |
-| P5 — Prose-left guard is a closed list with common words missing | **HIGH** | — | ⬜ Outstanding |
+| P4 — Sentence-break guard blind to a lowercase new sentence | **HIGH** | `141af92` (0.3.1) | ✅ Shipped |
+| P5 — Prose-left guard is a closed list with common words missing | **HIGH** | `141af92` (0.3.1) | ✅ Shipped |
 
 Both are **false-positive** findings. Neither hides a scam; both put a
 "suspicious" scam card on entirely innocent messages.
+
+### Deviations
+
+- **P4 and P5 shipped as one guard, not two.** The probe treated them as
+  separate findings and predicted that "fixing P4 properly would subsume most of
+  P5". That held: both are the same defect read from opposite sides — two guards
+  each seeing only the two labels either side of the dot. The fix adds a third
+  condition that looks at what *follows* the host, and neither original guard
+  needed changing. All 11 probe phrasings now score 0/safe, and the three
+  regression cases keep their cards.
+
+- **The guard suppresses the URL card only, not the message.** Not in the
+  proposal, and it is what makes the fix safe to ship. Every rule that quietens
+  the innocent phrasings also hands an attacker a recipe for silence: append one
+  word after the host. Measured — `claim now at freemoney.tk urgently` loses its
+  card under every version of this guard. Because the text still reaches
+  message-level scoring, that evasion is still flagged **22/suspicious** on the
+  urgency and call-to-action rules; buying silence costs the attacker the
+  persuasion the scam runs on. Verified: a realistic myGov phishing SMS using a
+  bare dictionary-word host still scores 50/likely_scam with no card.
+
+### Corrections
+
+- **The "prose follows ⇒ suppress" signal is not safe on its own**, contrary to
+  the direction the probe proposed. Tested alone it suppressed
+  `claim now at freemoney.tk urgently`, `shop.top now` and `login.click today`.
+  Three further conditions were needed to make it narrow enough to ship: two
+  labels only, a plain-word left label (no hyphen or digit), and no path or
+  `www.`. The hyphen requirement is what saves `secure-billing.top now` and
+  `mygov-verify.tk please act`.
+
+- **Residual gap, recorded rather than closed.** A bare *dictionary-word* host
+  with weak surrounding language still slips: `Pay at shop.top now` scores
+  0/safe. Isolated to a pre-existing message-scoring weakness, not this guard —
+  with the host removed entirely, `Your parcel is held. Pay the fee now` also
+  scores 0. The guard removes a URL card that was previously compensating for
+  it. Four of five realistic phishing phrasings still flag; this is the fifth.
+  Worth a look next probe, on the message rules rather than the extractor.
 
 ---
 
