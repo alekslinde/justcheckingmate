@@ -89,9 +89,15 @@ const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justch
 // string repeated four times, so the row styling can only change in lockstep.
 // Grid placement and the disabled states are per-option and stay at the call
 // site — the forward option is an <a> and is never disabled.
+// Icon beside the text on a phone (one full-width row per option, so there is
+// plenty of horizontal room), and icon above centred text from sm up, where
+// three columns leave each option only ~200px and a side-by-side layout would
+// squeeze the description into a narrow ragged column.
 const CAPTURE_OPTION =
-  "flex items-center gap-3 px-4 py-3.5 min-h-[64px] border-2 border-dashed border-gray-600 " +
-  "rounded-xl text-gray-400 hover:border-emerald-500 hover:text-emerald-400 transition-colors text-left";
+  "flex items-center gap-3 text-left px-4 py-3.5 min-h-[64px] " +
+  "sm:flex-col sm:items-center sm:justify-center sm:gap-2 sm:text-center sm:px-3 sm:py-5 sm:min-h-[112px] " +
+  "border-2 border-dashed border-gray-600 rounded-xl text-gray-400 " +
+  "hover:border-emerald-500 hover:text-emerald-400 transition-colors";
 
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply
@@ -633,11 +639,11 @@ export default function CheckFlow() {
 
       {/* Ways to hand this page something to check, most-direct first: take a
           photo, upload an image, upload an .eml. One column on a phone (full-
-          width tap targets, and the descriptions need the room); two per row
-          from sm up, where full-width rows would just be stripes of empty space.
-          Forwarding is deliberately NOT here — see the block below the submit
-          button. Per-field capture help lives on the Learn page, linked below. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          width tap targets, and the descriptions need the room); all three
+          across in one row from sm up. Forwarding is deliberately NOT here —
+          see the block below the submit button. Per-field capture help lives on
+          the Learn page, linked below. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
@@ -645,7 +651,7 @@ export default function CheckFlow() {
           className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span className="shrink-0"><CameraIcon /></span>
-          <span className="min-w-0">
+          <span className="min-w-0 sm:w-full">
             <span className="block font-medium text-sm">{t("check.takePhoto")}</span>
             <span className="block text-xs text-gray-500 leading-tight">{t("check.takePhotoDesc")}</span>
           </span>
@@ -658,7 +664,7 @@ export default function CheckFlow() {
           className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
-          <span className="min-w-0">
+          <span className="min-w-0 sm:w-full">
             <span className="block font-medium text-sm">{t("check.uploadImage")}</span>
             <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadImageDesc")}</span>
           </span>
@@ -671,7 +677,7 @@ export default function CheckFlow() {
           className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <span className="shrink-0"><EmailFileIcon /></span>
-          <span className="min-w-0">
+          <span className="min-w-0 sm:w-full">
             <span className="block font-medium text-sm">{t("check.uploadEml")}</span>
             <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadEmlDesc")}</span>
           </span>
