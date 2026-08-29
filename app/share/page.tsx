@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import ShareTargetSeed from "@/components/ShareTargetSeed";
-import CheckFlow from "@/components/CheckFlow";
 
 export const metadata: Metadata = {
   title: "Check a shared message — Just Checking, Mate",
@@ -39,10 +38,20 @@ export default function SharePage() {
         </p>
       </div>
 
-      {/* Fallback renders an empty check box rather than a spinner: if the
-          payload is slow or missing, an empty box someone can paste into is
-          more useful than a loading state. */}
-      <Suspense fallback={<CheckFlow />}>
+      {/* The fallback is deliberately NOT an interactive CheckFlow. Rendering a
+          usable box here invites typing into a component that unmounts the
+          moment the payload resolves, silently discarding the input — and it
+          would run CheckFlow's history/popstate effects twice across the swap.
+          An inert placeholder of roughly the right height avoids both, and
+          keeps the layout from jumping. */}
+      <Suspense
+        fallback={
+          <div
+            className="h-64 rounded-2xl border border-gray-800 bg-gray-900/60 animate-pulse"
+            aria-hidden="true"
+          />
+        }
+      >
         <ShareTargetSeed />
       </Suspense>
     </main>

@@ -26,15 +26,58 @@ export interface SharePayload {
   url?: string;
 }
 
+export interface ShareContent {
+  /** What the check box opens with. "" when nothing usable was shared. */
+  content: string;
+  /**
+   * True when the shared body was longer than we carry and was cut. Surfaced to
+   * the user rather than swallowed: a silently half-checked message reads as
+   * "we checked all of this", which is the false reassurance the whole app
+   * exists to avoid.
+   */
+  truncated: boolean;
+}
+
 // Generous next to reportPrefill's 300: a shared SMS or email body is the
 // point here, not an extracted identifier. Long enough for a full scam message,
 // bounded so a crafted share can't stuff the textarea (or exceed what browsers
 // will carry in a GET URL, which is the real ceiling anyway).
 const MAX_SHARE_LEN = 5000;
 
+// Reserved for the shared `url` so a long body can never crowd it out. The url
+// is the highest-signal field we get — see buildShareContent.
+const MAX_URL_LEN = 600;
+
 function clean(value: string | null | undefined): string {
   if (typeof value !== "string") return "";
   return value.trim();
+}
+
+/**
+ * Is `url` already present in `text` as a complete link, rather than as the
+ * prefix of a longer one?
+ *
+ * A plain `text.includes(url)` is wrong: sharing
+ * `{text: "see https://evil.tk/pay-now", url: "https://evil.tk/pay"}` would
+ * treat the shorter url as already present and drop it, so the link the user
+ * actually shared is never analysed. The match only counts when what follows
+ * the occurrence is a boundary — end of string, whitespace, or punctuation
+ * that cannot continue a URL.
+ */
+function containsUrl(text: string, url: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(url, from);
+    if (at === -1) return false;
+    const next = text[at + url.length];
+    // End of string, whitespace, or a character that reads as sentence
+    // punctuation rather than a continuation of the path. Trailing `.`/`,`/`!`
+    // etc. are ordinary prose around a pasted link, so the url still counts as
+    // present; `-` or an alphanumeric means we matched a prefix of a DIFFERENT,
+    // longer link and must not treat it as present.
+    if (next === undefined || /[\s<>"')\];,.!?]/.test(next)) return true;
+    from = at + 1;
+  }
 }
 
 /**
@@ -54,21 +97,41 @@ function clean(value: string | null | undefined): string {
  *
  * Returns "" when there is nothing usable, which the caller renders as the
  * ordinary empty check box rather than an error.
+ *
+ * The result also reports whether anything was dropped, so the UI can say so
+ * rather than silently half-checking a long message — the scam link is often in
+ * the footer of a forwarded email, which is exactly what a silent tail-trim
+ * discards.
  */
-export function buildShareContent(payload: SharePayload): string {
+export function buildShareContent(payload: SharePayload): ShareContent {
   const text = clean(payload.text);
   const url = clean(payload.url);
   const title = clean(payload.title);
 
+  // The url is appended last but must never be the part that gets clipped: it
+  // is the single highest-signal field, and a half-clipped one is worse than
+  // absent because it can parse as a different host. Reserve its budget first,
+  // then give the body whatever remains.
+  const appendUrl = url && url.length <= MAX_URL_LEN && !containsUrl(text, url) ? url : "";
+  const separator = appendUrl ? "\n\n" : "";
+  const bodyBudget = MAX_SHARE_LEN - appendUrl.length - separator.length;
+
+  let body = text;
+  let truncated = false;
+  if (body.length > bodyBudget) {
+    body = body.slice(0, bodyBudget);
+    truncated = true;
+  }
+
   const parts: string[] = [];
-  if (text) parts.push(text);
-  if (url && !text.includes(url)) parts.push(url);
+  if (body) parts.push(body);
+  if (appendUrl) parts.push(appendUrl);
 
   // Only when we got nothing else — see the note above on why the title is not
   // mixed into real content.
-  if (parts.length === 0 && title) parts.push(title);
+  if (parts.length === 0 && title) parts.push(title.slice(0, MAX_SHARE_LEN));
 
-  return parts.join("\n\n").slice(0, MAX_SHARE_LEN);
+  return { content: parts.join("\n\n"), truncated };
 }
 
 /** Read a share payload out of a URLSearchParams-like source. */

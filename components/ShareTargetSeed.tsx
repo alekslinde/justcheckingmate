@@ -39,5 +39,19 @@ export default function ShareTargetSeed() {
     window.history.replaceState(window.history.state, "", "/share");
   }, []);
 
-  return <CheckFlow initialContent={seed} />;
+  return (
+    <>
+      {seed.truncated && (
+        <p
+          role="status"
+          className="text-sm text-amber-300/90 bg-amber-950/40 border border-amber-900/60 rounded-xl px-4 py-3"
+        >
+          That message was too long to check in full, so the end of it was cut.
+          Check anything that&apos;s missing separately — scam links often sit at
+          the bottom of a long email.
+        </p>
+      )}
+      <CheckFlow initialContent={seed.content} />
+    </>
+  );
 }
