@@ -1658,6 +1658,32 @@ describe("threat-intel roadmap 2026-07-26 (#101, #103, #105)", () => {
     }
   });
 
+  // The lowercase mid-sentence cases the sentence-boundary guard cannot reach:
+  // "tune in.live", "or.online". Nothing about their shape separates them from
+  // a real host, so the guard is a closed list of English function words on the
+  // LEFT label instead.
+  it("does not raise a URL card for a prose connective before a word-like TLD", async () => {
+    const benign = [
+      "Order it in store or.online whichever is easier.",
+      "Tune in.live for the announcement.",
+      "Coordinates are in.lat and long format.",
+    ];
+    for (const text of benign) {
+      const cards = (await analyzeContent(text)).filter((i) => i.kind === "url");
+      expect(cards, `expected no URL card for: ${text}`).toHaveLength(0);
+    }
+  });
+
+  // The limit of that guard, and the reason it is safe: it only ever skips the
+  // BARE form. A real host whose label happens to be a function word is still
+  // caught as soon as a path or a www. prefix shows a host was meant.
+  it("still detects a prose-word host when a path or www. corroborates it", async () => {
+    for (const text of ["Login at www.in.live now", "Go to or.online/verify immediately"]) {
+      const cards = (await analyzeContent(text)).filter((i) => i.kind === "url");
+      expect(cards.length, `expected a URL card for: ${text}`).toBeGreaterThan(0);
+    }
+  });
+
   // The guard keys on Capitalised-then-lowercase, NOT on "starts uppercase",
   // because scam SMS shout. An all-caps host must still be caught.
   it("still detects an all-caps schemeless scam host (shouty SMS)", async () => {

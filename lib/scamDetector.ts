@@ -1235,6 +1235,25 @@ const BARE_HOST_TLDS = new Set([
 // in prose, not about the TLD's reputation. See docs/threat-intel/sources.yml.
 const AMBIGUOUS_BARE_TLDS = new Set(["zip", "mov", "bond", "xin", "icu"]);
 
+// English function words that turn up on the LEFT of a word-like TLD in
+// ordinary prose — "tune in.live for the announcement", "order it in store
+// or.online", "coordinates are in.lat and long format". These survive the
+// sentence-boundary guard because they are lowercase and mid-sentence, so
+// nothing about their shape distinguishes them from a real hostname.
+//
+// A closed list rather than a length rule: "a.tk" and "b.tk" are one character
+// and are perfectly good hosts, so short does not mean prose. Only a real host
+// label that IS one of these words is affected, and then only in its bare form
+// with no path or www. — "evil.work/login" and "www.evil.work" are untouched.
+// Kept deliberately small; the risk of a longer list is silencing a real host.
+const PROSE_LEFT_LABELS = new Set([
+  "a", "an", "the", "and", "or", "but", "so", "as", "at", "by", "in", "on",
+  "of", "to", "up", "for", "from", "with", "is", "are", "was", "were", "be",
+  "been", "it", "its", "we", "he", "she", "they", "you", "i", "my", "our",
+  "your", "their", "this", "that", "these", "those", "if", "then", "than",
+  "when", "while", "not", "no", "do", "does", "did", "go", "get", "got",
+]);
+
 const BARE_HOST_GLOBAL =
   /(?<![\w@.\/\\-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(\/[^\s<>"']*)?/gi;
 
@@ -1268,6 +1287,16 @@ function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
     // RAW hostname because `labels` has already been lowercased.
     const rawTld = hostname.slice(hostname.lastIndexOf(".") + 1);
     if (/^[A-Z][a-z]/.test(rawTld)) continue;
+
+    // Prose connective on the left ("in.live", "or.online"). Only ever skips
+    // the BARE form — a path or a www. prefix means a host was meant, and both
+    // are checked below.
+    if (
+      labels.length === 2 &&
+      PROSE_LEFT_LABELS.has(labels[0]) &&
+      !match[2] &&
+      !/^www\./i.test(hostname)
+    ) continue;
 
     const isFlaggedTld = flagged.has(tld);
     if (!BARE_HOST_TLDS.has(tld) && !isFlaggedTld) continue;
