@@ -4,6 +4,7 @@ import { CHECK_RATE_LIMIT, checkAndRecordRateLimit, incrementCheckCount } from "
 import { clientIpFromHeaders } from "@/lib/geo";
 import { getUrlhausBlocklist } from "@/lib/urlhausBlocklist";
 import { resolveRegion } from "@/lib/regionResolver";
+import { corsHeaders, corsPreflightHeaders } from "@/lib/cors";
 
 // IMPORTANT: This route performs ONLY string analysis on the submitted content.
 // It must NEVER make an outbound HTTP request, DNS lookup, or socket connection
@@ -15,7 +16,29 @@ import { resolveRegion } from "@/lib/regionResolver";
 // The URLhaus blocklist fetch below is to a fixed trusted endpoint (abuse.ch),
 // NOT to any user-supplied URL — it does not violate the contract above.
 
+/**
+ * CORS preflight.
+ *
+ * A JSON POST is not a "simple" request — its Content-Type triggers a
+ * preflight — so without this the browser's OPTIONS would 405 and the real
+ * request would never be sent. An origin that is not allowlisted gets a bare
+ * 204 with no CORS headers, which is what makes the browser refuse the
+ * subsequent request.
+ */
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsPreflightHeaders(req.headers.get("origin"), ["POST"]),
+  });
+}
+
 export async function POST(req: NextRequest) {
+  // Computed once and attached to every exit path below. A cross-origin caller
+  // that gets a 429 or a 400 without these headers sees an opaque network
+  // failure instead of the message, which is a bad experience and a confusing
+  // one to debug from inside an extension.
+  const cors = corsHeaders(req.headers.get("origin"));
+
   try {
     // Throttle before parsing or analysing — this endpoint is public and
     // unauthenticated, and analysis is the expensive part. The IP is used as a
@@ -23,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!checkAndRecordRateLimit(`check:${clientIpFromHeaders(req.headers)}`, CHECK_RATE_LIMIT)) {
       return NextResponse.json(
         { error: "Too many checks — give it a minute and try again." },
-        { status: 429 },
+        { status: 429, headers: cors },
       );
     }
 
@@ -34,7 +57,7 @@ export async function POST(req: NextRequest) {
     } = await req.json();
 
     if (!content?.trim()) {
-      return NextResponse.json({ error: "Missing content" }, { status: 400 });
+      return NextResponse.json({ error: "Missing content" }, { status: 400, headers: cors });
     }
 
     // Explicit choice wins over the platform geo header; falls back to the
@@ -58,8 +81,11 @@ export async function POST(req: NextRequest) {
     // from an older client — records as `web`, which is what this endpoint
     // served before the share target existed.
     incrementCheckCount(surface === "share" ? "share" : "web").catch(() => {});
-    return NextResponse.json({ results, region: resolvedRegion });
+    return NextResponse.json({ results, region: resolvedRegion }, { headers: cors });
   } catch {
-    return NextResponse.json({ error: "Something went sideways on our end" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went sideways on our end" },
+      { status: 500, headers: cors },
+    );
   }
 }
