@@ -1298,6 +1298,43 @@ function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
       !/^www\./i.test(hostname)
     ) continue;
 
+    // Sentence break with prose running on past it — "i finished early.live
+    // music starts at 8", "sign up here.online registration closes friday".
+    //
+    // The two guards above read only the two labels either side of the dot, and
+    // at that scope there is not enough information: the capitalisation tell
+    // misses a lowercase new sentence, and PROSE_LEFT_LABELS is a closed list
+    // that cannot hold every word an English sentence can end on ("desk.work",
+    // "lunch.top"). Both are the same defect seen from two sides.
+    //
+    // The wider signal is what follows the match. A real bare host is the
+    // message's payload and ends the clause — "Pay at secure-billing.top",
+    // "claim now at freemoney.tk". Prose continuing straight after an
+    // uncorroborated host is the shape of a missing space after a full stop.
+    //
+    // This SUPPRESSES THE URL CARD ONLY. The text still reaches message-level
+    // scoring, which is what keeps the guard from becoming a bypass: appending
+    // a word to evade the card ("claim now at freemoney.tk urgently") leaves
+    // the urgency and call-to-action rules untouched, so the message is still
+    // flagged — just without naming the link. An attacker has to drop the
+    // persuasion to buy silence, which costs them the scam.
+    //
+    // Deliberately narrow, so a hostname that could not be a sentence is never
+    // caught by it:
+    //   · two labels only — a subdomain is host structure, not prose;
+    //   · left label a plain word — no hyphen or digit, so "secure-billing.top
+    //     now" and "mygov-verify.tk please" stay;
+    //   · no path and no www. — either means a host was meant, per above.
+    if (
+      labels.length === 2 &&
+      /^[a-z]+$/.test(labels[0]) &&
+      !match[2] &&
+      !/^www\./i.test(hostname) &&
+      // Prose continues: whitespace then a letter. A following digit,
+      // punctuation or end-of-input is not a sentence carrying on.
+      /^\s+[A-Za-z]/.test(text.slice((match.index ?? 0) + whole.length))
+    ) continue;
+
     const isFlaggedTld = flagged.has(tld);
     if (!BARE_HOST_TLDS.has(tld) && !isFlaggedTld) continue;
 

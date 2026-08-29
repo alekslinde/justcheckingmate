@@ -96,6 +96,32 @@ the time — rewriting it to match the outcome destroys that.
 
 ---
 
+## Cadence — what runs when
+
+Three different rhythms, easy to conflate because all three touch this
+directory:
+
+| | Rhythm | Automated? |
+|---|---|---|
+| **Sweep** (threat roadmap) | Roughly weekly, by hand | No |
+| **Probe** | Event-triggered — see below | No |
+| **Source check** | Weekly, Tuesday ~07:00 AEST | **Yes** — the only cron here |
+
+Only the source check is a machine. It verifies that citation links still
+resolve and nothing more; it never decides a sweep is due, and a green run says
+nothing about whether the research is current.
+
+**The sweep cadence is a habit, not a schedule.** Nothing enforces it and
+nothing will chase a missed week — the ~7-day spacing is visible in the
+filenames and that is the whole of it. Worth knowing before reading a gap in the
+dates as a system failure.
+
+**A probe never discharges a sweep, or the reverse.** They answer opposite
+questions — outward from sources, inward by attack — and running one leaves the
+other exactly as outstanding as it was.
+
+---
+
 ## Adversarial probes
 
 A **probe** is the inward-looking counterpart to a sweep. A sweep asks *"what
@@ -103,9 +129,11 @@ are scammers doing that we don't detect?"* and answers it from sourced
 advisories. A probe asks *"can our existing rules be evaded?"* and answers it by
 attacking them.
 
-Named `YYYY-MM-DD-adversarial-probe.md`, and following the same workflow: a
-research doc, then implementation in a separate PR with tests, then a Status
-block. Two differences from a sweep:
+Named `YYYY-MM-DD-adversarial-probe.md`, or
+`YYYY-MM-DD-<target>-probe.md` when a date already holds one — the trigger is an
+event, so two probes can genuinely land on the same day, as they did on
+2026-08-29. Same workflow as a sweep: a research doc, then implementation in a
+separate PR with tests, then a Status block. Two differences:
 
 - **No sources.** The evidence is a reproduction — every finding states the
   score before and after, measured against the live detector. `sources.yml` is
@@ -114,13 +142,34 @@ block. Two differences from a sweep:
   threats deferred; a probe's records attacks that *failed*, so the next run
   doesn't re-test the same ground.
 
-Probes are **not** on a cadence. Run one when there's a reason to think an area
-has had less adversarial attention than it needs — after a parser changes, when
-a new input form is accepted, or when a run of false positives suggests the
-rules were never pushed on. The first one
-([2026-08-29](2026-08-29-adversarial-probe.md)) was prompted by three false
-positives surfacing in two days once verdict emails started explaining
-themselves.
+### When to run one
+
+Probes are **event-triggered, not scheduled** — but they are *recurring*, and
+those two things are easy to confuse. A timer would have you probing quiet code
+on a due date; the trigger points you at code that just moved, which is where
+the defects have actually been. Run one when:
+
+- **a parser changes** — anything that reads untrusted input and decides what it
+  is;
+- **a new input form is accepted** — a new surface, or an existing one starting
+  to receive a different *shape* of input;
+- **a run of false positives** suggests the rules were never pushed on;
+- **a phase is about to widen the surface** — probe before, not after. This is
+  the one the ecosystem roadmap cares about: breadth multiplies whatever the
+  engine already gets wrong across every new client.
+
+**The evidence for the trigger rule.** Both probes so far were prompted, not
+due, and both found real defects:
+
+| Probe | Trigger | Found |
+|---|---|---|
+| [2026-08-29 (email path)](2026-08-29-adversarial-probe.md) | Three false positives surfaced in two days once verdict emails started explaining themselves | 3 findings, 2 HIGH — including a display-name bypass that flipped a phishing email to **safe** |
+| [2026-08-29 (share path)](2026-08-29-share-path-probe.md) | The PWA share target shipped that morning — a new input form, never probed | 2 findings, both HIGH, both false-positive |
+
+Aimed at recently-changed code, a probe has found something every time it has
+been run. That is the argument for the trigger, and also the honest limit on it:
+**a probe only finds what the person running it thought to try.** The *held up*
+section is a record of attempts, never a clean bill of health.
 
 ---
 
