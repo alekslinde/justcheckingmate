@@ -17,6 +17,8 @@ import {
   getPublicReports,
   getPublicReportsCount,
   countRecent,
+  smoothPath,
+  axisTicks,
 } from "@/lib/reportStore";
 import { getDb } from "@/lib/db";
 
@@ -755,5 +757,85 @@ describe("countRecent", () => {
     const copy = structuredClone(byDay);
     countRecent(byDay, now);
     expect(byDay).toEqual(copy);
+  });
+});
+
+describe("smoothPath", () => {
+  const pts = (...ys: number[]) => ys.map((y, i) => ({ x: i * 10, y }));
+
+  it("returns nothing for fewer than two points", () => {
+    expect(smoothPath([])).toBe("");
+    expect(smoothPath([{ x: 0, y: 0 }])).toBe("");
+  });
+
+  it("starts at the first point and ends at the last", () => {
+    const d = smoothPath(pts(10, 4, 8));
+    expect(d.startsWith("M0.00,10.00")).toBe(true);
+    expect(d.endsWith("20.00,8.00")).toBe(true);
+  });
+
+  it("passes exactly through every point", () => {
+    // The property that matters: a curve that merely approximates the points
+    // would draw a count nobody reported. Every input point must appear as a
+    // segment endpoint.
+    const input = pts(5, 12, 3, 9, 9, 1);
+    const d = smoothPath(input);
+    for (const p of input) {
+      expect(d).toContain(`${p.x.toFixed(2)},${p.y.toFixed(2)}`);
+    }
+  });
+
+  it("emits one cubic segment per gap", () => {
+    expect((smoothPath(pts(1, 2, 3, 4)).match(/C/g) ?? []).length).toBe(3);
+  });
+
+  it("never overshoots the values it connects", () => {
+    // A spline through a spike can bulge past it. Control points are clamped to
+    // each segment's own range, so no drawn y may fall outside the data range.
+    const input = pts(2, 2, 40, 2, 2);
+    const d = smoothPath(input);
+    const ys = [...d.matchAll(/[ML,C]?[\d.]+,([\d.]+)/g)].map((m) => Number(m[1]));
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(2);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(40);
+  });
+
+  it("handles a flat series without producing NaN", () => {
+    const d = smoothPath(pts(7, 7, 7, 7));
+    expect(d).not.toContain("NaN");
+  });
+});
+
+describe("axisTicks", () => {
+  it("always includes zero", () => {
+    expect(axisTicks(9)[0]).toBe(0);
+    expect(axisTicks(0)).toEqual([0]);
+  });
+
+  it("covers the maximum", () => {
+    for (const max of [1, 3, 7, 9, 12, 47, 130, 999]) {
+      const ticks = axisTicks(max);
+      expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(max);
+    }
+  });
+
+  it("uses round steps a reader recognises", () => {
+    // The point of the 1/2/5 ladder: labels land on 0/5/10, not on whatever
+    // the data's maximum happens to divide into.
+    expect(axisTicks(9)).toEqual([0, 5, 10]);
+    expect(axisTicks(12)).toEqual([0, 5, 10, 15]);
+    expect(axisTicks(7)).toEqual([0, 5, 10]);
+    expect(axisTicks(3)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("keeps an even step throughout", () => {
+    const ticks = axisTicks(47);
+    const steps = ticks.slice(1).map((v, i) => v - ticks[i]);
+    expect(new Set(steps.map((s) => s.toFixed(6))).size).toBe(1);
+  });
+
+  it("survives junk input rather than looping forever", () => {
+    expect(axisTicks(-5)).toEqual([0]);
+    expect(axisTicks(NaN)).toEqual([0]);
+    expect(axisTicks(Infinity)).toEqual([0]);
   });
 });

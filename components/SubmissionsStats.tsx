@@ -11,10 +11,10 @@
 // card visibly empty. Figures that are always present carry the top row now,
 // and the chart appears below only when there is something to plot.
 
-import { useEffect, useState } from "react";
-import { FeedStats, countRecent } from "@/lib/reportStore";
+import { useEffect, useRef, useState } from "react";
+import { FeedStats, countRecent, smoothPath, axisTicks } from "@/lib/reportStore";
 import { useLang, MessageKey } from "@/lib/lang";
-import { fmt } from "@/lib/formatters";
+import { fmt, formatDayLabel } from "@/lib/formatters";
 
 // Minimum reports before the trend chart is worth drawing. Below this the line
 // carries no information and just looks broken.
@@ -51,51 +51,218 @@ function Figure({ label, value, accent = false }: { label: string; value: string
   );
 }
 
-function Sparkline({ byDay }: { byDay: FeedStats["byDay"] }) {
-  if (byDay.length < 2) return null;
+/**
+ * Daily report counts over the last 30 days, as a smoothed area chart.
+ *
+ * Three things this is not, and why:
+ *
+ * It is not a stretched viewBox. The previous version drew into a fixed 200×36
+ * box with preserveAspectRatio="none", which scales x and y by different
+ * factors — that distorts stroke width, and it makes any curve look wrong,
+ * because the smoothing is computed in one space and displayed in another. The
+ * chart is measured and drawn in real pixels instead.
+ *
+ * It is not straight lines. A hard corner at every day reads as jitter on a
+ * 30-point series; the curve passes exactly through every point (see
+ * smoothPath) so no count is misreported, and is clamped so it cannot bulge
+ * past a value between two days.
+ *
+ * It is not decoration, so it is not aria-hidden. The figures beside it say how
+ * many reports there are; only this says when they arrived. Keyboard users get
+ * the same readout as pointer users via a focusable region and arrow keys, and
+ * the whole series is also available as a table to a screen reader.
+ */
+function ActivityChart({ byDay }: { byDay: FeedStats["byDay"] }) {
+  const { t } = useLang();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  // Which day the reader is inspecting. null when they aren't.
+  const [active, setActive] = useState<number | null>(null);
 
-  const W = 200;
-  const H = 36;
-  const PAD = 2;
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  const max = Math.max(...byDay.map((d) => d.count));
-  if (max === 0) return null;
+  const max = Math.max(...byDay.map((d) => d.count), 0);
+  const ticks = axisTicks(max);
+  const axisMax = ticks[ticks.length - 1];
 
-  // Map each day to an (x, y) point; days are already sorted ASC from the API.
-  const pts = byDay.map((d, i) => {
-    const x = PAD + (i / (byDay.length - 1)) * (W - PAD * 2);
-    const y = PAD + (1 - d.count / max) * (H - PAD * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
+  // Room for the axis labels themselves. Without this the y labels sit on top
+  // of the plot and the last x label runs off the right edge.
+  const PAD = { top: 6, right: 8, bottom: 16, left: 22 };
+  const plotW = Math.max(0, size.w - PAD.left - PAD.right);
+  const plotH = Math.max(0, size.h - PAD.top - PAD.bottom);
 
-  const polyline = pts.join(" ");
-  const first = pts[0].split(",");
-  const last  = pts[pts.length - 1].split(",");
-  const area  = `M${first[0]},${H} L${polyline} L${last[0]},${H} Z`;
+  const points = byDay.map((d, i) => ({
+    x: PAD.left + (byDay.length === 1 ? plotW / 2 : (i / (byDay.length - 1)) * plotW),
+    y: PAD.top + (1 - (axisMax === 0 ? 0 : d.count / axisMax)) * plotH,
+  }));
+
+  const line = smoothPath(points);
+  // The area is the same curve, closed down to the baseline — reusing the path
+  // rather than recomputing it guarantees the fill can never drift from the
+  // stroke it sits under.
+  const area = line
+    ? `${line} L${points[points.length - 1].x.toFixed(2)},${(PAD.top + plotH).toFixed(2)} L${points[0].x.toFixed(2)},${(PAD.top + plotH).toFixed(2)} Z`
+    : "";
+
+  /** Nearest day to a pointer position, in element coordinates. */
+  function nearest(clientX: number): number | null {
+    const el = wrapRef.current;
+    if (!el || byDay.length === 0) return null;
+    const rect = el.getBoundingClientRect();
+    const x = clientX - rect.left;
+    let best = 0;
+    let bestDist = Infinity;
+    points.forEach((p, i) => {
+      const dist = Math.abs(p.x - x);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+    return best;
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const step = e.key === "ArrowRight" ? 1 : -1;
+    setActive((prev) => {
+      const next = (prev ?? (step > 0 ? -1 : byDay.length)) + step;
+      return Math.min(byDay.length - 1, Math.max(0, next));
+    });
+  }
+
+  const day = active === null ? null : byDay[active];
+  const ready = plotW > 0 && plotH > 0;
 
   return (
-    // Fills its panel rather than sitting at a fixed 36px: pinned to the
-    // bottom of a taller panel the line read as a footer rule rather than a
-    // chart, and the area fill had no room to show. preserveAspectRatio="none"
-    // lets the viewBox stretch to whatever the panel gives it, which is what a
-    // sparkline wants — the shape of the trend matters, not its proportions.
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full min-h-[52px]" aria-hidden="true" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--clear)" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="var(--clear)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#spark-fill)" />
-      <polyline
-        points={polyline}
-        fill="none"
-        stroke="var(--clear)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
+    <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+      {/* The readout sits above the chart in its own fixed-height line rather
+          than floating over the plot: a tooltip that appears on hover shifts
+          the layout under the reader's cursor, and one that overlays the curve
+          hides the very shape they are pointing at. */}
+      <p
+        className="font-[family-name:var(--font-mono-ui)] text-[11px] text-[var(--text-dim)] h-4 leading-4 tabular-nums"
+        aria-live="polite"
+      >
+        {day &&
+          t(day.count === 1 ? "subs.stats.reportOn" : "subs.stats.reportsOn", {
+            n: fmt(day.count),
+            date: formatDayLabel(day.date),
+          })}
+      </p>
+
+      <div
+        ref={wrapRef}
+        className="relative flex-1 min-h-[64px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--clear)] rounded"
+        tabIndex={0}
+        role="img"
+        aria-label={t("subs.stats.chartLabel")}
+        onKeyDown={onKeyDown}
+        onPointerMove={(e) => setActive(nearest(e.clientX))}
+        onPointerLeave={() => setActive(null)}
+        onBlur={() => setActive(null)}
+      >
+        {ready && (
+          <svg width={size.w} height={size.h} className="absolute inset-0 overflow-visible">
+            <defs>
+              <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--clear)" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="var(--clear)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {/* Y grid and labels. The count axis is what turns "the line went
+                up" into "it went up to nine", which is the difference between
+                a decoration and a chart. */}
+            {ticks.map((value) => {
+              const y = PAD.top + (1 - (axisMax === 0 ? 0 : value / axisMax)) * plotH;
+              return (
+                <g key={value}>
+                  <line
+                    x1={PAD.left} x2={PAD.left + plotW} y1={y} y2={y}
+                    stroke="var(--rule)" strokeWidth="1"
+                  />
+                  <text
+                    x={PAD.left - 6} y={y + 3} textAnchor="end"
+                    className="font-[family-name:var(--font-mono-ui)] fill-[var(--faint)]"
+                    fontSize="9"
+                  >
+                    {value}
+                  </text>
+                </g>
+              );
+            })}
+
+            <path d={area} fill="url(#spark-fill)" />
+            <path
+              d={line}
+              fill="none"
+              stroke="var(--clear)"
+              strokeWidth="1.75"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+
+            {/* The inspected day: a rule down to the axis, then a dot on the
+                curve. The rule is what ties the readout above to a position on
+                the x axis. */}
+            {active !== null && points[active] && (
+              <g>
+                <line
+                  x1={points[active].x} x2={points[active].x}
+                  y1={PAD.top} y2={PAD.top + plotH}
+                  stroke="var(--clear)" strokeOpacity="0.35" strokeWidth="1"
+                />
+                <circle
+                  cx={points[active].x} cy={points[active].y} r="3.5"
+                  fill="var(--ink-2)" stroke="var(--clear)" strokeWidth="1.75"
+                />
+              </g>
+            )}
+
+            {/* X axis: first and last day only. Thirty dated ticks would be
+                unreadable at this width, and the span is the thing that needs
+                stating — the points between are read off the hover readout. */}
+            {byDay.length > 1 && (
+              <>
+                <text
+                  x={PAD.left} y={size.h - 4} textAnchor="start"
+                  className="font-[family-name:var(--font-mono-ui)] fill-[var(--faint)]" fontSize="9"
+                >
+                  {formatDayLabel(byDay[0].date)}
+                </text>
+                <text
+                  x={PAD.left + plotW} y={size.h - 4} textAnchor="end"
+                  className="font-[family-name:var(--font-mono-ui)] fill-[var(--faint)]" fontSize="9"
+                >
+                  {formatDayLabel(byDay[byDay.length - 1].date)}
+                </text>
+              </>
+            )}
+          </svg>
+        )}
+      </div>
+
+      {/* The same series as text. A screen reader gets every day and count
+          rather than the single aria-label a graphic would otherwise carry. */}
+      <table className="sr-only">
+        <caption>{t("subs.stats.chartLabel")}</caption>
+        <tbody>
+          {byDay.map((d) => (
+            <tr key={d.date}>
+              <th scope="row">{formatDayLabel(d.date)}</th>
+              <td>{d.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -187,8 +354,12 @@ export default function SubmissionsStats() {
               {t("subs.stats.activity")}
             </p>
             {showChart ? (
-              <div className="flex-1 min-h-[52px]">
-                <Sparkline byDay={stats.byDay} />
+              // The chart sizes itself from this box, so the box needs a floor:
+              // the panel's natural height comes from the type breakdown beside
+              // it, and on a feed with two or three types that is shorter than a
+              // chart with axes can usefully be.
+              <div className="flex-1 min-h-[104px] flex">
+                <ActivityChart byDay={stats.byDay} />
               </div>
             ) : (
               <p className="text-[13px] text-[var(--faint)] leading-relaxed">

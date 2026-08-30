@@ -441,3 +441,79 @@ export function countRecent(byDay: FeedStats["byDay"], now: number, days = 7): n
   const cutoff = new Date(now - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   return byDay.reduce((sum, d) => (d.date >= cutoff ? sum + d.count : sum), 0);
 }
+
+/** A point on the activity chart, in chart pixel space. */
+export interface ChartPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * A smooth path through `points`, as an SVG path `d` string.
+ *
+ * Uses a Catmull-Rom spline converted to cubic béziers, with the tangent at
+ * each point scaled by `tension`. The straight polyline this replaces put a
+ * hard corner at every day, which on a 30-point series reads as jitter rather
+ * than a trend.
+ *
+ * The important property is that the curve passes exactly through every point —
+ * a smoothing that merely approximates them would misreport the day's count,
+ * which on a chart of scam reports is a data error, not a visual one. Tangents
+ * are also clamped so the curve cannot overshoot below zero or above the
+ * plotted maximum between two points: a spline through a spike can otherwise
+ * bulge past it, drawing a value that never happened.
+ *
+ * Returns "" for fewer than two points, which callers treat as "nothing to draw".
+ */
+export function smoothPath(points: readonly ChartPoint[], tension = 0.25): string {
+  if (points.length < 2) return "";
+
+  let d = `M${points[0].x.toFixed(2)},${points[0].y.toFixed(2)}`;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? p2;
+
+    // Control points along the Catmull-Rom tangents.
+    let c1y = p1.y + ((p2.y - p0.y) / 6) * (tension * 4);
+    let c2y = p2.y - ((p3.y - p1.y) / 6) * (tension * 4);
+
+    // Clamp to the segment's own range so the curve never bulges past the two
+    // values it connects — an overshoot would draw a count nobody reported.
+    const lo = Math.min(p1.y, p2.y);
+    const hi = Math.max(p1.y, p2.y);
+    c1y = Math.min(hi, Math.max(lo, c1y));
+    c2y = Math.min(hi, Math.max(lo, c2y));
+
+    const c1x = p1.x + (p2.x - p1.x) * tension;
+    const c2x = p2.x - (p2.x - p1.x) * tension;
+
+    d += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${p2.x.toFixed(2)},${p2.y.toFixed(2)}`;
+  }
+
+  return d;
+}
+
+/**
+ * Tick values for a count axis running 0..max.
+ *
+ * Picks a step from the 1/2/5×10ⁿ ladder so labels land on numbers a reader
+ * recognises (0, 5, 10) rather than on whatever the data's maximum divides
+ * into (0, 4.33, 8.67). Returns at most `target`+1 ticks, always including 0
+ * and always covering `max`.
+ */
+export function axisTicks(max: number, target = 3): number[] {
+  if (!Number.isFinite(max) || max <= 0) return [0];
+  const rough = max / target;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10;
+  // Round the top up to a whole step so the axis always covers the data: a
+  // maximum of 7 against a step of 5 must reach 10, not stop at 5 and leave the
+  // series' own peak drawn above the highest gridline.
+  const top = Math.ceil(max / step) * step;
+  const ticks: number[] = [];
+  for (let v = 0; v <= top + step / 1000; v += step) ticks.push(Math.round(v * 1000) / 1000);
+  return ticks;
+}
