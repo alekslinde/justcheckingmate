@@ -15,16 +15,20 @@ const REGIONAL: LangMode = { locale: "en", tone: "regional" };
 
 describe("translate", () => {
   it("returns the base-tone string", () => {
-    expect(translate(NORMAL, "check.report")).toBe("Report This Scam");
+    expect(translate(NORMAL, "check.report")).toBe("Report this scam");
   });
 
   it("returns the regional-tone string for the same key", () => {
-    expect(translate(REGIONAL, "check.report")).toBe("Report This Mongrel");
+    expect(translate(REGIONAL, "check.report")).toBe("Report this mongrel");
   });
 
   it("falls back to the base tone when a key is missing from the regional bundle", () => {
-    // "check.uploadImage" is the same in both dicts — still resolves.
-    expect(translate(REGIONAL, "check.uploadImage")).toBe("Upload image");
+    // "check.uploadImage" has no regional override, so it resolves to the base
+    // string. Asserted against the base bundle rather than a copy literal: the
+    // claim under test is the fallback, and pinning the wording here made an
+    // ordinary copy edit fail a test about lookup.
+    expect(enRegional).not.toHaveProperty("check.uploadImage");
+    expect(translate(REGIONAL, "check.uploadImage")).toBe(enNormal["check.uploadImage"]);
   });
 
   it("falls back to the raw key when it exists in neither dictionary", () => {
@@ -50,7 +54,7 @@ describe("translate", () => {
 
   it("resolves an unknown tone via the base tone rather than the raw key", () => {
     const odd = { locale: "en", tone: "shouty" } as unknown as LangMode;
-    expect(translate(odd, "check.report")).toBe("Report This Scam");
+    expect(translate(odd, "check.report")).toBe("Report this scam");
   });
 
   it("every regional key exists in the base bundle", () => {
@@ -58,6 +62,18 @@ describe("translate", () => {
     const baseKeys = new Set(Object.keys(enNormal));
     const orphans = Object.keys(enRegional).filter((k) => !baseKeys.has(k));
     expect(orphans).toEqual([]);
+  });
+
+  it("carries no regional override identical to its base string", () => {
+    // A regional bundle is partial by design, so an override that matches base
+    // buys nothing: it resolves the same either way, and only survives to drift
+    // out of sync when the base string is later edited. Editing base copy
+    // should not silently leave a stale duplicate behind in the other tone.
+    const base = enNormal as Record<string, string>;
+    const dupes = Object.entries(enRegional as Record<string, string>)
+      .filter(([k, v]) => base[k] === v)
+      .map(([k]) => k);
+    expect(dupes).toEqual([]);
   });
 });
 

@@ -13,8 +13,8 @@ import type { ReactNode } from "react";
 // right screen-reader semantics, and find-in-page for free (a browser opens a
 // closed <details> to reveal a Ctrl+F match), none of which a div-and-state
 // version gets without work. The chevron is the same inline SVG ThreatCard and
-// SeasonRow draw — a downward V at text-gray-200, stroke 2.5, rotated 180° on
-// open — so every disclosure in the app reads as the same control.
+// SeasonRow draw — a downward V, rotated 180° on open — so every disclosure in
+// the app reads as the same control.
 //
 // The id lands on the <details> itself so a table-of-contents link can target
 // it; LearnContent additionally opens the matching section on navigation, since
@@ -37,14 +37,20 @@ export default function Collapsible({
     <details
       id={id}
       open={defaultOpen}
-      className="group scroll-mt-20 bg-gray-900 border border-gray-800 rounded-2xl"
+      className="group scroll-mt-24 bg-[var(--ink-2)] border border-[var(--rule)] rounded-xl"
     >
       {/* marker:hidden + the webkit rule drop the platform triangle so the SVG
           chevron can sit on the right where the layout wants it. */}
-      <summary className="flex items-center justify-between gap-3 p-6 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-2xl hover:bg-gray-800/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">
-        <h2 className="font-bold text-emerald-400 text-sm uppercase tracking-wider">{title}</h2>
+      <summary className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-xl hover:bg-[var(--ink-3)]/50 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--clear)]">
+        {/* The display face at reading size, not a small uppercase label: these
+            are section headings on a long page, and uppercase tracking is harder
+            to scan the longer the string gets — several of these run to six
+            words. */}
+        <h2 className="font-[family-name:var(--font-display)] font-semibold text-[17px] leading-snug tracking-[-0.01em] text-[var(--foreground)]">
+          {title}
+        </h2>
         <svg
-          className="shrink-0 w-5 h-5 text-gray-200 transition-transform duration-200 group-open:rotate-180"
+          className="shrink-0 w-[18px] h-[18px] text-[var(--faint)] transition-transform duration-200 group-open:rotate-180"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -58,7 +64,7 @@ export default function Collapsible({
       </summary>
       {/* Padding lives here, not on <details>: a closed <details> renders only
           its summary, so the body's padding never affects the collapsed height. */}
-      <div className="px-6 pb-6">{children}</div>
+      <div className="px-5 pb-5">{children}</div>
     </details>
   );
 }

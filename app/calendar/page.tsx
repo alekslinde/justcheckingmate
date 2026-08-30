@@ -14,16 +14,26 @@ export const metadata: Metadata = {
 // cached page would freeze on the build date and show the wrong season.
 export const dynamic = "force-dynamic";
 
-export default async function CalendarPage() {
-  const region = resolveRegion(await headers());
+export default async function CalendarPage({
+  searchParams,
+}: {
+  // The region bar writes its choice here. Same contract as the radar page: an
+  // explicit pick beats the geo guess, survives a refresh, and can be linked to
+  // someone in that region.
+  searchParams: Promise<{ region?: string }>;
+}) {
+  const { region: requested } = await searchParams;
+  const region = resolveRegion(await headers(), requested);
   // Resolved here rather than in the component: the component is a client
   // component (it needs the tone preference), and the browser clock reflects the
-  // device's timezone rather than the user's region.
+  // device's timezone rather than the user's region. It also has to follow the
+  // *chosen* region — reading a UK calendar against Australian local time would
+  // put "today" on the wrong side of a season boundary for half the day.
   const today = regionToday(region);
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-      <ScamCalendar region={region} today={today} standalone />
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
+      <ScamCalendar region={region} today={today} />
     </main>
   );
 }

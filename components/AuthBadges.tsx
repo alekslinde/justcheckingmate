@@ -36,7 +36,7 @@ const SEVERITY_CLASSES: Record<Severity, string> = {
   bad:     "bg-red-900/50 text-red-300 border-red-700/60",
   warn:    "bg-yellow-900/40 text-yellow-300 border-yellow-700/50",
   ok:      "bg-emerald-900/40 text-emerald-300 border-emerald-700/50",
-  neutral: "bg-gray-800 text-gray-400 border-gray-700",
+  neutral: "bg-[var(--ink-3)] text-gray-400 border-[var(--rule)]",
 };
 
 interface Props {

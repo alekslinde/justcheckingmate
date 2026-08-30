@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { buildShareContent, parseSharePayload } from "@/lib/sharePrefill";
-import CheckFlow from "./CheckFlow";
+import CheckStage from "./CheckStage";
 
 /**
  * Thin client wrapper for the share target: reads the shared payload out of the
@@ -39,19 +39,23 @@ export default function ShareTargetSeed() {
     window.history.replaceState(window.history.state, "", "/share");
   }, []);
 
+  // CheckStage rather than CheckFlow directly: the collapsing fold and the
+  // "Checked … / Edit & check again" strip are the stage's, and a share-sheet
+  // reader needs the way back to the box exactly as much as a pasting one.
+  // Forwarding is off here — arriving via the share sheet is already a choice
+  // about how to get content in, so offering a second route is noise.
   return (
-    <>
+    <CheckStage initialContent={seed.content} surface="share" forward={false}>
       {seed.truncated && (
         <p
           role="status"
-          className="text-sm text-amber-300/90 bg-amber-950/40 border border-amber-900/60 rounded-xl px-4 py-3"
+          className="text-sm text-[var(--caution)] bg-[var(--caution)]/10 border border-[var(--caution)]/30 rounded-xl px-4 py-3"
         >
           That message was too long to check in full, so the end of it was cut.
           Check anything that&apos;s missing separately — scam links often sit at
           the bottom of a long email.
         </p>
       )}
-      <CheckFlow initialContent={seed.content} surface="share" />
-    </>
+    </CheckStage>
   );
 }

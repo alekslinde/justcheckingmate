@@ -13,14 +13,22 @@
 // careful not to imply the tool scores messages differently by date: a season
 // tells you what's *likely*, and likelihood is context for a person, not a
 // reason for the detector to move a number.
+//
+// Structurally the radar's sibling, and deliberately so: page header, freshness
+// stamp, region bar, then capped hairline lists. The two pages answer the same
+// shape of question — "what should I expect, where I am" — and a reader who
+// learns one should not have to learn the other.
 
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { useLang, type MessageKey } from "@/lib/lang";
-import YearRibbon from "@/components/YearRibbon";
+import SeasonGantt from "@/components/SeasonGantt";
+import FreshnessStamp from "@/components/FreshnessStamp";
+import PageHeader from "@/components/PageHeader";
+import RegionBar from "@/components/RegionBar";
 import {
   activeSeasons,
   upcomingSeasons,
-  remainingSeasons,
   calendarForRegion,
   daysUntilStart,
   daysUntilEnd,
@@ -32,14 +40,20 @@ import {
 } from "@/lib/scamCalendar";
 import type { RegionCode } from "@justcheckingmate/engine/regions";
 
-// Matches the card styling used across Learn and About.
-const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
-const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
+// Matches the card styling used across Learn, About and the radar.
+const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-6";
+const H2 =
+  "font-[family-name:var(--font-display)] font-semibold text-[17px] leading-snug tracking-[-0.01em] text-[var(--foreground)]";
 
-// How many not-yet-active seasons get their own "coming up" row. The rest fold
-// into the collapsed index below, so this is a display budget rather than the
-// glance-sized strip upcomingSeasons() documents as its default.
-const UPCOMING_LIMIT = 2;
+// Section heading, matching the radar's group headings so the two pages read as
+// one system rather than two designs.
+const H3 =
+  "font-[family-name:var(--font-display)] font-semibold text-[clamp(18px,2.2vw,22px)] leading-tight tracking-[-0.015em] text-[var(--foreground)]";
+
+// How many rows a section shows before the "show more" cap, matching the radar's
+// GROUP_CAP. Five is what fits on a phone without the next section's heading
+// being pushed out of reach, which is what makes the page's shape scannable.
+const SECTION_CAP = 5;
 
 /**
  * The "starts in N" label, chosen by day count.
@@ -79,191 +93,214 @@ function endsInLabel(days: number, t: (k: MessageKey, v?: Record<string, string 
   return t(months === 1 ? "calendar.ends.month" : "calendar.ends.months", { count: months });
 }
 
-/** Window and confidence, the one-line subtitle shared by the card and the row. */
-function SeasonMeta({ season }: { season: ScamSeason }) {
+/**
+ * One season, as an always-open row.
+ *
+ * Previously everything except the active seasons was a collapsed <details>,
+ * which solved a real problem — the page ran six phone screens — at the cost of
+ * making the whole year a list of titles nothing could be read from. The cap
+ * solves that problem better: five rows per section keeps the page short while
+ * leaving every row readable.
+ *
+ * Unlike the radar's rows, these keep their lures and advice. The radar folded
+ * those away because 28 entries at full weight measured 17,000px; a region here
+ * has a dozen seasons and shows at most ten, and the lures *are* the content —
+ * a season the reader can't act on is a horoscope.
+ *
+ * Rows are separated by hairlines rather than being individually bordered
+ * cards, matching the radar: a dozen bordered boxes read as a dozen competing
+ * objects, while a ruled list reads as one list.
+ */
+function SeasonRow({
+  season,
+  badge,
+  live,
+}: {
+  season: ScamSeason;
+  /** The timing pill: how long an active season has left, or when it starts. */
+  badge: string;
+  /** Active now. Drives the amber pill — never red, which is the verdict colour. */
+  live: boolean;
+}) {
   const { t } = useLang();
-  return (
-    <>
-      {formatWindow(season.window)} · {t(`calendar.confidence.${season.confidence}` as MessageKey)}
-    </>
-  );
-}
-
-/** The lures + advice body. Shared so a collapsed row expands to the same content. */
-function SeasonBody({ season }: { season: ScamSeason }) {
-  const { t } = useLang();
 
   return (
-    <>
-      <p className="text-sm text-gray-400">{season.why}</p>
-
-      <div className="space-y-1.5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-          {t("calendar.lures.heading")}
-        </p>
-        <ul className="space-y-1 list-none">
-          {season.lures.map((lure) => (
-            <li key={lure} className="flex items-start gap-2 text-sm text-gray-300">
-              <span className="text-amber-400/80 mt-0.5 shrink-0" aria-hidden="true">⚑</span>
-              <span>{lure}</span>
-            </li>
-          ))}
-        </ul>
+    <li className="bg-[var(--ink-2)] px-4 py-3.5 space-y-[7px]">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        {/* h4, one level below the section heading — the rows nest inside "In
+            season right now", and matching its level would flatten the two in a
+            screen reader's outline. */}
+        <h4 className="font-semibold text-[15px] text-[var(--foreground)]">{season.title}</h4>
+        <span
+          className={`font-[family-name:var(--font-mono-ui)] text-[10.5px] uppercase tracking-[0.07em] rounded-full px-2 py-0.5 border ${
+            live
+              ? "text-[var(--caution)] border-[var(--caution)]/40 bg-[var(--caution)]/10"
+              : "text-[var(--text-dim)] border-[var(--rule)]"
+          }`}
+        >
+          {badge}
+        </span>
       </div>
 
-      <div className="flex items-start gap-2 pt-1 border-t border-gray-700/50 mt-1">
-        <span className="text-emerald-400/80 mt-2 shrink-0" aria-hidden="true">✓</span>
-        <p className="text-sm text-gray-300 pt-1.5">{season.advice}</p>
-      </div>
+      {/* Window, confidence and this season's own review date on one mono line.
+          The per-season date is what makes the page-level "Reviewed" claim
+          inspectable: a reader can see that most seasons were checked on one
+          date and a few more recently, rather than taking the newest date as
+          covering everything. */}
+      <p className="font-[family-name:var(--font-mono-ui)] text-[11px] leading-relaxed tracking-[0.02em] text-[var(--faint)]">
+        {formatWindow(season.window)} · {t(`calendar.confidence.${season.confidence}` as MessageKey)} ·{" "}
+        <span className="whitespace-nowrap">
+          {t("freshness.label")} {formatReviewedDate(season.reviewed)}
+        </span>
+      </p>
+
+      <p className="text-[13.5px] text-[var(--text-dim)] leading-relaxed max-w-[92ch]">{season.why}</p>
+
+      {/* Lures and advice as prose rather than a bulleted block with icons and
+          section labels. The old version spent five heading-sized elements per
+          season on structure; at a dozen seasons that structure was most of the
+          page. A bolded lead-in carries the same distinction in one line. */}
+      <p className="text-[13.5px] text-[var(--text-dim)] leading-relaxed max-w-[92ch]">
+        <b className="font-semibold text-[var(--foreground)]">{t("calendar.lures.heading")}:</b>{" "}
+        {season.lures.join("; ")}
+      </p>
+
+      <p className="text-[13.5px] leading-relaxed max-w-[92ch] text-[var(--text-dim)] border-l-2 border-l-[var(--clear)] pl-3">
+        {season.advice}
+      </p>
 
       {/* Provenance, mirroring the radar's evidence link. Every season traces to
-          a named authority — without this the "expect this now" claim is asserted
-          rather than checkable, which is the whole difference from a horoscope.
-          Links open in a new tab; the leading "·" separates entries without a
-          list element for a one-line footer. */}
-      <p className="text-xs text-gray-500 pt-1">
-        <span className="font-semibold uppercase tracking-wider">{t("calendar.sources")}</span>{" "}
+          a named authority — without this the "expect this now" claim is
+          asserted rather than checkable, which is the whole difference from a
+          horoscope. */}
+      <p className="font-[family-name:var(--font-mono-ui)] text-[11px] leading-relaxed tracking-[0.02em] text-[var(--faint)]">
+        {t("calendar.sources")}:{" "}
         {season.sources.map((source, i) => (
           <span key={source.url}>
-            {i > 0 ? " · " : " "}
+            {i > 0 && " · "}
             <a
               href={source.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 hover:text-emerald-400 underline underline-offset-2 transition-colors"
+              className="underline underline-offset-2 hover:text-[var(--clear)] transition-colors"
             >
               {source.label}
+              <span className="sr-only"> ({t("a11y.newTab")})</span>
             </a>
           </span>
         ))}
       </p>
-    </>
+    </li>
   );
 }
 
 /**
- * A season in full — used only for what's active right now.
+ * One section of seasons, capped until asked to show the rest.
  *
- * Everything else is a SeasonRow. Giving a season five months away the same
- * height as the one the user is standing in was what made this page six phone
- * screens long, so full weight is now reserved for the thing that's true today.
+ * The cap is per-section rather than per-page: without it "in season now" can
+ * run long enough that "coming up" is off-screen, and that heading is what tells
+ * the reader the page has a shape at all.
+ *
+ * Collapsing scrolls the section's own heading back into view — otherwise the
+ * page shortens under the reader and leaves them somewhere further down than
+ * where they clicked. Same behaviour as the radar's groups.
  */
-function SeasonCard({ season, today }: { season: ScamSeason; today: CivilDate }) {
+function SeasonSection({
+  heading,
+  seasons,
+  badgeFor,
+  live = false,
+}: {
+  heading: string;
+  seasons: ScamSeason[];
+  badgeFor: (season: ScamSeason) => string;
+  live?: boolean;
+}) {
   const { t } = useLang();
+  const [expanded, setExpanded] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  if (seasons.length === 0) return null;
+
+  const shown = expanded ? seasons : seasons.slice(0, SECTION_CAP);
+  const hiddenCount = seasons.length - shown.length;
 
   return (
-    <article className="rounded-xl border p-4 space-y-3 bg-amber-500/10 border-amber-500/40">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h3 className="font-bold text-gray-100 text-base">{season.title}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            <SeasonMeta season={season} />
-          </p>
-        </div>
-        {/* How much of the window is left, not just that it's open: ten weeks of
-            tax season remaining is more actionable than "active". */}
-        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-full px-2.5 py-1">
-          {t("calendar.badge.active")} · {endsInLabel(daysUntilEnd(season, today), t)}
-        </span>
-      </div>
-
-      <SeasonBody season={season} />
-    </article>
-  );
-}
-
-/**
- * A collapsed season — title, timing, and a disclosure.
- *
- * Native <details>/<summary> rather than useState: it brings keyboard support,
- * the right screen-reader semantics, and find-in-page over the collapsed text
- * for free, none of which a div-and-state version gets without work. The
- * `marker:hidden` and `[&::-webkit-details-marker]` rules drop the platform
- * triangle so the SVG chevron can sit where the layout wants it.
- *
- * The disclosure chevron matches ThreatCard on the radar: a right-aligned inline
- * SVG (a downward V, rotated 180° on open) at `text-gray-200`, stroke-width 2.5,
- * rather than the left-hand text triangle this row used to draw. The two pages
- * share a card idiom, so they should share the affordance that opens the card.
- *
- * `min-w-0` on the root lets the row shrink inside the two-column grid the "rest
- * of the year" section lays it out in. Grid items default to `min-width: auto`,
- * so without this the shrink-0 timing text forces the track wider than the card
- * and the row spills past its right edge.
- */
-function SeasonRow({ season, timing }: { season: ScamSeason; timing: string }) {
-  return (
-    <details className="group min-w-0 rounded-xl border bg-gray-800/40 border-gray-700/50 open:bg-gray-800/60">
-      {/* No aria-label here. One would replace the whole accessible name, so a
-          screen reader would hear "Tax season — show what to look for" and lose
-          the window, the confidence and the timing that a sighted user can scan
-          without expanding anything. The visible text is already the better
-          name; <summary> announces the expand/collapse affordance itself. */}
-      <summary className="flex items-center gap-3 p-3 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden rounded-xl hover:bg-gray-700/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">
-        <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-gray-200 text-sm truncate">{season.title}</span>
-          {/* truncate clips visually on a narrow row; the full string stays in
-              the accessible name because it's still real text in the DOM. */}
-          <span className="block text-xs text-gray-500 truncate">
-            <SeasonMeta season={season} />
-          </span>
-        </span>
-        <span className="shrink-0 text-xs text-gray-500">{timing}</span>
-        {/* Same chevron geometry as ThreatCard: a downward V from this path at
-            text-gray-200 and stroke-width 2.5, rotated 180° on open. Drawn as an
-            SVG rather than a text glyph so stroke weight is explicit and the
-            rotation is smooth. */}
-        <svg
-          className="shrink-0 w-5 h-5 text-gray-200 transition-transform duration-200 group-open:rotate-180"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
+    <section className="space-y-3">
+      <h3 ref={headingRef} className={`${H3} flex items-center gap-2.5 scroll-mt-24`}>
+        {heading}
+        {/* The count belongs with the heading, not in prose below it: "how many"
+            is the first thing asked of a list like this. */}
+        <span
+          className={`font-[family-name:var(--font-mono-ui)] text-[12px] font-medium rounded-full px-2 py-0.5 tabular-nums ${
+            live
+              ? "text-[var(--caution)] bg-[var(--caution)]/12"
+              : "text-[var(--text-dim)] bg-[var(--ink-3)]"
+          }`}
         >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </summary>
-
-      <div className="px-3 pb-3 pt-1 space-y-3 border-t border-gray-700/50 mt-1">
-        <SeasonBody season={season} />
-      </div>
-    </details>
+          {seasons.length}
+        </span>
+      </h3>
+      {/* The hairline list: a 1px gap over a rule-coloured ground gives every
+          row a divider without each one drawing its own border. */}
+      <ul className="grid gap-px overflow-hidden rounded-xl border border-[var(--rule)] bg-[var(--rule)] list-none">
+        {shown.map((season) => (
+          <SeasonRow key={season.id} season={season} badge={badgeFor(season)} live={live} />
+        ))}
+      </ul>
+      {(hiddenCount > 0 || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => {
+            const collapsing = expanded;
+            setExpanded(!expanded);
+            if (collapsing) headingRef.current?.scrollIntoView({ block: "start" });
+          }}
+          className="w-full font-[family-name:var(--font-mono-ui)] text-[11px] tracking-[0.07em] uppercase text-[var(--text-dim)] border border-[var(--rule)] rounded-lg px-3.5 py-2.5 hover:border-[var(--clear)] hover:text-[var(--clear)] transition-colors"
+        >
+          {expanded ? t("calendar.fewer") : t("calendar.more", { n: hiddenCount })}
+        </button>
+      )}
+    </section>
   );
 }
 
 /**
- * The honest empty state, shown only on the standalone page.
+ * The honest empty state for a region with no authored calendar.
  *
- * As a *section* on another page, an unauthored region rendered nothing — right,
- * because there was surrounding content to carry the page. As a whole page that
- * would be a dead end, so this says plainly that we have no data rather than
- * substituting another country's seasons, and points somewhere useful.
+ * Rendering nothing would be a dead end, so this says plainly that we have no
+ * data rather than substituting another country's seasons, and points somewhere
+ * useful. The region bar renders here too, and has to: picking a region we have
+ * no data for is a normal thing to do.
  */
-function EmptyState() {
+function EmptyState({ region }: { region: RegionCode }) {
   const { t } = useLang();
   return (
-    <article className={CARD}>
-      <section className="space-y-2">
-        <h2 className={H2}>{t("calendar.empty.heading")}</h2>
-        <p className="text-sm text-gray-400">{t("calendar.empty.body")}</p>
-      </section>
-      <Link
-        href="/learn"
-        className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
-      >
-        {t("calendar.learnCta")}
-      </Link>
-    </article>
+    <div className="space-y-6">
+      {/* The region bar renders here too, and it has to: picking a region we
+          have no calendar for is a normal thing to do, and without the control
+          still on screen it would be a dead end with no way back. */}
+      <RegionBar region={region} />
+      <article className={CARD}>
+        <section className="space-y-2">
+          <h2 className={H2}>{t("calendar.empty.heading")}</h2>
+          <p className="text-sm text-[var(--text-dim)]">{t("calendar.empty.body")}</p>
+        </section>
+        <Link
+          href="/learn"
+          className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
+        >
+          {t("calendar.learnCta")}
+        </Link>
+      </article>
+    </div>
   );
 }
 
 export default function ScamCalendar({
   region,
   today,
-  standalone = false,
 }: {
   region: RegionCode;
   /**
@@ -272,109 +309,70 @@ export default function ScamCalendar({
    * the RSC boundary — a Date would be re-read in the *browser's* timezone.
    */
   today: CivilDate;
-  /** Renders an explanatory empty state instead of nothing when true. */
-  standalone?: boolean;
 }) {
   const { t } = useLang();
   const all = calendarForRegion(region);
 
-  // A region with no authored calendar never borrows another's seasons. Inline
-  // it renders nothing; as a page it explains itself.
-  if (all.length === 0) return standalone ? <EmptyState /> : null;
+  // A region with no authored calendar never borrows another's seasons — it
+  // says so instead.
+  if (all.length === 0) return <EmptyState region={region} />;
 
   // Freshness signal, derived from the seasons' own review dates so it can't
   // drift — the same contract as the radar's "as at" line.
   const reviewed = lastReviewed(region);
   const active = activeSeasons(region, today);
-  const upcoming = upcomingSeasons(region, today, UPCOMING_LIMIT);
-  const rest = remainingSeasons(region, today, UPCOMING_LIMIT);
+  // Everything not currently active, in the order it arrives. The old three-way
+  // split (active / next two / "rest of the year") put the same rows in two
+  // shapes for no reason a reader could see; one capped list is the same
+  // information with one rule instead of two.
+  const upcoming = upcomingSeasons(region, today, all.length);
 
   return (
-    <article className={CARD} id="scam-calendar">
-      {/* Intro only. The neutrality line moved to the outro: it's a disclaimer
-          about how we score, and standing it between the reader and the season
-          they came for spent the top of the page on a caveat. */}
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <h2 className={H2}>{t("calendar.title")}</h2>
-          {reviewed && (
-            <p className="text-xs text-gray-500">
-              {t("calendar.reviewed", { date: formatReviewedDate(reviewed) })}
-            </p>
-          )}
-        </div>
-        <p className="text-sm text-gray-400">{t("calendar.intro")}</p>
-      </section>
+    <article className="space-y-6" id="scam-calendar">
+      {/* The neutrality line rides with the lede rather than floating below the
+          header: it qualifies what the lede just promised, and a gap between
+          them reads as a new section starting. */}
+      <PageHeader
+        eyebrow={t("calendar.eyebrow")}
+        title={t("calendar.headline")}
+        lede={`${t("calendar.intro")} ${t("calendar.neutrality")}`}
+      />
 
-      <YearRibbon region={region} today={today} />
-
-      {active.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300">
-            {t("calendar.active.heading")}
-          </h3>
-          <div className="space-y-3">
-            {active.map((s) => (
-              <SeasonCard key={s.id} season={s} today={today} />
-            ))}
-          </div>
-        </section>
+      {/* Order: how fresh, then whose, then the year. Matches the radar — the
+          freshness stamp leads because it is the claim the page is making, and
+          everything below is only worth reading if the review is current. */}
+      {reviewed && (
+        <FreshnessStamp
+          date={formatReviewedDate(reviewed)}
+          note={t("calendar.freshness.note", { n: String(all.length) })}
+        />
       )}
 
-      {upcoming.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            {t("calendar.upcoming.heading")}
-          </h3>
-          <div className="space-y-2">
-            {upcoming.map((s) => (
-              <SeasonRow
-                key={s.id}
-                season={s}
-                timing={startsInLabel(daysUntilStart(s, today), t)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <RegionBar region={region} />
 
-      {rest.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-              {t("calendar.rest.heading")}
-            </h3>
-            <span className="text-xs text-gray-600">
-              {t("calendar.rest.count", { count: rest.length })}
-            </span>
-          </div>
-          {/* Two columns from sm up: four rows become two, and the section
-              reads as an index rather than a queue of things to get through. */}
-          <div className="grid gap-2 sm:grid-cols-2">
-            {rest.map((s) => (
-              <SeasonRow
-                key={s.id}
-                season={s}
-                timing={startsInLabel(daysUntilStart(s, today), t)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <SeasonGantt region={region} today={today} />
 
-      <div className="border-t border-gray-800 pt-4 space-y-3">
-        <p className="text-xs text-gray-500">{t("calendar.neutrality")}</p>
-        <p className="text-xs text-gray-500">{t("calendar.outro")}</p>
-        {/* Only on the standalone page — inline, the surrounding page already
-            carries its own navigation and this would be a link to itself. */}
-        {standalone && (
-          <Link
-            href="/learn"
-            className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block"
-          >
-            {t("calendar.learnCta")}
-          </Link>
-        )}
+      <SeasonSection
+        heading={t("calendar.active.heading")}
+        seasons={active}
+        live
+        badgeFor={(s) => `${t("calendar.badge.active")} · ${endsInLabel(daysUntilEnd(s, today), t)}`}
+      />
+
+      <SeasonSection
+        heading={t("calendar.upcoming.heading")}
+        seasons={upcoming}
+        badgeFor={(s) => startsInLabel(daysUntilStart(s, today), t)}
+      />
+
+      <div className="border-t border-[var(--rule)] pt-4 space-y-3">
+        <p className="text-xs text-[var(--faint)] leading-relaxed max-w-[70ch]">{t("calendar.outro")}</p>
+        <Link
+          href="/learn"
+          className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
+        >
+          {t("calendar.learnCta")}
+        </Link>
       </div>
     </article>
   );

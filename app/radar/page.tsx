@@ -15,12 +15,20 @@ export const metadata: Metadata = {
 // components/ThreatRadar.tsx), so this is the only reason.
 export const dynamic = "force-dynamic";
 
-export default async function RadarPage() {
-  const region = resolveRegion(await headers());
+export default async function RadarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ region?: string }>;
+}) {
+  // ?region= is the reader correcting the geo guess (see RegionBar). It takes
+  // precedence inside resolveRegion, which validates it and falls back to the
+  // header rather than trusting the query string.
+  const { region: requested } = await searchParams;
+  const region = resolveRegion(await headers(), requested);
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-      <ThreatRadar region={region} standalone />
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
+      <ThreatRadar region={region} />
     </main>
   );
 }

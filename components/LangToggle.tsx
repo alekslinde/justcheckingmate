@@ -68,7 +68,7 @@ export default function LangToggle() {
         <div
           role="menu"
           aria-label="Language"
-          className="absolute right-0 mt-1 min-w-[10rem] py-1 rounded-lg border border-gray-700 bg-gray-900 shadow-lg z-50"
+          className="absolute right-0 mt-1 min-w-[10rem] py-1 rounded-lg border border-[var(--rule)] bg-[var(--ink-2)] shadow-lg z-50"
         >
           {OPTIONS.map((opt) => {
             const active = opt.value === mode.tone;
@@ -79,7 +79,7 @@ export default function LangToggle() {
                 aria-checked={active}
                 onClick={() => choose(opt.value)}
                 className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors ${
-                  active ? "text-emerald-400" : "text-gray-300 hover:text-emerald-400 hover:bg-gray-800"
+                  active ? "text-emerald-400" : "text-gray-300 hover:text-emerald-400 hover:bg-[var(--ink-3)]"
                 }`}
               >
                 <span>{opt.label}</span>

@@ -5,7 +5,7 @@ import { resolveRegion } from "@/lib/regionResolver";
 import { regionToday, activeSeasons } from "@/lib/scamCalendar";
 
 export const metadata: Metadata = {
-  title: "Learn — Just Checking, Mate",
+  title: "How scammers work — Just Checking, Mate",
   description: "Understand how scammers work, where scams come from, how to handle one, and what to do if you've already clicked or shared details — plus how to capture a scam so we can check it.",
 };
 

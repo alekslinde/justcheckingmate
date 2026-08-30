@@ -10,6 +10,7 @@ import { useLang, MessageKey } from "@/lib/lang";
 import SafeDisplay from "@/components/SafeDisplay";
 import AuthBadges from "@/components/AuthBadges";
 import SubmissionsStats from "@/components/SubmissionsStats";
+import PageHeader from "@/components/PageHeader";
 
 function CopyId({ id }: { id: string }) {
   const { t } = useLang();
@@ -23,7 +24,7 @@ function CopyId({ id }: { id: string }) {
   return (
     <button
       onClick={copy}
-      className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-400 transition-colors font-mono py-1"
+      className="flex items-center gap-1 font-[family-name:var(--font-mono-ui)] text-[11px] text-[var(--faint)] hover:text-[var(--text-dim)] transition-colors py-1"
       title={t("subs.copyId")}
     >
       {copied ? `✓ ${t("subs.copied")}` : id}
@@ -60,8 +61,8 @@ function FilterSelect({
 }) {
   const { t } = useLang();
   return (
-    <div className="bg-gray-900 px-4 py-3 space-y-1">
-      <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+    <div className="bg-[var(--ink-2)] px-4 py-3 space-y-1">
+      <label htmlFor={id} className="block font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
         {t(labelKey)}
       </label>
       <div className="relative">
@@ -69,19 +70,19 @@ function FilterSelect({
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none bg-transparent pr-6 text-sm text-gray-200 focus:outline-none cursor-pointer"
+          className="w-full appearance-none bg-transparent pr-6 text-sm text-[var(--foreground)] focus:outline-none cursor-pointer"
         >
           {options.map((opt) => (
             // The select is transparent to sit on the panel, but the dropdown
             // popup is painted by the OS — without an explicit background the
             // options inherit that transparency and render dark-on-dark.
-            <option key={opt.value} value={opt.value} className="bg-gray-900 text-gray-200">
+            <option key={opt.value} value={opt.value} className="bg-[var(--ink-2)] text-[var(--foreground)]">
               {t(opt.labelKey)}
             </option>
           ))}
         </select>
         <svg
-          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-200"
+          className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[var(--faint)]"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -135,16 +136,16 @@ function pageNumbers(current: number, total: number): (number | "…")[] {
 
 function SkeletonList() {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden" aria-hidden="true">
-      <ul className="divide-y divide-gray-800">
+    <div className="grid gap-px overflow-hidden rounded-2xl border border-[var(--rule)] bg-[var(--rule)]" aria-hidden="true">
+      <ul className="grid gap-px list-none">
         {[0, 1, 2, 3].map((i) => (
-          <li key={i} className="px-5 py-4 space-y-3 animate-pulse">
+          <li key={i} className="bg-[var(--ink-2)] px-5 py-4 space-y-3 animate-pulse">
             <div className="flex items-center justify-between">
-              <div className="h-4 w-32 bg-gray-800 rounded" />
-              <div className="h-3 w-16 bg-gray-800 rounded" />
+              <div className="h-4 w-32 bg-[var(--ink-3)] rounded" />
+              <div className="h-3 w-16 bg-[var(--ink-3)] rounded" />
             </div>
-            <div className="h-4 w-3/4 bg-gray-800 rounded" />
-            <div className="h-3 w-1/2 bg-gray-800 rounded" />
+            <div className="h-4 w-3/4 bg-[var(--ink-3)] rounded" />
+            <div className="h-3 w-1/2 bg-[var(--ink-3)] rounded" />
           </li>
         ))}
       </ul>
@@ -254,26 +255,33 @@ export default function SubmissionsBrowser() {
   function clearSearch() { setSearchInput(""); searchRef.current?.focus(); }
 
   return (
-    <main>
-      {/* Header */}
-      <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
-        <div className="max-w-2xl mx-auto px-4 py-8">
-          <div>
-            <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
-              {t("subs.title")}
-            </h1>
-            <p className="text-sm text-gray-400">{t("subs.subtitle")}</p>
-          </div>
-        </div>
-      </div>
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10">
+      {/* The same header every other page uses. The old treatment — a full-bleed
+          gradient band holding small emerald caps — was the only one of its kind
+          left in the app, and it made this page read as a different product. */}
+      <PageHeader
+        eyebrow={t("subs.eyebrow")}
+        title={t("subs.headline")}
+        lede={t("subs.lede")}
+      />
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className="space-y-4">
 
         <SubmissionsStats />
 
         {/* Search */}
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" aria-hidden="true">🔍</span>
+          {/* Drawn rather than an emoji: the magnifier glyph renders at a
+              different size and colour on every platform, and picks up the
+              system's emoji font rather than the page's. */}
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--faint)] pointer-events-none"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
           <input
             ref={searchRef}
             id={SEARCH_INPUT_ID}
@@ -282,13 +290,13 @@ export default function SubmissionsBrowser() {
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t("subs.search.placeholder")}
             aria-label={t("subs.search.label")}
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-11 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 [&::-webkit-search-cancel-button]:hidden"
+            className="w-full bg-[var(--ink-2)] border border-[var(--rule)] rounded-xl pl-9 pr-11 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--faint)] focus:outline-none focus:border-[var(--clear)] focus:ring-1 focus:ring-[var(--clear)] [&::-webkit-search-cancel-button]:hidden"
           />
           {searchInput && (
             <button
               onClick={clearSearch}
               aria-label={t("subs.search.clear")}
-              className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors text-lg leading-none"
+              className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-[var(--faint)] hover:text-[var(--foreground)] transition-colors text-lg leading-none"
             >
               ×
             </button>
@@ -296,10 +304,10 @@ export default function SubmissionsBrowser() {
         </div>
 
         {/* Filter panel */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
 
           {/* ── Filter grid ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-800">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-[var(--ink-3)]">
 
             <FilterSelect
               id="subs-filter-type"
@@ -338,14 +346,14 @@ export default function SubmissionsBrowser() {
           </>
         ) : reports.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <p className="text-gray-300 font-medium">{t("subs.empty.title")}</p>
-            <p className="text-sm text-gray-400">
+            <p className="text-[var(--foreground)] font-medium">{t("subs.empty.title")}</p>
+            <p className="text-sm text-[var(--text-dim)]">
               {search ? t("subs.empty.searchHint") : t("subs.empty.filterHint")}
             </p>
           </div>
         ) : (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <ul className="divide-y divide-gray-800">
+          <div className="grid gap-px overflow-hidden rounded-2xl border border-[var(--rule)] bg-[var(--rule)]">
+            <ul className="grid gap-px list-none">
               {reports.map((r) => {
                 const opt = TYPE_OPTIONS.find((o) => o.value === r.type) ?? TYPE_OPTIONS[TYPE_OPTIONS.length - 1];
 
@@ -369,19 +377,23 @@ export default function SubmissionsBrowser() {
                 ].filter(Boolean) as { labelKey: MessageKey; value: string }[];
 
                 return (
-                  <li key={r.id} className="px-5 py-4 space-y-3">
+                  <li key={r.id} className="bg-[var(--ink-2)] px-5 py-4 space-y-3">
 
                     {/* ── Row 1: type label · repetition badge · age ── */}
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-semibold text-gray-300">{t(opt.labelKey)}</span>
+                        <span className="text-[15px] font-semibold text-[var(--foreground)]">{t(opt.labelKey)}</span>
                         {r.matchCount > 1 && (
-                          <span className="shrink-0 border text-xs font-semibold px-2 py-0.5 rounded-full bg-red-900/50 text-red-300 border-red-700/50">
+                          // Amber, not red. Red is the verdict colour in this
+                          // app — it means "this is a scam". A repetition count
+                          // says how many people reported the same thing, which
+                          // is a fact about the feed, not a stronger verdict.
+                          <span className="shrink-0 font-[family-name:var(--font-mono-ui)] text-[10.5px] uppercase tracking-[0.07em] px-2 py-0.5 rounded-full border text-[var(--caution)] border-[var(--caution)]/40 bg-[var(--caution)]/10 tabular-nums">
                             {r.matchCount}×
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-gray-500 shrink-0">{timeAgo(r.submittedAt)}</span>
+                      <span className="font-[family-name:var(--font-mono-ui)] text-[11px] text-[var(--faint)] shrink-0">{timeAgo(r.submittedAt)}</span>
                     </div>
 
                     {/* ── Row 2: scam identifiers (reporter-supplied) ──
@@ -392,17 +404,17 @@ export default function SubmissionsBrowser() {
                       <div className="space-y-2">
                         {identifiers.map(({ labelKey, value }, i) => (
                           <div key={i} className="flex flex-col gap-0.5">
-                            <span className="text-[11px] uppercase tracking-wider text-gray-500">{t(labelKey)}</span>
+                            <span className="font-[family-name:var(--font-mono-ui)] text-[10px] uppercase tracking-[0.09em] text-[var(--faint)]">{t(labelKey)}</span>
                             <SafeDisplay
                               value={value}
-                              className={`font-mono break-all ${i === 0 ? "text-sm text-amber-300" : "text-xs text-amber-300/70"}`}
+                              className={`font-[family-name:var(--font-mono-ui)] break-all ${i === 0 ? "text-[13px] text-[var(--caution)]" : "text-[12px] text-[var(--caution)]/70"}`}
                             />
                           </div>
                         ))}
                         {r.scamReplyTo && (
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-[11px] uppercase tracking-wider text-gray-500">{t("subs.repliesTo")}</span>
-                            <SafeDisplay value={r.scamReplyTo} className="font-mono text-xs text-amber-300/70 break-all" />
+                            <span className="font-[family-name:var(--font-mono-ui)] text-[10px] uppercase tracking-[0.09em] text-[var(--faint)]">{t("subs.repliesTo")}</span>
+                            <SafeDisplay value={r.scamReplyTo} className="font-[family-name:var(--font-mono-ui)] text-[12px] text-[var(--caution)]/70 break-all" />
                           </div>
                         )}
                       </div>
@@ -416,11 +428,11 @@ export default function SubmissionsBrowser() {
                       {displayContent && (
                         <SafeDisplay
                           value={displayContent}
-                          className="block text-xs text-gray-400 break-all border-l-2 border-gray-700 pl-2"
+                          className="block text-[13px] text-[var(--text-dim)] leading-relaxed break-all border-l-2 border-[var(--rule)] pl-2.5"
                         />
                       )}
                       {r.description && (
-                        <p className="text-xs text-gray-500 italic">{truncate(r.description, 200)}</p>
+                        <p className="text-[12.5px] text-[var(--faint)] italic leading-relaxed">{truncate(r.description, 200)}</p>
                       )}
                     </div>
 
@@ -428,7 +440,7 @@ export default function SubmissionsBrowser() {
                     <div className="flex items-center justify-between gap-3 pt-0.5">
                       <CopyId id={r.id} />
                       {r.location && (
-                        <p className="text-xs text-gray-600 shrink-0">
+                        <p className="font-[family-name:var(--font-mono-ui)] text-[11px] text-[var(--faint)] shrink-0">
                           {t("subs.reportedFrom", { location: r.location })}
                         </p>
                       )}
@@ -447,7 +459,7 @@ export default function SubmissionsBrowser() {
             <button
               onClick={() => goTo(page - 1)}
               disabled={page === 1 || loading}
-              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-gray-900 border border-gray-700 text-gray-300 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-[var(--ink-2)] border border-[var(--rule)] text-[var(--text-dim)] hover:border-[var(--clear)] hover:text-[var(--clear)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[var(--rule)] disabled:hover:text-[var(--text-dim)] transition-colors"
             >
               ← {t("subs.pagination.prev")}
             </button>
@@ -456,7 +468,7 @@ export default function SubmissionsBrowser() {
             <div className="hidden sm:contents">
               {pageNumbers(page, totalPages).map((p, i) =>
                 p === "…" ? (
-                  <span key={`ellipsis-${i}`} className="px-2 text-gray-500 text-sm select-none">…</span>
+                  <span key={`ellipsis-${i}`} className="px-2 text-[var(--faint)] text-sm select-none">…</span>
                 ) : (
                   <button
                     key={p}
@@ -465,8 +477,8 @@ export default function SubmissionsBrowser() {
                     aria-current={p === page ? "page" : undefined}
                     className={`min-w-[44px] min-h-[44px] py-2.5 text-sm rounded-lg border transition-colors ${
                       p === page
-                        ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
-                        : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500"
+                        ? "bg-[var(--clear)] border-[var(--clear)] text-[var(--ink)] font-semibold"
+                        : "bg-[var(--ink-2)] border-[var(--rule)] text-[var(--text-dim)] hover:border-[var(--clear)] hover:text-[var(--clear)]"
                     }`}
                   >
                     {p}
@@ -476,23 +488,23 @@ export default function SubmissionsBrowser() {
             </div>
 
             {/* Compact page indicator for mobile */}
-            <span className="sm:hidden text-sm text-gray-400 px-3 py-2.5 min-h-[44px] flex items-center" aria-live="polite">
+            <span className="sm:hidden font-[family-name:var(--font-mono-ui)] text-sm text-[var(--text-dim)] px-3 py-2.5 min-h-[44px] flex items-center tabular-nums" aria-live="polite">
               {page} / {totalPages}
             </span>
 
             <button
               onClick={() => goTo(page + 1)}
               disabled={page === totalPages || loading}
-              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-gray-900 border border-gray-700 text-gray-300 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-[var(--ink-2)] border border-[var(--rule)] text-[var(--text-dim)] hover:border-[var(--clear)] hover:text-[var(--clear)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[var(--rule)] disabled:hover:text-[var(--text-dim)] transition-colors"
             >
               {t("subs.pagination.next")} →
             </button>
           </nav>
         )}
 
-        <p className="text-center text-sm text-gray-400 pb-4">
+        <p className="text-center text-sm text-[var(--text-dim)] pb-4">
           {t("subs.footer.note")}{" "}
-          <Link href="/" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium">
+          <Link href="/" className="text-[var(--clear)] hover:underline underline-offset-2 font-medium">
             {t("subs.footer.cta")}
           </Link>
         </p>

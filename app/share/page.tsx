@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
  */
 export default function SharePage() {
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-5">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
           Shared with Just Checking, Mate
@@ -44,16 +44,23 @@ export default function SharePage() {
           would run CheckFlow's history/popstate effects twice across the swap.
           An inert placeholder of roughly the right height avoids both, and
           keeps the layout from jumping. */}
-      <Suspense
-        fallback={
-          <div
-            className="h-64 rounded-2xl border border-gray-800 bg-gray-900/60 animate-pulse"
-            aria-hidden="true"
-          />
-        }
-      >
-        <ShareTargetSeed />
-      </Suspense>
+      {/* No width cap here: CheckStage caps itself, and it needs to cap the
+          input and the verdict differently — a textarea spanning 1180px is
+          worse to paste into than one at a readable width, but the verdict
+          wants more room than the box does. A cap on this wrapper would sit
+          outside that decision and clamp both to the narrower of the two. */}
+      <div>
+        <Suspense
+          fallback={
+            <div
+              className="h-64 rounded-2xl border border-[var(--rule)] bg-[var(--ink-2)] animate-pulse"
+              aria-hidden="true"
+            />
+          }
+        >
+          <ShareTargetSeed />
+        </Suspense>
+      </div>
     </main>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AnalyzedIdentifier, ScamType } from "@justcheckingmate/engine/scamDetector";
 import { detectType } from "@justcheckingmate/engine/detectType";
 import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSanitizer";
@@ -10,7 +9,6 @@ import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
-import { bold } from "@/lib/richText";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
@@ -19,13 +17,19 @@ import VerdictBadge from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
 import ReportForm from "./ReportForm";
 
-type Step = "input" | "result" | "report";
+/**
+ * Which part of the flow is on screen. Exported because CheckStage lifts this
+ * one piece of state out — the layout around the flow changes once a check has
+ * run, and the forwarding panel it needs to hide is CheckFlow's sibling.
+ */
+export type CheckStep = "input" | "result" | "report";
+type Step = CheckStep;
 type Verdict = AnalyzedIdentifier["result"]["verdict"];
 
 // Inline stroke icons for the upload actions — kept local (no icon-library
 // dependency for three glyphs). They inherit the button's text colour via
 // currentColor, so hover/disabled states need no extra wiring.
-const ICON = { className: "w-6 h-6", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+const ICON = { className: "w-[15px] h-[15px]", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
 
 function CameraIcon() {
   return (
@@ -55,18 +59,9 @@ function EmailFileIcon() {
   );
 }
 
-function ForwardIcon() {
-  return (
-    <svg {...ICON}>
-      <path d="M3 17v-2a6 6 0 0 1 6-6h11" />
-      <path d="m16 5 4 4-4 4" />
-    </svg>
-  );
-}
-
 function SpinnerIcon() {
   return (
-    <svg {...ICON} className="w-6 h-6 animate-spin">
+    <svg {...ICON} className="w-[15px] h-[15px] animate-spin">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
   );
@@ -82,8 +77,6 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
 // Forward-to-us address, shown only once inbound mail is live end-to-end. The
 // flag is read at build time (NEXT_PUBLIC_*), so an unconfigured deploy never
 // advertises a dead inbox. Address is overridable for staging/other domains.
-const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
-const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.com";
 
 // Shared chrome for the four capture options (take photo / upload image /
 // upload .eml / forward). One constant rather than the same 200-character class
@@ -94,11 +87,44 @@ const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justch
 // plenty of horizontal room), and icon above centred text from sm up, where
 // three columns leave each option only ~200px and a side-by-side layout would
 // squeeze the description into a narrow ragged column.
+// Chips in the card footer, on the paper surface — so these are light-surface
+// colours, not the page palette. Secondary to the submit beside them.
 const CAPTURE_OPTION =
-  "flex items-center gap-3 text-left px-4 py-3.5 min-h-[64px] " +
-  "sm:flex-col sm:items-center sm:justify-center sm:gap-2 sm:text-center sm:px-3 sm:py-5 sm:min-h-[112px] " +
-  "border-2 border-dashed border-gray-600 rounded-xl text-gray-400 " +
-  "hover:border-emerald-500 hover:text-emerald-400 transition-colors";
+  "inline-flex items-center gap-2 rounded-lg border border-[#D9D5CC] bg-white " +
+  "px-3 py-2 min-h-[40px] text-[13px] font-medium text-[#3D4654] " +
+  "hover:border-[#A8B0BC] transition-colors " +
+  "disabled:opacity-45 disabled:cursor-not-allowed max-sm:w-full max-sm:justify-start";
+
+// The camera is offered only where one exists. A desktop webcam is not how
+// anyone photographs a scam text they were sent, and the picker it opens is a
+// dead end. Feature-detecting the pointer beats sniffing the user agent.
+const CAMERA_QUERY = "(hover: none) and (pointer: coarse)";
+
+function subscribeCamera(cb: () => void) {
+  const mq = window.matchMedia(CAMERA_QUERY);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+function useHasCamera() {
+  // useSyncExternalStore is the right primitive for a media query: it reads on
+  // every render without a state-in-effect round trip, and its server snapshot
+  // (false) means the camera button is absent from the SSR markup rather than
+  // flashing in and out on hydration.
+  return useSyncExternalStore(
+    subscribeCamera,
+    () => window.matchMedia(CAMERA_QUERY).matches,
+    () => false,
+  );
+}
+
+// The image pipeline's real stages, in the order the code runs them.
+const STAGES = ["qr", "ocr-local", "ocr-server"] as const;
+const STAGE_LABEL = {
+  "qr": "check.stage.qr",
+  "ocr-local": "check.stage.ocrLocal",
+  "ocr-server": "check.stage.ocrServer",
+} as const satisfies Record<(typeof STAGES)[number], MessageKey>;
 
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply
@@ -132,9 +158,16 @@ interface CheckFlowProps {
    * identical either way — this is attribution only, never behaviour.
    */
   surface?: "web" | "share";
+  /**
+   * Called whenever the visible step changes, including on browser Back. Lets a
+   * parent lay out around the flow without owning the flow's own state.
+   */
+  onStepChange?: (step: CheckStep) => void;
+  /** Called with the content a check was actually run against. */
+  onChecked?: (content: string) => void;
 }
 
-export default function CheckFlow({ initialContent = "", surface = "web" }: CheckFlowProps = {}) {
+export default function CheckFlow({ initialContent = "", surface = "web", onStepChange, onChecked }: CheckFlowProps = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [step, setStep] = useState<Step>("input");
@@ -145,12 +178,16 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
   const [checkLoading, setCheckLoading] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
+  // Which stage the image pipeline is actually in. These map 1:1 onto the
+  // branches in handleImageUpload — there is no stage here that the code does
+  // not really pass through, and the paste path deliberately has none because
+  // it is a single request.
+  const [stage, setStage] = useState<null | "qr" | "ocr-local" | "ocr-server">(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   // Forward-address copy confirmation. Copying is the one part of forwarding the
   // web can actually do for someone — the forward itself happens in their mail
   // app, which no page can reach into.
-  const [addressCopied, setAddressCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Full email-source analysis (unwrap → headers → identity flags → tracking),
   // populated in runCheck. null until a check runs. Everything the result page
@@ -195,12 +232,21 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
     prevStep.current = step;
   }, [step]);
 
+  // Tell the parent which step is showing. Done in an effect on `step` rather
+  // than inside goForward so browser Back — which moves the step via popstate,
+  // not through goForward — is reported too. A parent laying out around the
+  // flow must see every transition, not only the forward ones.
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [step, onStepChange]);
+
   // Image → QR decode (client-side) first, OCR fallback via /api/ocr.
   async function handleImageUpload(file: File) {
     setUploadError(null);
     setUploadLoading(true);
     try {
       let qrData: string | null = null;
+      setStage("qr");
       try {
         const bitmap = await createImageBitmap(file);
         const canvas = document.createElement("canvas");
@@ -222,6 +268,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       // WASM core, or when the local attempt fails outright.
       let cleaned: string | null = null;
       if (canRunClientOcr()) {
+        setStage("ocr-local");
         try {
           const { recogniseImageText } = await import("@/lib/clientOcr");
           cleaned = await recogniseImageText(file);
@@ -234,6 +281,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       }
 
       if (cleaned === null) {
+        setStage("ocr-server");
         const formData = new FormData();
         formData.append("image", file);
         const controller = new AbortController();
@@ -267,6 +315,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       reportFailure("upload", err);
     } finally {
       setUploadLoading(false);
+      setStage(null);
       if (imageRef.current) imageRef.current.value = "";
       if (cameraRef.current) cameraRef.current.value = "";
     }
@@ -328,6 +377,9 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       // message, not the forwarder's. Same path as ReportForm and /api/inbound.
       setEmailAnalysis(analyseEmailSource(content));
       setShareCopied(false);
+      // Report what was checked, not what the box holds: a region re-check
+      // re-runs against the same content, and the strip should keep naming it.
+      onChecked?.(content);
       if (!overrideRegion) goForward("result");
     } catch (err) {
       setCheckError(t("check.serverError"));
@@ -363,19 +415,8 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
     }
   }
 
-  async function copyInboundAddress() {
-    try {
-      await navigator.clipboard.writeText(INBOUND_ADDRESS);
-      setAddressCopied(true);
-      setTimeout(() => setAddressCopied(false), 2500);
-    } catch {
-      // Clipboard unavailable (older browser, insecure origin) — the address is
-      // rendered as selectable text right beside the button, so there is still
-      // a way through without it.
-    }
-  }
-
   const busy = uploadLoading || checkLoading;
+  const hasCamera = useHasCamera();
 
   // ── Report step ─────────────────────────────────────────────────────────────
   if (step === "report") {
@@ -394,11 +435,11 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       : content;
     const primary = results[0];
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.report")}</h2>
         <button
           onClick={() => history.back()}
-          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-gray-800 text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
+          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-[var(--rule)] text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
         >
           <span aria-hidden="true">‹</span> {t("check.back.results")}
         </button>
@@ -426,14 +467,11 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
   // ── Result step ───────────────────────────────────────────────────────────────
   if (step === "result") {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      // No back link in this header any more: the checked-strip above the
+      // results carries it, alongside the record of what was checked, so the
+      // two live together instead of the affordance floating on its own.
+      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
-        <button
-          onClick={() => history.back()}
-          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-gray-800 text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
-        >
-          <span aria-hidden="true">‹</span> {t("check.back.edit")}
-        </button>
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
             // Email source can parse to a sender analysis even when there are no
@@ -470,7 +508,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
                     small status dot. No competing card colours. */}
-                <div className="space-y-2 border-t border-gray-800 pt-4">
+                <div className="space-y-2 border-t border-[var(--rule)] pt-4">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                     {t("verdict.breakdown.heading")}
                   </div>
@@ -514,7 +552,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
                           key={r.esp}
                           href={r.href}
                           {...(r.kind === "url" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-[var(--caution)] hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
                         >
                           <span aria-hidden="true">🚩</span>
                           {t("verdict.breakdown.reportEsp", { esp: r.esp })}
@@ -540,7 +578,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
               this was email source that came up clean. Findings carry their own
               copy; the values they surface are already non-clickable text. */}
           {trackingReport && (trackingReport.hasTracking || hasSender) && (
-            <div className="space-y-2 border-t border-gray-800 pt-4">
+            <div className="space-y-2 border-t border-[var(--rule)] pt-4">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 {t("tracking.heading")}
               </div>
@@ -574,7 +612,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
             const { headers, identityFlags: flags } = emailAnalysis;
             const authSummary = summariseAuth(headers);
             return (
-              <div className="space-y-2 border-t border-gray-800 pt-4">
+              <div className="space-y-2 border-t border-[var(--rule)] pt-4">
                 <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                   {t("email.analysis.heading")}
                 </div>
@@ -625,7 +663,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
                 onClick={() => goForward("report")}
                 className={`w-full py-3 px-6 font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2 ${
                   clean
-                    ? "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                    ? "bg-[var(--ink-3)] hover:bg-gray-700 text-gray-300 border border-[var(--rule)]"
                     : "bg-red-800 hover:bg-red-700 text-white"
                 }`}
               >
@@ -637,7 +675,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
           {results.length > 0 && (
             <button
               onClick={shareResults}
-              className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-[var(--ink-3)] hover:bg-gray-700 border border-[var(--rule)] flex items-center justify-center gap-2"
             >
               {shareCopied ? t("check.shareCopied") : t("check.share")}
             </button>
@@ -649,7 +687,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
 
   // ── Input step ──────────────────────────────────────────────────────────────
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
+    <div className="space-y-4">
       <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.input")}</h2>
 
       {/* Hidden file inputs */}
@@ -660,124 +698,169 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      {/* Ways to hand this page something to check, most-direct first: take a
-          photo, upload an image, upload an .eml. One column on a phone (full-
-          width tap targets, and the descriptions need the room); all three
-          across in one row from sm up. Forwarding is deliberately NOT here —
-          see the block below the submit button. Per-field capture help lives on
-          the Learn page, linked below. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <button
-          type="button"
-          onClick={() => cameraRef.current?.click()}
-          disabled={busy}
-          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <span className="shrink-0"><CameraIcon /></span>
-          <span className="min-w-0 sm:w-full">
-            <span className="block font-medium text-sm">{t("check.takePhoto")}</span>
-            <span className="block text-xs text-gray-500 leading-tight">{t("check.takePhotoDesc")}</span>
+      {/* The check card is deliberately light on a dark page: it reads as paper,
+          the thing you put a message onto. Pasting is the primary action, so the
+          textarea leads and the capture options sit in the footer beside the
+          submit — the old arrangement put three bordered cards above the box and
+          an "or paste below" divider under them, which made paste the fallback. */}
+      <div
+        className={`bg-[var(--paper)] text-[var(--ink)] rounded-2xl overflow-hidden relative shadow-[0_18px_44px_-20px_rgba(0,0,0,0.6)] transition-shadow ${
+          dragOver ? "ring-2 ring-[var(--clear)]" : ""
+        }`}
+        onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+        onDrop={handleDrop}
+      >
+        {/* Names the surface and states the privacy claim at the point of input,
+            which is where the question is actually being asked. */}
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--paper-dim)]">
+          <span className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium tracking-[0.09em] uppercase text-[#5D6675]">
+            {t("check.contentLabel")}
           </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => imageRef.current?.click()}
-          disabled={busy}
-          aria-busy={uploadLoading}
-          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
-          <span className="min-w-0 sm:w-full">
-            <span className="block font-medium text-sm">{t("check.uploadImage")}</span>
-            <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadImageDesc")}</span>
+          <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-semibold tracking-[0.03em] text-[#00805B]">
+            <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--clear)] shrink-0" />
+            {t("check.onDevice")}
           </span>
-        </button>
-        {/* .eml upload — labelled for clarity; described as advanced to de-prioritise for most users */}
-        <button
-          type="button"
-          onClick={() => emlRef.current?.click()}
-          disabled={busy}
-          className={`${CAPTURE_OPTION} disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <span className="shrink-0"><EmailFileIcon /></span>
-          <span className="min-w-0 sm:w-full">
-            <span className="block font-medium text-sm">{t("check.uploadEml")}</span>
-            <span className="block text-xs text-gray-500 leading-tight">{t("check.uploadEmlDesc")}</span>
-          </span>
-        </button>
-      </div>
-
-      {/* Quiet pointer to the full capture guide on Learn — replaces the inline
-          expandables that crowded this flow. */}
-      <p className="text-xs text-gray-500 text-center">
-        <Link href="/learn#using-this-tool" className="text-emerald-400/90 hover:text-emerald-300 underline underline-offset-2">
-          {t("check.help.link")}
-        </Link>
-      </p>
-
-      {/* OCR can legitimately take up to a minute on a cold start — say so,
-          and announce it to screen readers, so a long wait doesn't read as a hang. */}
-      {uploadLoading && (
-        <p role="status" className="text-sm text-gray-400 text-center">
-          {t("check.ocr.working")}
-        </p>
-      )}
-
-      {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
-
-      <div className="flex items-center gap-3" aria-hidden="true">
-        <div className="flex-1 h-px bg-gray-700" />
-        <span className="text-xs text-gray-500">{t("check.orPaste")}</span>
-        <div className="flex-1 h-px bg-gray-700" />
-      </div>
-
-      <div>
-        <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
-        {/* Drop target: dragging a .eml / image / source file onto the textarea
-            fills it in. dragenter/over must preventDefault to mark a valid drop
-            zone; the overlay only appears mid-drag so it never blocks typing. */}
-        <div
-          className="relative"
-          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
-          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
-          onDrop={handleDrop}
-        >
-          <textarea
-            id="check-content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={t("check.placeholder")}
-            rows={5}
-            className={`w-full bg-gray-950 border rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-base font-mono transition-colors ${
-              dragOver ? "border-emerald-500 border-dashed" : "border-gray-700"
-            }`}
-          />
-          {dragOver && (
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 flex items-center justify-center rounded-xl bg-gray-950/90 border-2 border-dashed border-emerald-500 pointer-events-none text-emerald-300 text-sm font-medium gap-2"
-            >
-              <span>📨</span> {t("check.dropHere")}
-            </div>
-          )}
         </div>
-        {/* Paste guidance for users who aren't sure how to copy on mobile */}
-        {!content && (
-          <p className="mt-1.5 text-xs text-gray-500">
-            {t("check.pasteHint")}{" "}
-            <span className="hidden sm:inline">{t("check.dropHint")}</span>
-          </p>
+
+        <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
+        <textarea
+          id="check-content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={t("check.placeholder")}
+          rows={4}
+          className="w-full min-h-[118px] px-4 py-4 bg-transparent text-[var(--ink)] placeholder-[#8A93A1] border-0 resize-y text-base leading-relaxed focus:outline-none block"
+        />
+
+        {/* Capture options and the submit share one bar: they are all ways to
+            start the same check, and the chips are secondary to pasting. */}
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-[var(--paper-dim)] bg-[#F5F3EE]">
+          <button
+            type="button"
+            onClick={() => imageRef.current?.click()}
+            disabled={busy}
+            aria-busy={uploadLoading}
+            className={CAPTURE_OPTION}
+          >
+            <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
+            {t("check.uploadImage")}
+          </button>
+
+          {hasCamera && (
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              disabled={busy}
+              className={CAPTURE_OPTION}
+            >
+              <span className="shrink-0"><CameraIcon /></span>
+              {t("check.takePhoto")}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => emlRef.current?.click()}
+            disabled={busy}
+            className={CAPTURE_OPTION}
+          >
+            <span className="shrink-0"><EmailFileIcon /></span>
+            {t("check.uploadEml")}
+          </button>
+
+          <button
+            onClick={() => runCheck()}
+            disabled={checkLoading || !content.trim()}
+            aria-busy={checkLoading}
+            className={`ml-auto max-sm:w-full max-sm:ml-0 inline-flex items-center justify-center gap-2.5 rounded-[9px] px-5 py-2.5 font-semibold text-[15px] transition-colors ${
+              checkLoading
+                ? "bg-[#00825C] text-[#EAF7F2] cursor-progress"
+                : "bg-[var(--ink)] text-white hover:bg-[#232F42] disabled:opacity-60 disabled:cursor-not-allowed"
+            }`}
+          >
+            {checkLoading && (
+              <span aria-hidden="true" className="w-4 h-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+            )}
+            {checkLoading ? t("check.analysing") : t("check.submit")}
+          </button>
+        </div>
+
+        {dragOver && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 grid place-items-center bg-[rgba(0,166,118,0.13)] backdrop-blur-[2px] pointer-events-none font-[family-name:var(--font-mono-ui)] text-[13px] tracking-[0.06em] uppercase font-semibold text-[#00674A]"
+          >
+            {t("check.dropHere")}
+          </div>
         )}
       </div>
 
-      <button
-        onClick={() => runCheck()}
-        disabled={checkLoading || !content.trim()}
-        aria-busy={checkLoading}
-        className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold rounded-lg transition-colors text-base uppercase tracking-wide"
-      >
-        {checkLoading ? t("check.analysing") : t("check.submit")}
-      </button>
+      {/* Paste guidance for users who aren't sure how to copy on mobile */}
+      {!content && (
+        <p className="text-xs text-[var(--faint)] px-0.5">
+          {t("check.pasteHint")}{" "}
+          <span className="hidden sm:inline">{t("check.dropHint")}</span>
+        </p>
+      )}
+
+      {/* What the image pipeline is actually doing, stage by stage. Each row
+          maps onto a real branch in handleImageUpload — nothing here is a
+          decorative step. OCR can take up to a minute on a cold start, so
+          naming the current stage stops a long wait reading as a hang.
+
+          The paste path deliberately has no stage list: it is a single request
+          to /api/check, and inventing steps for it would misrepresent the work. */}
+      {uploadLoading && stage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-xl border border-[var(--rule)] bg-[var(--ink-2)] overflow-hidden"
+        >
+          <ul className="py-1.5">
+            {STAGES.map((sKey) => {
+              const idx = STAGES.indexOf(sKey);
+              const cur = STAGES.indexOf(stage);
+              // The two OCR stages are alternatives, not a sequence: only the
+              // one actually taken is shown.
+              if (sKey === "ocr-local" && stage === "ocr-server") return null;
+              if (sKey === "ocr-server" && stage !== "ocr-server") return null;
+              const state = idx < cur ? "done" : idx === cur ? "active" : "wait";
+              return (
+                <li
+                  key={sKey}
+                  className={`grid grid-cols-[20px_1fr] gap-3 items-center px-4 py-2 text-sm ${
+                    state === "active"
+                      ? "text-[var(--foreground)] font-medium"
+                      : state === "done"
+                        ? "text-[var(--text-dim)]"
+                        : "text-[var(--faint)]"
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`w-3.5 h-3.5 rounded-full border-[1.5px] grid place-items-center ${
+                      state === "active"
+                        ? "border-[var(--clear)] border-t-transparent animate-spin"
+                        : state === "done"
+                          ? "border-[var(--clear)] bg-[var(--clear)]/20"
+                          : "border-[var(--ink-3)]"
+                    }`}
+                  />
+                  <span>{t(STAGE_LABEL[sKey])}</span>
+                </li>
+              );
+            })}
+          </ul>
+          {/* Where the work is happening. The local and server paths make
+              materially different privacy promises, so the line changes. */}
+          <p className="px-4 py-2.5 border-t border-[var(--rule)] text-xs text-[var(--faint)] bg-black/15">
+            {t(stage === "ocr-server" ? "check.stage.uploaded" : "check.stage.onDevice")}
+          </p>
+        </div>
+      )}
+
+      {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
 
       {checkError && (
         <div role="alert" className="bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
@@ -797,45 +880,6 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
           promising "Forward" that opens an empty email is worse than no button,
           so we do the one thing the page genuinely can (copy the address) and
           state plainly where the rest happens. */}
-      {INBOUND_ENABLED && (
-        <div className="border-t border-gray-800 pt-5 space-y-2">
-          {/* Heading and payoff on one line — the payoff is four words and does
-              not earn a paragraph of its own. */}
-          <p className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <span className="shrink-0 text-gray-500"><ForwardIcon /></span>
-            <span>
-              {t("check.forward.heading")}{" "}
-              <span className="font-normal text-gray-400">{t("check.forward.body")}</span>
-            </span>
-          </p>
-
-          {/* The app flags tracking pixels as a red flag, so it must not tell
-              people to trigger one. Opening a scam email loads its pixel and
-              confirms the address is live; forwarding from the message list
-              doesn't. Guidance, not a prerequisite — someone who already opened
-              it still needs the check. */}
-          <p className="text-xs text-amber-300/90 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
-            {bold(t("check.forward.noopen"))}
-          </p>
-
-          <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2">
-            {/* Selectable text, so the address is usable even when the clipboard
-                API isn't (insecure origin, older browser, denied permission). */}
-            <code className="flex-1 min-w-0 truncate text-sm text-emerald-400 select-all">
-              {INBOUND_ADDRESS}
-            </code>
-            <button
-              type="button"
-              onClick={copyInboundAddress}
-              className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
-            >
-              {addressCopied ? t("check.forward.copied") : t("check.forward.copy")}
-            </button>
-          </div>
-
-          <p className="text-[11px] text-gray-500">{t("check.forward.note")}</p>
-        </div>
-      )}
     </div>
   );
 }

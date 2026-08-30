@@ -111,9 +111,18 @@ export interface ThreatEntry {
   lastSeen: string;
   /** One or two sentences: what is happening, in the second person. */
   summary: string;
-  /** Verbatim-style lures. Concrete strings beat description for recognition. */
+  /**
+   * Verbatim-style lures. Concrete strings beat description for recognition.
+   *
+   * Authored for every entry but not currently rendered: the radar's rows show
+   * title, channel, coverage, summary and provenance, because printing lures
+   * and advice for all 28 is what made the page 17,000px on a phone. Kept
+   * deliberately — it is researched content, it costs nothing at runtime, and
+   * it is the obvious source for a per-entry detail view or an email reply. A
+   * test asserts every entry has some, so it cannot rot unnoticed.
+   */
   lures: string[];
-  /** A verifiable habit, not "be careful". Same contract as ScamSeason.advice. */
+  /** A verifiable habit, not "be careful". Same contract as ScamSeason.advice. Also unrendered — see `lures`. */
   advice: string;
   /**
    * What the detector does about it — one sentence, in user-facing terms.
@@ -789,11 +798,6 @@ export function radarForRegion(code: RegionCode): ThreatEntry[] {
   return isRadarRegion(code) ? RADARS[code] : [];
 }
 
-/** Whether a region has an authored radar — drives nav/link visibility. */
-export function hasRadar(code: RegionCode): boolean {
-  return radarForRegion(code).length > 0;
-}
-
 /** Entries by status, in authored order. */
 export function threatsByStatus(code: RegionCode, status: RadarStatus): ThreatEntry[] {
   return radarForRegion(code).filter((t) => t.status === status);
@@ -818,6 +822,36 @@ export function uncoveredThreats(code: RegionCode): ThreatEntry[] {
   return radarForRegion(code).filter(
     (t) => t.coverage === "partial" || t.coverage === "none",
   );
+}
+
+/** The channel filter's selection: a channel, or every channel. */
+export type ChannelFilterValue = RadarChannel | "all";
+
+/**
+ * Entries matching the selected channel. "all" passes everything through.
+ *
+ * Pure and here rather than inline in the component so it can be tested without
+ * a browser — the same reason lib/toc.ts holds the table-of-contents selection.
+ */
+export function filterByChannel(
+  entries: ThreatEntry[],
+  channel: ChannelFilterValue,
+): ThreatEntry[] {
+  return channel === "all" ? entries : entries.filter((e) => e.channel === channel);
+}
+
+/**
+ * How many entries each channel has in this region.
+ *
+ * Counted across the whole board rather than the filtered view, so the numbers
+ * on the filter buttons stay put as the reader switches between them. Every
+ * channel is present in the result, including those with zero — the caller
+ * decides whether to offer an empty one.
+ */
+export function channelCounts(code: RegionCode): Record<RadarChannel, number> {
+  const counts: Record<RadarChannel, number> = { sms: 0, email: 0, phone: 0, web: 0, mixed: 0 };
+  for (const entry of radarForRegion(code)) counts[entry.channel] += 1;
+  return counts;
 }
 
 /** Counts behind the at-a-glance line. Derived so they cannot drift. */

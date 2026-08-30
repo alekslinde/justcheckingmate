@@ -18,6 +18,16 @@ beforeEach(() => {
   vi.mocked(getCheckEvents).mockResolvedValue([]);
 });
 
+// The UTC day key `days` back, inclusive of today — the same arithmetic the
+// route does. Compared as a key rather than as a rounded duration: `since` is a
+// date-only string, which Date.parse reads as UTC midnight, so subtracting it
+// from Date.now() and rounding gave 27 or 28 depending on what time of day the
+// suite ran. That made these two tests pass all morning UTC and fail all
+// afternoon, which is a broken test rather than a broken route.
+function expectedSince(days: number): string {
+  return new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+}
+
 describe("GET /api/stats", () => {
   it("returns only the public totals by default", async () => {
     const body = await (await GET(req("https://x/api/stats"))).json();
@@ -100,16 +110,14 @@ describe("GET /api/stats", () => {
     const since = vi.mocked(getCheckEvents).mock.calls[0][0] as string;
     expect(since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
-    const spanDays = Math.round((Date.now() - Date.parse(since)) / 86_400_000);
-    expect(spanDays).toBe(27); // inclusive bound: 28 days counted
+    expect(since).toBe(expectedSince(28));
   });
 
   it("honours a valid ?days=", async () => {
     await GET(req("https://x/api/stats?breakdown=1&days=7"));
 
     const since = vi.mocked(getCheckEvents).mock.calls[0][0] as string;
-    const spanDays = Math.round((Date.now() - Date.parse(since)) / 86_400_000);
-    expect(spanDays).toBe(6);
+    expect(since).toBe(expectedSince(7));
   });
 
   it.each(["0", "-3", "1.5", "9999", "abc", ""])(

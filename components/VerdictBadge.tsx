@@ -1,16 +1,73 @@
 "use client";
 
 import { CheckResult, PhoneIntel } from "@justcheckingmate/engine/scamDetector";
+import type { Signal } from "@justcheckingmate/engine/engineTypes";
+import { matchedTactics, TACTIC_IDS } from "@/lib/signalTactics";
 import { defangText } from "@justcheckingmate/engine/urlSanitizer";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 
-const VERDICTS = {
-  safe:        { icon: "✅", bg: "bg-green-900/40",  border: "border-green-700",  text: "text-green-400",  bar: "bg-green-500" },
-  suspicious:  { icon: "⚠️", bg: "bg-yellow-900/40", border: "border-yellow-700", text: "text-yellow-400", bar: "bg-yellow-500" },
-  likely_scam: { icon: "🚨", bg: "bg-red-900/40",    border: "border-red-700",    text: "text-red-400",    bar: "bg-red-500" },
-  unknown:     { icon: "❓", bg: "bg-gray-800",      border: "border-gray-600",   text: "text-gray-300",   bar: "bg-gray-500" },
+// Verdict colour comes from the tokens, and only from them: red is the verdict
+// colour, amber is reserved for statements about our own coverage. "unknown"
+// means we could not reach a view — that is a limit of ours, not a finding
+// about the message — so it takes the neutral rule rather than a warning hue.
+const VERDICTS: Record<
+  CheckResult["verdict"],
+  { dot: string; text: string; bar: string; edge: string }
+> = {
+  safe:        { dot: "bg-[var(--clear)]",   text: "text-[var(--clear)]",     bar: "bg-[var(--clear)]",   edge: "border-[var(--clear)]/35" },
+  suspicious:  { dot: "bg-[var(--caution)]", text: "text-[var(--caution)]",   bar: "bg-[var(--caution)]", edge: "border-[var(--caution)]/35" },
+  likely_scam: { dot: "bg-[var(--scam)]",    text: "text-[var(--scam-text)]", bar: "bg-[var(--scam)]",    edge: "border-[var(--scam)]/35" },
+  unknown:     { dot: "bg-[var(--faint)]",   text: "text-[var(--text-dim)]",  bar: "bg-[var(--faint)]",   edge: "border-[var(--rule)]" },
 };
+
+const EYEBROW =
+  "font-[family-name:var(--font-mono-ui)] text-[10.5px] font-medium uppercase tracking-[0.11em] text-[var(--faint)]";
+
+const SOURCE_KEY: Record<Signal["source"], MessageKey> = {
+  link:       "verdict.evidence.source.link",
+  message:    "verdict.evidence.source.message",
+  sender:     "verdict.evidence.source.sender",
+  phone:      "verdict.evidence.source.phone",
+  attachment: "verdict.evidence.source.attachment",
+  score:      "verdict.evidence.source.score",
+};
+
+// ── Evidence ──────────────────────────────────────────────────────────────────
+
+// One row per signal, each showing what it contributed. Publishing the weights
+// is the point: detection is open source precisely so people can check our
+// reasoning, and a score with no breakdown asks to be taken on faith.
+function Evidence({ signals }: { signals: Signal[] }) {
+  const { t } = useLang();
+  if (!signals.length) return null;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 mb-2">
+        <h3 className={EYEBROW}>{t("verdict.evidence.heading")}</h3>
+      </div>
+      <ul className="grid gap-px bg-[var(--rule)] rounded-lg overflow-hidden border border-[var(--rule)]">
+        {signals.map((s, i) => (
+          <li key={i} className="bg-[var(--ink-2)] px-3.5 py-2.5 flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className={`${EYEBROW} mb-0.5`}>{t(SOURCE_KEY[s.source])}</div>
+              <p className="text-[13.5px] leading-relaxed text-[var(--foreground)]">{defangText(s.text)}</p>
+            </div>
+            {/* Tabular figures so the column of weights lines up as a column. */}
+            <span
+              className={`shrink-0 font-[family-name:var(--font-mono-ui)] text-[12.5px] tabular-nums ${
+                s.points > 0 ? "text-[var(--caution)]" : s.points < 0 ? "text-[var(--clear)]" : "text-[var(--faint)]"
+              }`}
+            >
+              {s.points > 0 ? `+${s.points}` : s.points < 0 ? `${s.points}` : "—"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // ── Action steps shown for actionable verdicts ────────────────────────────────
 
@@ -31,18 +88,21 @@ function ActionSteps({ verdict }: { verdict: "suspicious" | "likely_scam" }) {
           t("verdict.suspicious.step3"),
         ];
 
-  const accentCls = verdict === "likely_scam" ? "text-red-400" : "text-yellow-400";
-  const bgCls     = verdict === "likely_scam"
-    ? "bg-red-950/40 border-red-900/60"
-    : "bg-yellow-950/30 border-yellow-900/60";
+  const accentCls = verdict === "likely_scam" ? "text-[var(--scam-text)]" : "text-[var(--caution)]";
+  const edgeCls   = verdict === "likely_scam" ? "border-[var(--scam)]/30" : "border-[var(--caution)]/30";
 
   return (
-    <div className={`rounded-lg border p-4 space-y-2 ${bgCls}`}>
-      <p className={`text-sm font-bold ${accentCls}`}>{heading}</p>
-      <ol className="space-y-1.5 list-none">
+    <div className={`rounded-lg border ${edgeCls} bg-[var(--ink)] p-4 space-y-2.5`}>
+      <p className={`${EYEBROW} ${accentCls}`}>{heading}</p>
+      <ol className="space-y-2 list-none">
         {steps.map((step, i) => (
-          <li key={i} className="flex items-start gap-2.5 text-sm text-gray-100">
-            <span className={`shrink-0 font-bold ${accentCls}`} aria-hidden="true">{i + 1}.</span>
+          <li key={i} className="flex items-start gap-2.5 text-[13.5px] leading-relaxed text-[var(--foreground)]">
+            <span
+              className={`shrink-0 font-[family-name:var(--font-mono-ui)] tabular-nums ${accentCls}`}
+              aria-hidden="true"
+            >
+              {i + 1}
+            </span>
             <span>{step}</span>
           </li>
         ))}
@@ -53,22 +113,22 @@ function ActionSteps({ verdict }: { verdict: "suspicious" | "likely_scam" }) {
 
 // ── Phone intelligence panel ──────────────────────────────────────────────────
 
-const LINE_TYPE_META: Record<PhoneIntel["lineType"], { icon: string; labelKey: MessageKey }> = {
-  mobile:       { icon: "📱", labelKey: "phone.lineType.mobile" },
-  fixed:        { icon: "☎️",  labelKey: "phone.lineType.fixed" },
-  voip_likely:  { icon: "🌐", labelKey: "phone.lineType.voip" },
-  premium:      { icon: "💸", labelKey: "phone.lineType.premium" },
-  freecall:     { icon: "📞", labelKey: "phone.lineType.freecall" },
-  shared_cost:  { icon: "📞", labelKey: "phone.lineType.shared" },
-  emergency:    { icon: "🚨", labelKey: "phone.lineType.emergency" },
-  unknown:      { icon: "❓", labelKey: "phone.lineType.unknown" },
+const LINE_TYPE_META: Record<PhoneIntel["lineType"], { labelKey: MessageKey }> = {
+  mobile:       { labelKey: "phone.lineType.mobile" },
+  fixed:        { labelKey: "phone.lineType.fixed" },
+  voip_likely:  { labelKey: "phone.lineType.voip" },
+  premium:      { labelKey: "phone.lineType.premium" },
+  freecall:     { labelKey: "phone.lineType.freecall" },
+  shared_cost:  { labelKey: "phone.lineType.shared" },
+  emergency:    { labelKey: "phone.lineType.emergency" },
+  unknown:      { labelKey: "phone.lineType.unknown" },
 };
 
 const SPOOFING_RISK_STYLE: Record<PhoneIntel["spoofingRisk"], { labelKey: MessageKey; cls: string }> = {
-  low:       { labelKey: "phone.risk.low",      cls: "text-green-400" },
-  medium:    { labelKey: "phone.risk.medium",   cls: "text-yellow-400" },
-  high:      { labelKey: "phone.risk.high",     cls: "text-orange-400" },
-  very_high: { labelKey: "phone.risk.veryHigh", cls: "text-red-400" },
+  low:       { labelKey: "phone.risk.low",      cls: "text-[var(--clear)]" },
+  medium:    { labelKey: "phone.risk.medium",   cls: "text-[var(--caution)]" },
+  high:      { labelKey: "phone.risk.high",     cls: "text-[var(--caution)]" },
+  very_high: { labelKey: "phone.risk.veryHigh", cls: "text-[var(--scam-text)]" },
 };
 
 function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
@@ -77,49 +137,47 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
   const risk = SPOOFING_RISK_STYLE[intel.spoofingRisk];
 
   return (
-    <div className="border-t border-gray-700 pt-4 space-y-3">
-      <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+    <div className="border-t border-[var(--rule)] pt-4 space-y-3">
+      <div className={EYEBROW}>
         {t("phone.heading")}
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.type")}</div>
-          <div className="text-gray-200 text-sm">{lt.icon} {t(lt.labelKey)}</div>
+        <div className="rounded-lg border border-[var(--rule)] bg-[var(--ink)] p-3 space-y-0.5">
+          <div className={EYEBROW}>{t("phone.type")}</div>
+          <div className="text-[13.5px] text-[var(--foreground)]">{t(lt.labelKey)}</div>
         </div>
-        <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.country")}</div>
-          <div className="text-gray-200 text-sm">{intel.country}</div>
+        <div className="rounded-lg border border-[var(--rule)] bg-[var(--ink)] p-3 space-y-0.5">
+          <div className={EYEBROW}>{t("phone.country")}</div>
+          <div className="text-[13.5px] text-[var(--foreground)]">{intel.country}</div>
         </div>
         {intel.region && (
-          <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.area")}</div>
-            <div className="text-gray-200 text-sm">{intel.region}</div>
+          <div className="rounded-lg border border-[var(--rule)] bg-[var(--ink)] p-3 space-y-0.5">
+            <div className={EYEBROW}>{t("phone.area")}</div>
+            <div className="text-[13.5px] text-[var(--foreground)]">{intel.region}</div>
           </div>
         )}
-        <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.fakeRisk")}</div>
-          <div className={`font-semibold text-sm ${risk.cls}`}>{t(risk.labelKey)}</div>
+        <div className="rounded-lg border border-[var(--rule)] bg-[var(--ink)] p-3 space-y-0.5">
+          <div className={EYEBROW}>{t("phone.fakeRisk")}</div>
+          <div className={`text-[13.5px] font-medium ${risk.cls}`}>{t(risk.labelKey)}</div>
         </div>
         {intel.normalised && (
-          <div className="bg-gray-800/60 rounded-lg p-3 space-y-0.5 col-span-2">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wide">{t("phone.formatted")}</div>
-            <div className="text-gray-200 text-sm font-mono">{intel.normalised}</div>
+          <div className="rounded-lg border border-[var(--rule)] bg-[var(--ink)] p-3 space-y-0.5 col-span-2">
+            <div className={EYEBROW}>{t("phone.formatted")}</div>
+            <div className="text-[13.5px] text-[var(--foreground)] font-[family-name:var(--font-mono-ui)]">{intel.normalised}</div>
           </div>
         )}
       </div>
 
       {intel.wangiriRisk && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-sm text-red-300 space-y-1">
+        <div className="rounded-lg border border-[var(--scam)]/30 bg-[var(--ink)] p-3 text-[13.5px] text-[var(--foreground)] space-y-1">
           <div className="font-bold">{t("phone.wangiri.title")}</div>
           <p>{bold(t("phone.wangiri.body"))}</p>
         </div>
       )}
 
-      <div className="bg-gray-800/40 rounded-lg p-3 text-sm text-gray-400 space-y-1.5">
-        <div className="font-semibold text-gray-300 flex items-center gap-1.5">
-          <span aria-hidden="true">ℹ️</span> {t("phone.spoof.title")}
-        </div>
+      <div className="rounded-lg border border-[var(--rule)] bg-[var(--ink)] p-3 text-[13.5px] text-[var(--text-dim)] space-y-1.5">
+        <div className="font-medium text-[var(--foreground)]">{t("phone.spoof.title")}</div>
         <p>{t("phone.spoof.body")}</p>
         <p>
           {t("phone.spoof.report.pre")}{" "}
@@ -127,13 +185,105 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
             href="https://www.scamwatch.gov.au"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-400 underline underline-offset-2 hover:text-emerald-300"
+            className="text-[var(--clear)] underline underline-offset-2 hover:opacity-80"
           >
             Scamwatch (scamwatch.gov.au)<span className="sr-only"> ({t("a11y.newTab")})</span><span aria-hidden="true"> ↗</span>
           </a>{" "}
           {t("phone.spoof.report.post")}
         </p>
       </div>
+    </div>
+  );
+}
+
+// ── Risk score ────────────────────────────────────────────────────────────────
+
+// The thresholds are drawn on the track rather than described underneath it, so
+// "why is this a scam and not merely suspicious" is answerable by looking.
+function RiskScore({ score, bar }: { score: number; bar: string }) {
+  const { t } = useLang();
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className={EYEBROW}>{t("verdict.score.label")}</h3>
+        <div className="font-[family-name:var(--font-mono-ui)] tabular-nums">
+          <span className="text-[26px] font-semibold text-[var(--foreground)]">{score}</span>
+          <span className="text-[12px] text-[var(--faint)]">/100</span>
+        </div>
+      </div>
+      <div
+        role="meter"
+        aria-valuenow={score}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={t("verdict.riskScore", { n: score })}
+        className="relative mt-1.5 h-1.5 w-full rounded-full bg-[var(--ink-3)]"
+      >
+        <div className={`h-1.5 rounded-full transition-[width] duration-500 ${bar}`} style={{ width: `${score}%` }} />
+        {/* 20 and 45 are the verdict boundaries in scoreToResult. */}
+        {[20, 45].map((at) => (
+          <span key={at} className="absolute top-0 h-1.5 w-px bg-[var(--ink)]" style={{ left: `${at}%` }} aria-hidden="true" />
+        ))}
+      </div>
+      <div className="relative mt-1 h-3" aria-hidden="true">
+        {([[20, "verdict.score.caution"], [45, "verdict.score.scam"]] as const).map(([at, key]) => (
+          <span
+            key={at}
+            className="absolute font-[family-name:var(--font-mono-ui)] text-[10px] text-[var(--faint)] -translate-x-1/2"
+            style={{ left: `${at}%` }}
+          >
+            {at} · {t(key)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Tactics ───────────────────────────────────────────────────────────────────
+
+// The same six names the Learn page teaches, so a reader who has been there
+// recognises them here. Unmatched tactics stay visible rather than being
+// filtered out: "we looked for six things and found four" says more than a list
+// of four, and it teaches the other two exist.
+function Tactics({ signals }: { signals: Signal[] }) {
+  const { t } = useLang();
+  const found = matchedTactics(signals);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 mb-2">
+        <h3 className={EYEBROW}>{t("verdict.tactics.heading")}</h3>
+        <span className={`${EYEBROW} text-[var(--caution)]`}>
+          {t("verdict.tactics.count", { n: found.size, total: TACTIC_IDS.length })}
+        </span>
+      </div>
+      <ul className="grid gap-px bg-[var(--rule)] rounded-lg overflow-hidden border border-[var(--rule)]">
+        {TACTIC_IDS.map((id) => {
+          const on = found.has(id);
+          return (
+            <li
+              key={id}
+              className={`flex items-center gap-2.5 px-3.5 py-2 text-[13.5px] ${
+                on ? "bg-[var(--ink-3)] text-[var(--foreground)]" : "bg-[var(--ink-2)] text-[var(--faint)]"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border text-[10px] ${
+                  on
+                    ? "border-[var(--caution)] bg-[var(--caution)]/15 text-[var(--caution)]"
+                    : "border-[var(--rule)]"
+                }`}
+              >
+                {on ? "✓" : ""}
+              </span>
+              <span className="min-w-0 flex-1">{t(`learn.tactics.${id}.title` as MessageKey)}</span>
+              {on && <span className={`${EYEBROW} text-[var(--caution)]`}>{t("verdict.tactics.matched")}</span>}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -146,64 +296,51 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
   const label = t(`verdict.${result.verdict}.label` as MessageKey);
   const sub   = t(`verdict.${result.verdict}.sub`   as MessageKey);
 
+  const signals = result.signals ?? [];
+  // The details sentence and verdict.*.sub restate one another for a clean
+  // result, so it is dropped where the sub already covers it.
+  const details = defangText(result.details);
+  const showDetails = details && !details.startsWith("Looks pretty right");
+
   return (
-    <div className={`${v.bg} border ${v.border} rounded-xl p-5 space-y-4`}>
+    <div className={`rounded-xl border ${v.edge} bg-[var(--ink-2)] overflow-hidden`}>
 
-      {/* Header: icon + verdict + sub-label (no raw score in primary position) */}
-      <div className="flex items-center gap-3">
-        <span className="text-3xl" aria-hidden="true">{v.icon}</span>
-        <div>
-          <div className={`font-bold text-lg ${v.text}`}>{label}</div>
-          <div className="text-sm text-gray-300">{sub}</div>
+      {/* Header. A dot rather than an emoji: emoji render differently on every
+          platform and carry a tone the verdict has to set itself. */}
+      <div className="px-5 pt-5 pb-4">
+        <div className="flex items-start gap-2.5">
+          <span className={`mt-[9px] h-2 w-2 shrink-0 rounded-full ${v.dot}`} aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className={`font-[family-name:var(--font-display)] text-[23px] leading-tight tracking-[-0.01em] ${v.text}`}>
+              {label}
+            </h2>
+            <p className="mt-1 text-[14px] leading-relaxed text-[var(--text-dim)]">{sub}</p>
+          </div>
         </div>
       </div>
 
-      {/* Risk bar — a static measurement, so meter (not progressbar) semantics */}
-      <div className="space-y-1">
-        <div
-          role="meter"
-          aria-valuenow={result.score}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={t("verdict.riskScore", { n: result.score })}
-          className="w-full bg-gray-800 rounded-full h-2.5"
-        >
-          <div
-            className={`${v.bar} h-2.5 rounded-full transition-[width] duration-500`}
-            style={{ width: `${result.score}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-xs text-gray-500" aria-hidden="true">
-          <span>{t("verdict.lowRisk")}</span>
-          <span>{t("verdict.riskScore", { n: result.score })}</span>
-          <span>{t("verdict.highRisk")}</span>
-        </div>
+      <div className="border-t border-[var(--rule)] px-5 py-4 space-y-5">
+        {signals.length > 0 ? <Evidence signals={signals} /> : null}
+
+        <RiskScore score={result.score} bar={v.bar} />
+
+        {showDetails && (
+          <p className="border-t border-[var(--rule)] pt-4 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+            {details}
+          </p>
+        )}
+
+        {/* Not on a clean result. The panel exists to name what was found, and
+            "1 of 6 matched" under a heading that says Looks good reads as a
+            contradiction — the reader cannot tell which half to believe. */}
+        {signals.length > 0 && result.verdict !== "safe" && <Tactics signals={signals} />}
+
+        {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
+          <ActionSteps verdict={result.verdict} />
+        )}
+
+        {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
       </div>
-
-      {/* Action steps for verdicts that need them */}
-      {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
-        <ActionSteps verdict={result.verdict} />
-      )}
-
-      {/* Details — secondary, below the action steps */}
-      <p className="text-sm text-gray-400 border-t border-gray-700/50 pt-3">
-        {defangText(result.details)}
-      </p>
-
-      {/* Warning flags */}
-      {result.flags.length > 0 && (
-        <div className="space-y-1.5">
-          {result.flags.map((flag, i) => (
-            <div key={i} className="flex items-start gap-2 text-sm text-gray-300">
-              <span className="text-amber-400 shrink-0 mt-0.5" aria-hidden="true">⚑</span>
-              <span>{defangText(flag)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Phone intelligence panel */}
-      {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
     </div>
   );
 }

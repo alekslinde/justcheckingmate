@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { timeAgo, truncate, fmt } from "@/lib/formatters";
+import { timeAgo, truncate, fmt, formatDayLabel } from "@/lib/formatters";
 
 // ── timeAgo ───────────────────────────────────────────────────────────────────
 
@@ -119,5 +119,32 @@ describe("fmt", () => {
   it("formats large numbers consistently with en-AU locale", () => {
     // Verify consistency — not just a string match
     expect(fmt(1_234_567)).toBe((1_234_567).toLocaleString("en-AU"));
+  });
+});
+
+// ── formatDayLabel ────────────────────────────────────────────────────────────
+
+describe("formatDayLabel", () => {
+  it("formats an ISO day as a short label", () => {
+    expect(formatDayLabel("2026-09-03")).toBe("3 Sep");
+    expect(formatDayLabel("2026-01-31")).toBe("31 Jan");
+    expect(formatDayLabel("2026-12-01")).toBe("1 Dec");
+  });
+
+  it("does not shift the day in timezones behind UTC", () => {
+    // new Date("2026-09-03") parses as UTC midnight, which renders as
+    // 2 September anywhere behind UTC. Parsing the parts directly is what keeps
+    // the chart's labels matching the dates the API actually returned.
+    const original = process.env.TZ;
+    process.env.TZ = "Pacific/Honolulu";
+    expect(formatDayLabel("2026-09-03")).toBe("3 Sep");
+    process.env.TZ = original;
+  });
+
+  it("returns malformed input unchanged rather than NaN", () => {
+    expect(formatDayLabel("not-a-date")).toBe("not-a-date");
+    expect(formatDayLabel("2026-13-01")).toBe("2026-13-01");
+    expect(formatDayLabel("2026-9-3")).toBe("2026-9-3");
+    expect(formatDayLabel("")).toBe("");
   });
 });

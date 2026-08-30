@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   radarForRegion,
-  hasRadar,
   threatsByStatus,
   activeThreats,
   lastUpdated,
@@ -12,6 +11,8 @@ import {
   roadmapUrl,
   uncoveredThreats,
   radarSummary,
+  filterByChannel,
+  channelCounts,
   type ThreatEntry,
 } from "@/lib/threatRadar";
 import { supportedRegions } from "@justcheckingmate/engine/regions";
@@ -23,7 +24,6 @@ const AU = radarForRegion("AU");
 describe("radarForRegion", () => {
   it("returns authored entries for AU", () => {
     expect(AU.length).toBeGreaterThan(0);
-    expect(hasRadar("AU")).toBe(true);
   });
 
   it("returns an empty list for regions with no authored radar", () => {
@@ -31,7 +31,6 @@ describe("radarForRegion", () => {
     // Australian campaigns. Same contract as calendarForRegion.
     for (const code of supportedRegions().filter((c) => c !== "AU")) {
       expect(radarForRegion(code)).toEqual([]);
-      expect(hasRadar(code)).toBe(false);
       expect(lastUpdated(code)).toBeNull();
     }
   });
@@ -417,5 +416,54 @@ describe("ThreatEntry type", () => {
       roadmap: "2026-08-09",
     };
     expect(entry.detection).toBeUndefined();
+  });
+});
+
+describe("filterByChannel", () => {
+  const all = radarForRegion("AU");
+
+  it("passes every entry through for \"all\"", () => {
+    expect(filterByChannel(all, "all")).toHaveLength(all.length);
+  });
+
+  it("keeps only entries on the chosen channel", () => {
+    const phone = filterByChannel(all, "phone");
+    expect(phone.length).toBeGreaterThan(0);
+    expect(phone.every((e) => e.channel === "phone")).toBe(true);
+  });
+
+  it("preserves the source order, so most-recently-seen stays first", () => {
+    const sms = filterByChannel(all, "sms");
+    expect(sms.map((e) => e.id)).toEqual(
+      all.filter((e) => e.channel === "sms").map((e) => e.id),
+    );
+  });
+
+  it("does not mutate the array it is given", () => {
+    const before = [...all];
+    filterByChannel(all, "email");
+    expect(all).toEqual(before);
+  });
+});
+
+describe("channelCounts", () => {
+  it("sums to the region's total, so no entry is uncounted or double-counted", () => {
+    const counts = channelCounts("AU");
+    const summed = Object.values(counts).reduce((a, b) => a + b, 0);
+    expect(summed).toBe(radarForRegion("AU").length);
+  });
+
+  it("agrees with filterByChannel for every channel", () => {
+    const all = radarForRegion("AU");
+    const counts = channelCounts("AU");
+    for (const channel of ["sms", "email", "phone", "web", "mixed"] as const) {
+      expect(counts[channel]).toBe(filterByChannel(all, channel).length);
+    }
+  });
+
+  it("reports every channel for a region with no radar, all at zero", () => {
+    // The filter UI reads every key to decide which buttons to offer, so a
+    // missing key would be a runtime undefined rather than a hidden button.
+    expect(channelCounts("ZZ")).toEqual({ sms: 0, email: 0, phone: 0, web: 0, mixed: 0 });
   });
 });

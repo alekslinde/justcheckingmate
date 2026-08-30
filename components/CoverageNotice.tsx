@@ -54,7 +54,7 @@ export default function CoverageNotice({
             id="region-select"
             value={region ?? ""}
             onChange={(e) => onRegionChange(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200"
+            className="w-full bg-[var(--ink-3)] border border-[var(--rule)] rounded-lg px-3 py-2 text-sm text-gray-200"
           >
             {REGION_OPTIONS.map((o) => (
               <option key={o.code} value={o.code}>{o.name}</option>

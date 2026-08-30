@@ -1,30 +1,31 @@
 import { headers } from "next/headers";
-import CheckFlow from "@/components/CheckFlow";
+import CheckStage from "@/components/CheckStage";
 import HomeHero from "@/components/HomeHero";
-import SeasonTeaser from "@/components/SeasonTeaser";
 import RadarTeaser from "@/components/RadarTeaser";
 import { resolveRegion } from "@/lib/regionResolver";
-import { regionToday } from "@/lib/scamCalendar";
 
-// The season teaser reads today's date, so this page can no longer be
-// prerendered at build time — a static page would freeze on the build date and
-// eventually claim the wrong season is active. The check flow is already
-// client-side and the stats bar fetches at runtime, so little was being served
-// statically here in practice.
+// Region comes from request headers, so this page is per-request regardless.
+// The check flow is client-side and the stats bar fetches at runtime, so little
+// was being served statically here in any case.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const region = resolveRegion(await headers());
-  const today = regionToday(region);
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
       <HomeHero />
-      <CheckFlow />
-      {/* Both below the check box on purpose — see SeasonTeaser's header
-          comment. The radar sits second: the season teaser only renders inside
-          its window, so it is the rarer and more timely of the two. */}
-      <SeasonTeaser region={region} today={today} />
+
+      {/* The fold holds exactly two things: paste it here, or forward it from
+          your mail app. They are alternatives, so they sit side by side rather
+          than stacked. Once a check has run the stage collapses to one column
+          and the verdict takes the page — see CheckStage for why that lives
+          there rather than inside the flow. */}
+      <CheckStage />
+
+      {/* Below the fold on purpose: someone arriving mid-panic with a dodgy SMS
+          needs the paste field first, and background information pushing it down
+          the page would trade their urgent need for ours. */}
       <RadarTeaser region={region} />
     </main>
   );
