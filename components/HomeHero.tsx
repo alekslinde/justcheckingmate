@@ -1,6 +1,7 @@
 "use client";
 
 import { useLang } from "@/lib/lang";
+import { accent } from "@/lib/richText";
 import StatsBar from "./StatsBar";
 
 export default function HomeHero() {
@@ -8,11 +9,19 @@ export default function HomeHero() {
   return (
     // Left-aligned rather than centred: the page reads as a tool with a job to
     // do, and centred text sets a different, more brochure-like expectation.
-    // Capped at 20ch so the display line breaks where the meaning does instead
-    // of running the full width of the wider layout.
+    // The headline carries its own line break, so it is capped generously
+    // rather than relied on to wrap.
     <div className="space-y-3">
-      <h1 className="font-[family-name:var(--font-display)] font-semibold text-[clamp(28px,5vw,50px)] leading-[1.06] tracking-[-0.02em] text-[var(--foreground)] max-w-[20ch] text-balance">
-        {t("home.title")}
+      {/* The headline breaks where the meaning does, so the line break is part
+          of the copy rather than a width accident: the question, then the
+          promise. "exactly" takes the accent because it is the differentiator —
+          plenty of tools say whether something is a scam, few show why. */}
+      <h1 className="font-[family-name:var(--font-display)] font-semibold text-[clamp(28px,5vw,50px)] leading-[1.06] tracking-[-0.02em] text-[var(--foreground)] max-w-[22ch]">
+        {t("home.title").split("\n").map((line, i) => (
+          <span key={i} className="block">
+            {accent(line)}
+          </span>
+        ))}
       </h1>
       {/* Carries the privacy promise inline — privacy is the core of this tool,
           so it is read up front, not buried in small print on the card. */}

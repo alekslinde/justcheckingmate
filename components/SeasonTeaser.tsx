@@ -34,28 +34,27 @@ export default function SeasonTeaser({
   if (active.length === 0) return null;
 
   return (
-    <aside className="bg-amber-500/5 border border-amber-500/30 rounded-2xl p-4 space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-amber-400 shrink-0" aria-hidden="true">⚑</span>
-        <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--caution)]">
-          {t("home.season.heading")}
-        </h2>
-      </div>
-
-      {/* Titles only, not each season's full `why` — that paragraph belongs on
-          the calendar page. A teaser that reprints it stops being a teaser and
-          starts competing with the check box for attention. */}
-      <p className="text-sm text-gray-200 font-medium">
-        {active.map((s) => s.title).join(" · ")}
+    // A quiet strip, matching the radar teaser. The comment below already
+    // warned against competing with the check box for attention; printing the
+    // full `why` paragraph did exactly that, so the titles now carry it and the
+    // detail stays on the calendar page where it belongs.
+    <aside className="flex items-baseline gap-3 rounded-xl border border-[var(--rule)] px-3.5 py-3 text-[13.5px] text-[var(--text-dim)]">
+      <span
+        aria-hidden="true"
+        className="w-[7px] h-[7px] rounded-full bg-[var(--caution)] shrink-0 self-center shadow-[0_0_0_3px_rgba(232,163,61,0.16)]"
+      />
+      <p className="min-w-0">
+        <span className="font-semibold text-[var(--foreground)]">
+          {t("home.season.heading")}:
+        </span>{" "}
+        {active.map((s) => s.title).join(" · ")}{" "}
+        <Link
+          href="/calendar"
+          className="text-[var(--clear)] hover:underline underline-offset-2 whitespace-nowrap"
+        >
+          {t("home.season.cta")}
+        </Link>
       </p>
-      <p className="text-sm text-gray-400">{active[0].why}</p>
-
-      <Link
-        href="/calendar"
-        className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block pt-1"
-      >
-        {t("home.season.cta")}
-      </Link>
     </aside>
   );
 }

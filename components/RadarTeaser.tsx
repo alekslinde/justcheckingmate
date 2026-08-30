@@ -39,30 +39,34 @@ export default function RadarTeaser({ region }: { region: RegionCode }) {
   const remaining = active.length - shown.length;
 
   return (
-    <aside className="bg-sky-500/5 border border-sky-500/30 rounded-2xl p-4 space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-sky-400 shrink-0" aria-hidden="true">◎</span>
-        <h2 className="text-xs font-bold uppercase tracking-wider text-sky-300">
-          {t("home.radar.heading")}
-        </h2>
-      </div>
-
-      <p className="text-sm text-gray-200 font-medium">
+    // A quiet strip, not a tinted card. This is background context under the
+    // primary action — a second full card competing with the check box for
+    // attention was most of what pushed the page long.
+    <aside className="flex items-baseline gap-3 rounded-xl border border-[var(--rule)] px-3.5 py-3 text-[13.5px] text-[var(--text-dim)]">
+      <span
+        aria-hidden="true"
+        className="w-[7px] h-[7px] rounded-full bg-[var(--caution)] shrink-0 self-center shadow-[0_0_0_3px_rgba(232,163,61,0.16)]"
+      />
+      <p className="min-w-0">
+        <span className="font-semibold text-[var(--foreground)]">
+          {t("home.radar.heading")}:
+        </span>{" "}
         {shown.map((threat) => threat.title).join(" · ")}
         {remaining > 0 && (
-          <span className="text-gray-400 font-normal">
+          <span className="text-[var(--faint)]">
             {" "}
             {t("home.radar.more", { count: remaining })}
           </span>
-        )}
+        )}{" "}
+        {/* Inline, so the strip stays one line of reading rather than a card
+            with a call to action stacked under it. */}
+        <Link
+          href="/radar"
+          className="text-[var(--clear)] hover:underline underline-offset-2 whitespace-nowrap"
+        >
+          {t("home.radar.cta")}
+        </Link>
       </p>
-
-      <Link
-        href="/radar"
-        className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 font-medium inline-block pt-1"
-      >
-        {t("home.radar.cta")}
-      </Link>
     </aside>
   );
 }

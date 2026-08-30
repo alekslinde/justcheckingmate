@@ -36,11 +36,11 @@ export default async function Home() {
       </div>
 
       {/* Both below the fold on purpose — see SeasonTeaser's header comment.
-          Side by side from md up: they are peers, and stacking two full-width
-          cards was most of what pushed the page long. The radar sits second:
-          the season teaser only renders inside its window, so it is the rarer
-          and more timely of the two. */}
-      <div className="grid gap-5 md:grid-cols-2 md:items-start">
+          Now single-line strips rather than cards, so they stack: two of them
+          side by side would leave one short line floating beside another. The
+          radar sits second because the season teaser only renders inside its
+          window, making it the rarer and more timely of the two. */}
+      <div className="space-y-2.5">
         <SeasonTeaser region={region} today={today} />
         <RadarTeaser region={region} />
       </div>
