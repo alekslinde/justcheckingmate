@@ -463,5 +463,13 @@
   "radar.filter.phone": "Calls",
   "radar.filter.gaps": "Gaps",
   "radar.filter.none": "Nothing matches that filter.",
-  "radar.count": "{n} of {total}"
+  "radar.count": "{n} of {total}",
+  "footer.built": "Built by",
+  "footer.scope": "Universal checks run worldwide. Full rules where we've done the groundwork.",
+  "nav.check": "Check",
+  "nav.menu": "Menu",
+  "nav.close": "Close",
+  "nav.here": "You're here",
+  "a11y.openMenu": "Open the menu",
+  "a11y.closeMenu": "Close the menu"
 }

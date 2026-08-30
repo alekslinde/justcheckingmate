@@ -1,16 +1,38 @@
 @import "tailwindcss";
 
 :root {
-  --background: #030712;
-  --foreground: #f9fafb;
+  --background: #141C2B;
+  --foreground: #F4F3EF;
   color-scheme: dark light;
+
+  /* Revamp palette. The ground warms from #030712 to #141C2B — still dark, but
+     with a blue bias that stops the emerald reading as neon against pure black.
+     Named by role so components stop hard-coding hexes. */
+  --ink:       #141C2B;   /* page ground */
+  --ink-2:     #1E2839;   /* raised surface: cards, panels */
+  --ink-3:     #2B3648;   /* pressed / hover surface */
+  --rule:      #2A3446;   /* hairline borders */
+  --paper:     #FBFAF7;   /* the check card — deliberately light */
+  --paper-dim: #EFEDE7;
+  --text-dim:  #A6B0C0;   /* secondary copy */
+  --faint:     #7C879A;   /* tertiary: captions, meta */
+
+  /* Verdict colours, separate from the accent so semantic never fights brand */
+  --clear:   #00A676;
+  --caution: #E8A33D;
+  --scam:    #D6453D;   /* display use only: headings, dots, bars */
+  /* #D6453D is 3.37:1 on --ink-2 — fine for a large heading, short of AA for
+     the small labels in the evidence list. This is the text-safe partner. */
+  --scam-text: #E86B63;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono-ui);
+  /* font-display:… in markup reaches the serif */
+  --font-display: var(--font-display);
 
   /* Extra-small breakpoint for sub-640px layout adjustments */
   --breakpoint-xs: 480px;
@@ -48,8 +70,8 @@ button:disabled {
 body {
   background: var(--background);
   color: var(--foreground);
-  /* P0 fix: use loaded Geist font, not the browser default Arial */
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  /* Use the loaded body face, never the browser default */
+  font-family: var(--font-body), system-ui, -apple-system, Arial, sans-serif;
   /* Improve readability — especially for elderly users */
   line-height: 1.65;
 }
@@ -59,7 +81,7 @@ body {
    Accent colours shift darker so they remain readable on light surfaces. */
 @media (prefers-color-scheme: light) {
   :root {
-    --background: #f9fafb;
+    --background: #FBFAF7;
     --foreground: #111827;
     --color-gray-950: #f9fafb;
     --color-gray-900: #f3f4f6;
@@ -80,6 +102,22 @@ body {
     --color-red-400: #dc2626;
     --color-amber-400: #d97706;
     --color-yellow-400: #ca8a04;
+
+    /* Revamp roles for light. Not a naive inversion: the paper card stays light
+       (it is light in both themes by design), and the verdict colours darken
+       enough to hold 4.5:1 on a near-white ground. */
+    --ink:       #FBFAF7;
+    --ink-2:     #FFFFFF;
+    --ink-3:     #EFEDE7;
+    --rule:      #DDD9D0;
+    --paper:     #FFFFFF;
+    --paper-dim: #EFEDE7;
+    --text-dim:  #4B5563;
+    --faint:     #6B7280;
+    --clear:     #00734F;
+    --caution:   #A66200;
+    --scam:      #B3231C;
+    --scam-text: #A81F19;
   }
 }
 

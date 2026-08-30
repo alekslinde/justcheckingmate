@@ -7,36 +7,37 @@ export default function SiteFooter() {
   const { t } = useLang();
   return (
     <footer
-      className="border-t border-gray-700 bg-gray-950 mt-auto"
-      style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      className="border-t border-[var(--rule)] bg-[var(--ink)] mt-auto"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="max-w-2xl mx-auto px-4 pt-6 pb-0 text-center text-sm text-gray-300 space-y-2">
-        <p>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[var(--text-dim)] leading-relaxed">
+        <span className="text-[var(--foreground)]">
           {t("footer.built")}{" "}
-          {t("footer.by")}{" "}
           <a
             href="https://alekslinde.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-emerald-400 font-semibold underline underline-offset-2 hover:text-emerald-300"
+            className="text-[var(--clear)] font-semibold hover:underline underline-offset-2"
           >
-            Aleks Linde<span className="sr-only"> ({t("a11y.newTab")})</span><span aria-hidden="true"> ↗</span>
+            Aleks Linde<span className="sr-only"> ({t("a11y.newTab")})</span>
+            <span aria-hidden="true"> ↗</span>
           </a>
-          {" "}{t("footer.tagline")}
-        </p>
-        {/* Carries the calendar link on mobile, where the header hides it for
-            space. Every page has a footer, so this is the one persistent route
-            to it on a phone. */}
-        <p className="text-xs text-gray-500 sm:hidden">
-          <Link href="/calendar" className="underline underline-offset-2 hover:text-gray-300">
-            {t("nav.calendar")}
-          </Link>
-        </p>
-        <p className="text-xs text-gray-500">
-          <Link href="/about" className="underline underline-offset-2 hover:text-gray-300">
-            {t("footer.about")}
-          </Link>
-        </p>
+        </span>
+        <span aria-hidden="true" className="hidden sm:inline text-[var(--ink-3)]">
+          ·
+        </span>
+        {/* The reach claim, stated honestly: universal checks everywhere, full
+            rule packs only where the groundwork exists. */}
+        <span className="hidden sm:inline text-[var(--faint)]">{t("footer.scope")}</span>
+        <span aria-hidden="true" className="hidden sm:inline text-[var(--ink-3)]">
+          ·
+        </span>
+        <Link
+          href="/about"
+          className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
+        >
+          {t("footer.about")}
+        </Link>
       </div>
     </footer>
   );
