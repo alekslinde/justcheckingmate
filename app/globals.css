@@ -11,7 +11,10 @@
   --ink:       #141C2B;   /* page ground */
   --ink-2:     #1E2839;   /* raised surface: cards, panels */
   --ink-3:     #2B3648;   /* pressed / hover surface */
-  --rule:      #2A3446;   /* hairline borders */
+  /* Translucent, not a solid hex: a rule has to read on the page ground and on
+     every raised surface above it. Solid #2A3446 was 1.36:1 on --ink but 1.03:1
+     on --ink-3 — invisible exactly where cards nest. */
+  --rule:      rgba(255, 255, 255, 0.12);
   --paper:     #FBFAF7;   /* the check card — deliberately light */
   --paper-dim: #EFEDE7;
   --text-dim:  #A6B0C0;   /* secondary copy */
@@ -112,7 +115,7 @@ body {
     --ink:       #FBFAF7;
     --ink-2:     #EFECE3;
     --ink-3:     #E1DDD2;
-    --rule:      #D5D0C4;
+    --rule:      rgba(20, 28, 43, 0.14);
     --paper:     #FFFFFF;
     --paper-dim: #EFEDE7;
     --text-dim:  #4B5563;
