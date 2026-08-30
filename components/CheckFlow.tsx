@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import Link from "next/link";
 import { AnalyzedIdentifier, ScamType } from "@justcheckingmate/engine/scamDetector";
 import { detectType } from "@justcheckingmate/engine/detectType";
 import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSanitizer";
@@ -783,14 +782,6 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
           <span className="hidden sm:inline">{t("check.dropHint")}</span>
         </p>
       )}
-
-      {/* Quiet pointer to the full capture guide on Learn — replaces the inline
-          expandables that crowded this flow. */}
-      <p className="text-xs text-gray-500 text-center">
-        <Link href="/learn#using-this-tool" className="text-emerald-400/90 hover:text-emerald-300 underline underline-offset-2">
-          {t("check.help.link")}
-        </Link>
-      </p>
 
       {/* What the image pipeline is actually doing, stage by stage. Each row
           maps onto a real branch in handleImageUpload — nothing here is a
