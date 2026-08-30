@@ -104,8 +104,6 @@
   "radar.coverage.partial": "Half caught",
   "radar.coverage.none": "Not caught yet",
   "radar.coverage.na": "Nothing to catch in text",
-  "radar.summary.body": "{active} going round now, {watchlist} gone quiet. We catch {covered} of the {total} — the rest are up there too, because a gap you know about is one you can work around.",
   "radar.gaps.heading": "Worth knowing we don't catch",
-  "radar.expand": "What it looks like, and what to do",
   "footer.scope": "Checks run worldwide. Full rules where we've done the legwork."
 }

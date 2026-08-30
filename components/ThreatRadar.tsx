@@ -75,141 +75,84 @@ const COVERAGE_KEY: Record<RadarCoverage, MessageKey> = {
 };
 
 /**
- * One campaign, collapsed to a scannable row until asked to open.
+ * One campaign, as an always-open row.
  *
- * The first draft rendered every card at full weight — badge, summary, lures,
- * advice, detection, source, five section labels — once per entry. That
- * measured 17,000px on a phone, twenty screens of scrolling, with no single card
- * fitting on screen at once, and it made scanning impossible: the reader had to
- * read to find out whether a card was relevant to them.
+ * An earlier version rendered every entry at full weight — badge, summary,
+ * lures, advice, detection, source, five section labels each — which measured
+ * 17,000px on a phone and made scanning impossible. The fix then was to collapse
+ * everything behind a <details>; the cost was that nothing could be read without
+ * a click, and the page became a list of titles.
  *
- * So the card carries only what supports the scan decision — title, channel,
- * and a coverage marker — and everything else moves behind a `<details>`. The
- * detail is unchanged when opened; it just stops being mandatory. `<details>`
- * rather than state because it needs no JS, survives Ctrl+F (browsers open a
- * closed `<details>` to reveal a match), and is keyboard- and screen-reader-
- * navigable for free.
+ * This is the middle: the row is open, but it carries only what a reader needs
+ * to decide "is this the thing I was sent?" — the title, how it reaches you,
+ * whether we catch it, the summary, and one line of provenance. The lures and
+ * advice, which were the bulk of the 17,000px, live on the entry's own source
+ * link rather than being reprinted for all 28 at once.
+ *
+ * Rows are separated by hairlines rather than being individually bordered
+ * cards: 28 bordered boxes read as 28 competing objects, while a ruled list
+ * reads as one list that happens to be long.
  */
 function ThreatCard({ threat }: { threat: ThreatEntry }) {
   const { t } = useLang();
   const isGap = threat.coverage === "partial" || threat.coverage === "none";
 
   return (
-    <article className="rounded-xl border border-[var(--rule)] bg-[var(--ink)]">
-      <details className="group">
-        {/* Matches the filter dropdowns on the reports page, which are the app's
-            existing "open this to see more" affordance: a right-aligned chevron
-            at the same weight and near-white tint. Those dropdowns draw their
-            own chevron rather than using the native <select> indicator, which
-            iOS Safari paints in light-mode chrome regardless of text colour.
-            The default <details> marker is suppressed because it can't be sized
-            or coloured to match — it renders as a small dim triangle on the
-            left, far weaker than the control it sits beside. Drawn as an inline
-            SVG rather than a text glyph so stroke weight is explicit and the
-            rotation is smooth. */}
-        <summary className="cursor-pointer list-none p-4 min-h-[44px] rounded-xl hover:bg-[var(--ink-3)]/50 transition-colors">
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              {/* h4, one level below the group heading — the cards nest inside
-                  "Circulating now", and matching its level would flatten the
-                  two in a screen reader's outline. */}
-              <h4 className="font-semibold text-[var(--foreground)] text-[15px]">{threat.title}</h4>
-              <p className="text-xs text-[var(--faint)] mt-1">
-                {t(`radar.channel.${threat.channel}` as MessageKey)}
-                {/* Only the exceptions are named in the collapsed row. "We catch
-                    this" was on 20 of 25 cards — a near-constant label spending
-                    the most prominent slot on the card to say nothing. Silence
-                    now means covered, and the summary line above states that
-                    convention so the absence is readable rather than ambiguous. */}
-                {isGap && (
-                  <>
-                    {" · "}
-                    <span className="text-[var(--caution)]">{t(COVERAGE_KEY[threat.coverage])}</span>
-                  </>
-                )}
-                {threat.coverage === "n/a" && (
-                  <>
-                    {" · "}
-                    <span className="text-[var(--text-dim)]">{t(COVERAGE_KEY[threat.coverage])}</span>
-                  </>
-                )}
-              </p>
-            </div>
-            {/* Same geometry as the <select> chevrons on /submissions and the
-                Collapsible on Learn — a downward V at stroke-width 2.5, rotated
-                180° here on open. */}
-            <svg
-              className="shrink-0 w-[18px] h-[18px] mt-0.5 text-[var(--faint)] transition-transform duration-200 group-open:rotate-180"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </div>
-          {/* Visible only to assistive tech: the chevron alone doesn't say what
-              opening the row would reveal. */}
-          <span className="sr-only">{t("radar.expand")}</span>
-        </summary>
+    <li className="bg-[var(--ink-2)] px-4 py-3.5 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        {/* h4, one level below the group heading — the rows nest inside
+            "Circulating now", and matching its level would flatten the two in a
+            screen reader's outline. */}
+        <h4 className="font-semibold text-[15px] text-[var(--foreground)]">{threat.title}</h4>
+        <span className="font-[family-name:var(--font-mono-ui)] text-[10px] uppercase tracking-[0.07em] text-[var(--faint)] border border-[var(--rule)] rounded px-1.5 py-px">
+          {t(`radar.channel.${threat.channel}` as MessageKey)}
+        </span>
+        {/* Coverage is stated on every row, not only the exceptions. Reading
+            "we catch this" is the reassurance the page exists to give, and with
+            the rows open there is room to say it rather than relying on silence
+            to mean yes. Amber for a gap, never red: red is the verdict colour,
+            and a detection gap is a statement about us, not about anything the
+            reader is holding. */}
+        <span
+          className={`font-[family-name:var(--font-mono-ui)] text-[10.5px] uppercase tracking-[0.07em] rounded-full px-2 py-0.5 border ${
+            isGap
+              ? "text-[var(--caution)] border-[var(--caution)]/40 bg-[var(--caution)]/10"
+              : threat.coverage === "n/a"
+                ? "text-[var(--faint)] border-[var(--rule)]"
+                : "text-[var(--clear)] border-[var(--clear)]/40 bg-[var(--clear)]/10"
+          }`}
+        >
+          {t(COVERAGE_KEY[threat.coverage])}
+        </span>
+      </div>
 
-        <div className="px-4 pb-4 space-y-3">
-          <p className="text-sm text-[var(--text-dim)] leading-relaxed">{threat.summary}</p>
+      {/* Both this and the meta line below share one measure, so the row reads
+          as a single block rather than two paragraphs of different widths. */}
+      <p className="text-[13.5px] text-[var(--text-dim)] leading-relaxed max-w-[92ch]">
+        {threat.summary}
+      </p>
 
-          <div className="space-y-1.5">
-            <p className="font-[family-name:var(--font-mono-ui)] text-[10.5px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
-              {t("radar.lures.heading")}
-            </p>
-            <ul className="space-y-1 list-none">
-              {/* Index-suffixed rather than keyed on the string alone: two
-                  entries could legitimately quote the same lure, and nothing in
-                  the data model forbids it. The list is static, so index is
-                  stable here. */}
-              {threat.lures.map((lure, i) => (
-                <li key={`${lure}-${i}`} className="flex items-start gap-2 text-sm text-[var(--text-dim)]">
-                  <span className="text-[var(--caution)] mt-0.5 shrink-0" aria-hidden="true">⚑</span>
-                  <span>{lure}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="flex items-start gap-2 pt-1 border-t border-[var(--rule)] mt-1">
-            <span className="text-[var(--clear)] mt-2 shrink-0" aria-hidden="true">✓</span>
-            <p className="text-sm text-[var(--text-dim)] pt-1.5 leading-relaxed">{threat.advice}</p>
-          </div>
-
-          {/* What we do about it. For `none` and `n/a` there is no rule to
-              describe, so a fixed line states the gap rather than leaving a
-              silent absence the reader would fill in optimistically. */}
-          <div className="text-xs text-[var(--faint)] border-t border-[var(--rule)] pt-3 space-y-1">
-            <p className="font-[family-name:var(--font-mono-ui)] text-[10.5px] font-medium uppercase tracking-[0.09em]">
-              {t("radar.detection.heading")}
-            </p>
-            <p>
-              {threat.detection ??
-                t(threat.coverage === "n/a" ? "radar.coverage.na.body" : "radar.coverage.none.body")}
-            </p>
-            {/* The evidence link. Every claim on this card traces to the sweep
-                that recorded it — without this the provenance is asserted rather
-                than checkable, which is the whole difference from a news feed. */}
-            <p className="pt-1">
-              <a
-                href={roadmapUrl(threat)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--text-dim)] hover:text-[var(--clear)] underline underline-offset-2 transition-colors"
-              >
-                {t("radar.source", { date: formatRadarDate(threat.lastSeen) })}
-              </a>
-            </p>
-          </div>
-        </div>
-      </details>
-    </article>
+      {/* What we do about it, and when it was last seen, on one mono line. For
+          `none` and `n/a` there is no rule to describe, so a fixed line states
+          the gap rather than leaving a silent absence the reader would fill in
+          optimistically. The date links to the sweep that recorded it — without
+          that the provenance is asserted rather than checkable, which is the
+          whole difference from a news feed. */}
+      <p className="font-[family-name:var(--font-mono-ui)] text-[11px] leading-relaxed text-[var(--faint)] tracking-[0.02em] max-w-[92ch]">
+        {threat.detection ??
+          t(threat.coverage === "n/a" ? "radar.coverage.na.body" : "radar.coverage.none.body")}
+        {" · "}
+        <a
+          href={roadmapUrl(threat)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-[var(--clear)] transition-colors"
+        >
+          {t("radar.source", { date: formatRadarDate(threat.lastSeen) })}
+          <span className="sr-only"> ({t("a11y.newTab")})</span>
+        </a>
+      </p>
+    </li>
   );
 }
 
@@ -245,11 +188,13 @@ function ThreatGroup({ heading, threats }: { heading: string; threats: ThreatEnt
           {threats.length}
         </span>
       </h3>
-      <div className="space-y-2.5">
+      {/* The hairline list: a 1px gap over a rule-coloured ground gives every
+          row a divider without each one drawing its own border. */}
+      <ul className="grid gap-px overflow-hidden rounded-xl border border-[var(--rule)] bg-[var(--rule)] list-none">
         {shown.map((threat) => (
           <ThreatCard key={threat.id} threat={threat} />
         ))}
-      </div>
+      </ul>
       {(hiddenCount > 0 || expanded) && (
         <button
           type="button"
@@ -399,15 +344,9 @@ export default function ThreatRadar({
         </section>
       )}
 
-      {/* Which region's board this is, and how to change it. Standalone only:
-          inline on the home page the check flow already owns region, and a
-          second control for the same thing would be a fork, not a convenience.
-          It sits above the freshness stamp because "whose data" comes before
-          "how fresh" — a fresh review of the wrong country is still wrong. */}
-      {standalone && <RegionBar region={region} />}
-
-      {/* Promoted from a grey line beside the heading: how current the data
-          is deserves to be read, not found. */}
+      {/* Order: how fresh, then whose, then how to narrow it. The freshness
+          stamp leads because it is the claim the page is making — everything
+          below is only worth reading if the review behind it is current. */}
       {reviewed && (
         <FreshnessStamp
           date={formatRadarDate(reviewed)}
@@ -415,23 +354,9 @@ export default function ThreatRadar({
         />
       )}
 
-      {/* The orienting line. With every card collapsed, the shape of the board
-          is no longer visible by scrolling it — this states the counts up front,
-          and establishes the convention the collapsed rows rely on: coverage is
-          only called out where it is *not* complete. */}
-      <section className="rounded-xl border border-[var(--rule)] bg-[var(--ink)] p-4 space-y-2">
-        <h3 className="font-[family-name:var(--font-mono-ui)] text-[10.5px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
-          {t("radar.summary.heading")}
-        </h3>
-        <p className="text-sm text-[var(--text-dim)] leading-relaxed">
-          {t("radar.summary.body", {
-            active: summary.active,
-            watchlist: summary.watchlist,
-            covered: summary.covered,
-            total: summary.total,
-          })}
-        </p>
-      </section>
+      {/* Standalone only: inline on the home page the check flow already owns
+          region, and a second control for the same thing would be a fork. */}
+      {standalone && <RegionBar region={region} />}
 
       {/* Gaps first, before the full board. They are the handful of entries
           where the reader is genuinely on their own, and burying them among the
