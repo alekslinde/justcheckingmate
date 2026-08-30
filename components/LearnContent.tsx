@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
@@ -87,6 +87,18 @@ function PartHeader({ id, heading, intro }: { id?: string; heading: string; intr
   );
 }
 
+// The index stands open from sm up and is a tap-to-open disclosure below it.
+// Feature-detecting the width beats guessing: nine wrapped chips are 327px on a
+// phone, which is 39% of the viewport permanently given over to navigation the
+// reader is not currently using.
+const TOC_WIDE = "(min-width: 640px)";
+
+function subscribeWide(cb: () => void) {
+  const mq = window.matchMedia(TOC_WIDE);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
 export default function LearnContent({
   activeSeasons = [],
 }: {
@@ -128,6 +140,22 @@ export default function LearnContent({
   const [activeId, setActiveId] = useState<string>(TOC[0].id);
   const navRef = useRef<HTMLElement>(null);
 
+  // Whether the viewport is wide enough for the index to stand open. Read
+  // through useSyncExternalStore rather than a state-in-effect: it reads on
+  // every render with no cascading re-render, and its server snapshot (false)
+  // means a phone's markup matches what it hydrates to instead of the bar
+  // flashing open and shutting.
+  const wide = useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia(TOC_WIDE).matches,
+    () => false,
+  );
+  // Whether the reader has explicitly opened the index on a phone. Starts
+  // false, so a narrow viewport gets the collapsed bar — 40px instead of 332 —
+  // and `wide` keeps it open from sm up regardless.
+  const [tocExpanded, setTocExpanded] = useState(false);
+  const tocOpen = wide || tocExpanded;
+
   useEffect(() => {
     const sections = TOC.map(({ id }) => document.getElementById(id)).filter(
       (el): el is HTMLElement => el !== null,
@@ -167,29 +195,57 @@ export default function LearnContent({
         lede={t("learn.intro")}
       />
 
-      {/* Table of contents — a sticky, horizontally-scrollable index. The page is
-          long and covers several distinct needs, so the fastest route to any one
-          is a persistent bar that also shows where you are, not a one-shot list
-          scrolled past once. It pins beneath the sticky site header; the negative
-          margins let the divider span the column while the inner padding keeps
-          the chips aligned with the content. The active chip is highlighted as
-          you move through the page.
+      {/* Table of contents — a sticky index that also shows where you are.
+          The page is long and covers several distinct needs, so the fastest
+          route to any one is a persistent bar, not a one-shot list scrolled
+          past once. It pins beneath the sticky site header.
 
-          The chips wrap rather than scrolling sideways. Nine labels, some as long
-          as "If you've already clicked or shared details", do not fit one row at
-          any width, and a horizontal scroller with a hidden scrollbar gives no
-          hint that the rest exist — it just reads as a bar you can drag, with
-          several sections invisible unless you happen to swipe it. */}
+          The chips wrap rather than scrolling sideways. Nine labels, some as
+          long as "If you've already clicked or shared details", do not fit one
+          row at any width, and a horizontal scroller with a hidden scrollbar
+          gives no hint that the rest exist.
+
+          Wrapped, though, nine chips are 327px on a phone — 39% of the
+          viewport, permanently, for navigation the reader is not currently
+          using. So on small screens the list is a native disclosure that opens
+          on tap and closes when you pick something; from sm up it is always
+          open and the summary is hidden, because there the bar costs one row
+          and hiding it would only add a click. `open` is set once from the
+          initial width rather than bound to a media query, so a reader who
+          opens it does not have it shut under them on an orientation change. */}
       <nav
         ref={navRef}
         aria-label={t("learn.toc.heading")}
-        // The rule and background span the full column via padding on the <ul>
-        // rather than negative margins on the <nav>. -mx-5 made this box wider
-        // than <main>, and since <main> already fills the viewport on a phone,
-        // that pushed the whole page into horizontal overflow.
+        // The rule and background span the full column via padding on the inner
+        // elements rather than negative margins on the <nav>. -mx-5 made this
+        // box wider than <main>, and since <main> already fills the viewport on
+        // a phone, that pushed the whole page into horizontal overflow.
         className="sticky top-[58px] z-20 border-y border-[var(--rule)] bg-[var(--ink)]/85 backdrop-blur"
       >
-        <ul className="flex flex-wrap gap-1.5 py-2.5 list-none">
+        {/* onToggle keeps React's state and the element's own `open` in step:
+            the native disclosure flips `open` itself on click, and without this
+            React's next render would put it straight back. */}
+        <details
+          open={tocOpen}
+          onToggle={(e) => setTocExpanded((e.currentTarget as HTMLDetailsElement).open)}
+          className="group"
+        >
+          {/* The summary is the control on a phone and a plain label from sm
+              up, where the list is always open — hence marker:hidden and the
+              chevron that only renders below sm. */}
+          <summary className="flex items-center justify-between gap-3 py-2.5 cursor-pointer sm:cursor-default list-none marker:hidden [&::-webkit-details-marker]:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--clear)] rounded">
+            <span className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--faint)]">
+              {t("learn.toc.heading")}
+            </span>
+            <svg
+              className="sm:hidden shrink-0 w-[18px] h-[18px] text-[var(--faint)] transition-transform duration-200 group-open:rotate-180"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+        <ul className="flex flex-wrap gap-1.5 pb-2.5 list-none">
           {TOC.map(({ id, labelKey }) => {
             const active = id === activeId;
             return (
@@ -197,10 +253,23 @@ export default function LearnContent({
                 <a
                   href={`#${id}`}
                   aria-current={active ? "location" : undefined}
+                  // Closing on pick matters on a phone: the reader has chosen a
+                  // destination, and leaving a 327px index pinned over it means
+                  // scrolling past the navigation to reach what they navigated
+                  // to. Guarded by the same breakpoint that decides `open`, so
+                  // the desktop bar is never dismissed by using it.
+                  onClick={() => setTocExpanded(false)}
+                  // Every chip carries a visible border, not just the active
+                  // one. border-transparent made the inactive nine render as
+                  // bare words with no boundary, so nothing said they could be
+                  // clicked — the bar read as a line of labels that happened to
+                  // have one highlighted. The active state now differs by
+                  // colour and fill, which is a difference between two things
+                  // that both look like controls.
                   className={`block rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                     active
-                      ? "border-[var(--clear)]/40 bg-[var(--clear)]/12 text-[var(--clear)]"
-                      : "border-transparent text-[var(--text-dim)] hover:text-[var(--foreground)] hover:bg-[var(--ink-2)]"
+                      ? "border-[var(--clear)] bg-[var(--clear)]/12 text-[var(--clear)]"
+                      : "border-[var(--rule)] text-[var(--text-dim)] hover:border-[var(--ink-3)] hover:text-[var(--foreground)] hover:bg-[var(--ink-2)]"
                   }`}
                 >
                   {t(key(labelKey))}
@@ -209,6 +278,7 @@ export default function LearnContent({
             );
           })}
         </ul>
+        </details>
       </nav>
 
       {/* Emergency content first. Everything else on this page can wait; someone
@@ -228,14 +298,19 @@ export default function LearnContent({
           </h2>
           <p className="text-sm text-[var(--text-dim)] mt-1.5">{t("learn.caught.intro")}</p>
         </div>
-        <div className="space-y-2">
+        {/* A hairline list rather than four separately bordered cards. The
+            content stays fully visible — this is the one section that must
+            never be collapsed — but four boxes inside a fifth box was three
+            borders of nesting, and the height came out of that chrome rather
+            than out of anything a panicking reader needs. */}
+        <ul className="grid gap-px overflow-hidden rounded-lg border border-[var(--rule)] bg-[var(--rule)] list-none">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-lg border border-[var(--rule)] bg-[var(--ink-2)] p-3.5">
+            <li key={i} className="bg-[var(--ink-2)] px-4 py-3">
               <p className="text-sm font-semibold text-[var(--foreground)]">{t(key(`learn.caught.${i}.situation`))}</p>
-              <p className="text-sm text-[var(--text-dim)] mt-1 leading-relaxed">{bold(t(key(`learn.caught.${i}.action`)))}</p>
-            </div>
+              <p className="text-[13.5px] text-[var(--text-dim)] mt-0.5 leading-relaxed">{bold(t(key(`learn.caught.${i}.action`)))}</p>
+            </li>
           ))}
-        </div>
+        </ul>
         <p className="text-sm text-[var(--faint)] leading-relaxed">{bold(t("learn.caught.outro"))}</p>
       </section>
 
@@ -278,15 +353,21 @@ export default function LearnContent({
         </div>
       </Collapsible>
 
-      {/* The core teaching — recognising a scam in front of you. Phase 1 kept
-          this open; Phase 2 splits what was one 20-item card into three focused
-          disclosures so the reader can collapse whatever they've read and jump
-          to the part they want. All open by default: this is the point of the
-          page and safety advice, so it is separated for scanning, never hidden. */}
+      {/* The core teaching — recognising a scam in front of you: one 20-item
+          card split into three focused disclosures, so a reader can collapse
+          what they have read and jump to the part they want.
+
+          Two of the three open by default, not all three. "Red flags" is what
+          to look for and "if something seems off" is what to do — both are
+          safety advice a first-time reader should not have to click to reach.
+          "How scammers operate" is the why behind them, which is worth reading
+          but is not what someone holding a suspicious text needs first; open,
+          its six tactics were 580px and pushed the actionable pair off the
+          screen entirely. */}
 
       {/* How scammers operate — the conceptual half: name the tactic, break the
           spell. Carries the how-to-spot anchor the table of contents points at. */}
-      <Collapsible id="how-to-spot" title={t("learn.tactics.heading")} defaultOpen>
+      <Collapsible id="how-to-spot" title={t("learn.tactics.heading")}>
         <div className="space-y-3">
           <p className="text-sm text-[var(--text-dim)] max-w-[62ch]">{t("learn.tactics.intro")}</p>
           {/* A hairline-separated row list rather than free-floating bullets:
