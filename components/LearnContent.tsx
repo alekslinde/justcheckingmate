@@ -77,7 +77,7 @@ const TOC_BAR_HEIGHT = 52;
 function PartHeader({ id, heading, intro }: { id?: string; heading: string; intro: string }) {
   return (
     <div id={id} className="scroll-mt-20 pt-2">
-      <div className="h-px bg-gray-800 mb-6" />
+      <div className="h-px bg-[var(--ink-3)] mb-6" />
       <h2 className="text-xl font-black text-gray-100 tracking-tight">{heading}</h2>
       <p className="text-sm text-gray-400 mt-1">{intro}</p>
     </div>
@@ -174,7 +174,7 @@ export default function LearnContent({
           highlighted and scrolled into view as you move through the page. */}
       <nav
         aria-label={t("learn.toc.heading")}
-        className="sticky top-0 z-20 -mx-4 border-b border-gray-800 bg-gray-950/80 backdrop-blur"
+        className="sticky top-0 z-20 -mx-4 border-b border-[var(--rule)] bg-gray-950/80 backdrop-blur"
       >
         <ul
           ref={tocRef}
@@ -218,7 +218,7 @@ export default function LearnContent({
         </div>
         <div className="space-y-2.5">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+            <div key={i} className="bg-gray-900/60 border border-[var(--rule)] rounded-lg p-3">
               <p className="text-sm font-semibold text-gray-100">{t(key(`learn.caught.${i}.situation`))}</p>
               <p className="text-sm text-gray-300 mt-0.5">{bold(t(key(`learn.caught.${i}.action`)))}</p>
             </div>
@@ -319,7 +319,7 @@ export default function LearnContent({
           its own page; reproducing it here would duplicate content and make an
           already-long page longer. Names today's active seasons so the link
           promises something specific rather than a generic "see also". */}
-      <article id="scam-calendar" className="scroll-mt-20 bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-3">
+      <article id="scam-calendar" className="scroll-mt-20 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-3">
         <h2 className={H2}>{t("learn.calendar.heading")}</h2>
         <p className="text-sm text-gray-400">{t("learn.calendar.body")}</p>
         {activeSeasons.length > 0 && (
@@ -367,7 +367,7 @@ export default function LearnContent({
           <div className="grid sm:grid-cols-2 gap-2 pt-1">
             {AGENCIES.map(({ name, abbr: abbrTitle, site, href }) => (
               <a key={site} href={href} target="_blank" rel="noopener noreferrer"
-                className="bg-gray-900/60 rounded-lg px-3 py-2 hover:bg-gray-900 transition-colors block">
+                className="bg-gray-900/60 rounded-lg px-3 py-2 hover:bg-[var(--ink-2)] transition-colors block">
                 <div className="text-sm text-gray-200 font-semibold">
                   {abbrTitle ? <abbr title={abbrTitle}>{name}</abbr> : name}
                   <span className="sr-only"> ({t("a11y.newTab")})</span>

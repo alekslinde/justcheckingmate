@@ -435,11 +435,11 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       : content;
     const primary = results[0];
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.report")}</h2>
         <button
           onClick={() => history.back()}
-          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-gray-800 text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
+          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-[var(--rule)] text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
         >
           <span aria-hidden="true">‹</span> {t("check.back.results")}
         </button>
@@ -467,11 +467,11 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
   // ── Result step ───────────────────────────────────────────────────────────────
   if (step === "result") {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
         <button
           onClick={() => history.back()}
-          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-gray-800 text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
+          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-[var(--rule)] text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
         >
           <span aria-hidden="true">‹</span> {t("check.back.edit")}
         </button>
@@ -511,7 +511,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
                     small status dot. No competing card colours. */}
-                <div className="space-y-2 border-t border-gray-800 pt-4">
+                <div className="space-y-2 border-t border-[var(--rule)] pt-4">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                     {t("verdict.breakdown.heading")}
                   </div>
@@ -581,7 +581,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
               this was email source that came up clean. Findings carry their own
               copy; the values they surface are already non-clickable text. */}
           {trackingReport && (trackingReport.hasTracking || hasSender) && (
-            <div className="space-y-2 border-t border-gray-800 pt-4">
+            <div className="space-y-2 border-t border-[var(--rule)] pt-4">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 {t("tracking.heading")}
               </div>
@@ -615,7 +615,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
             const { headers, identityFlags: flags } = emailAnalysis;
             const authSummary = summariseAuth(headers);
             return (
-              <div className="space-y-2 border-t border-gray-800 pt-4">
+              <div className="space-y-2 border-t border-[var(--rule)] pt-4">
                 <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                   {t("email.analysis.heading")}
                 </div>
@@ -666,7 +666,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
                 onClick={() => goForward("report")}
                 className={`w-full py-3 px-6 font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2 ${
                   clean
-                    ? "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                    ? "bg-[var(--ink-3)] hover:bg-gray-700 text-gray-300 border border-[var(--rule)]"
                     : "bg-red-800 hover:bg-red-700 text-white"
                 }`}
               >
@@ -678,7 +678,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
           {results.length > 0 && (
             <button
               onClick={shareResults}
-              className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-[var(--ink-3)] hover:bg-gray-700 border border-[var(--rule)] flex items-center justify-center gap-2"
             >
               {shareCopied ? t("check.shareCopied") : t("check.share")}
             </button>
@@ -904,7 +904,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
           so we do the one thing the page genuinely can (copy the address) and
           state plainly where the rest happens. */}
       {INBOUND_ENABLED && (
-        <div className="border-t border-gray-800 pt-5 space-y-2">
+        <div className="border-t border-[var(--rule)] pt-5 space-y-2">
           {/* Heading and payoff on one line — the payoff is four words and does
               not earn a paragraph of its own. */}
           <p className="text-sm font-semibold text-gray-300 flex items-center gap-2">
@@ -933,7 +933,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
             <button
               type="button"
               onClick={copyInboundAddress}
-              className="shrink-0 rounded-md border border-gray-700 px-2.5 py-1 text-xs font-semibold text-gray-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+              className="shrink-0 rounded-md border border-[var(--rule)] px-2.5 py-1 text-xs font-semibold text-gray-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
             >
               {addressCopied ? t("check.forward.copied") : t("check.forward.copy")}
             </button>

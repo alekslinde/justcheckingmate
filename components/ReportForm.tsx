@@ -40,16 +40,16 @@ function authChipClass(verdict: string): string {
   switch (verdict.toLowerCase()) {
     case "pass":
     case "bestguesspass":
-      return "bg-emerald-900/50 border-emerald-700 text-emerald-300";
+      return "bg-[var(--clear)]/12 border-[var(--clear)]/45 text-[var(--clear)]";
     case "fail":
     case "permerror":
-      return "bg-red-900/40 border-red-800 text-red-300";
+      return "bg-[var(--scam)]/12 border-[var(--scam)]/40 text-[var(--scam-text)]";
     case "softfail":
     case "neutral":
     case "temperror":
-      return "bg-amber-900/40 border-amber-800 text-amber-300";
+      return "bg-[var(--caution)]/12 border-[var(--caution)]/40 text-[var(--caution)]";
     default:
-      return "bg-gray-800 border-gray-700 text-gray-400";
+      return "bg-[var(--ink-3)] border-[var(--rule)] text-gray-400";
   }
 }
 
@@ -210,7 +210,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           <h3 className="font-bold text-green-400 text-lg mb-1">{t("report.success.title")}</h3>
           <p className="text-gray-300 text-sm">{t("report.success.body")}</p>
         </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 inline-block mx-auto">
+        <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-lg px-4 py-3 inline-block mx-auto">
           <div className="text-sm text-gray-400 mb-0.5">{t("report.success.reference")}</div>
           <div className="font-mono text-emerald-400 font-bold">{reportId}</div>
           {/* The reference is genuinely usable: the submissions search matches ids */}
@@ -234,18 +234,18 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         <div className="flex flex-wrap justify-center gap-3">
           <button
             onClick={reset}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-all"
+            className="px-4 py-2 bg-[var(--ink-3)] hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-all"
           >
             {t("report.success.another")}
           </button>
           <Link
             href="/submissions"
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-sm rounded-lg transition-all"
+            className="px-4 py-2 bg-[var(--ink-3)] hover:bg-gray-700 text-emerald-400 text-sm rounded-lg transition-all"
           >
             {t("report.success.community")}
           </Link>
         </div>
-        <div className="text-sm text-gray-400 pt-2 border-t border-gray-800">
+        <div className="text-sm text-gray-400 pt-2 border-t border-[var(--rule)]">
           {t("report.success.official.pre")}{" "}
           <a
             href="https://www.scamwatch.gov.au"
@@ -284,7 +284,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         />
       </div>
 
-      <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 space-y-1.5">
+      <div className="rounded-lg border border-[var(--clear)]/40 bg-[var(--clear)]/[0.09] px-4 py-3 space-y-1.5">
         <p className="text-sm text-emerald-400 font-semibold text-center">{t("report.urgent")}</p>
         <p className="text-sm text-gray-400 text-center">{t("report.valuable")}</p>
       </div>
@@ -307,8 +307,8 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               key={rt.value}
               className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-lg border text-sm cursor-pointer transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-300 ${
                 type === rt.value
-                  ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
-                  : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500 hover:text-gray-100"
+                  ? "bg-[var(--clear)] border-[var(--clear)] text-[#08130F] font-semibold"
+                  : "bg-[var(--ink-3)] border-[var(--rule)] text-[var(--foreground)] hover:border-[var(--clear)]"
               }`}
             >
               <input
@@ -328,7 +328,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
 
       {/* For email type: show a summary of what was already parsed from the headers */}
       {type === "email" && (scamEmail || scamReplyTo || authSummary) && (
-        <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-4 py-3 space-y-1.5 text-xs">
+        <div className="rounded-lg border border-[var(--clear)]/35 bg-[var(--clear)]/[0.07] px-4 py-3 space-y-1.5 text-xs">
           <p className="text-emerald-400 font-semibold">{t("report.extracted.heading")}</p>
           {scamEmail && (
             <p className="text-gray-300 font-mono">
@@ -349,7 +349,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             </div>
           )}
           {trackingReport?.summary && (
-            <p className="text-amber-300/90 font-mono">
+            <p className="text-[var(--caution)] font-mono">
               <span className="text-gray-500">{t("report.extracted.tracking")} </span>{trackingReport.summary}
             </p>
           )}
@@ -373,7 +373,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           placeholder={t(PLACEHOLDER_KEYS[type])}
           rows={type === "url" || type === "phone" ? 2 : 4}
           maxLength={2000}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm font-mono"
+          className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm font-mono"
         />
         {/* Deliberately not aria-live — announcing every keystroke is noise;
             the count is reachable via aria-describedby on the field. */}
@@ -395,7 +395,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             placeholder={t("report.desc.placeholder.custom")}
             rows={4}
             maxLength={1000}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm"
+            className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm"
           />
         </div>
       )}
@@ -419,7 +419,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               onChange={(e) => setScamUrl(e.target.value)}
               placeholder="https://fake-ato-refund.xyz/verify"
               maxLength={2000}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
+              className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
             />
           </div>
         )}
@@ -435,7 +435,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               onChange={(e) => setScamPhone(e.target.value)}
               placeholder="+61 4xx xxx xxx"
               maxLength={50}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
+              className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
             />
           </div>
         )}
@@ -453,7 +453,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               onChange={(e) => setScamEmail(e.target.value)}
               placeholder="scammer@dodgy-domain.com"
               maxLength={200}
-              className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
+              className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
             />
           </div>
         )}
@@ -471,7 +471,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
                 onChange={(e) => setScamReplyTo(e.target.value)}
                 placeholder="different-address@elsewhere.ru"
                 maxLength={200}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
+                className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-sm font-mono"
               />
               {scamEmail && scamReplyTo &&
                 scamEmail.split("@")[1]?.toLowerCase() !== scamReplyTo.split("@")[1]?.toLowerCase() && (
@@ -497,14 +497,14 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
                   onChange={(e) => parseSource(e.target.value)}
                   placeholder={t("report.email.source.placeholder")}
                   rows={3}
-                  className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-xs font-mono resize-y"
+                  className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 text-[16px] sm:text-xs font-mono resize-y"
                 />
                 <input
                   type="file"
                   accept=".eml,message/rfc822,text/plain"
                   aria-label={t("report.email.source.file")}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlFile(f); }}
-                  className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1.5 file:text-gray-300 hover:file:bg-gray-700"
+                  className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-[var(--ink-3)] file:px-3 file:py-1.5 file:text-gray-300 hover:file:bg-gray-700"
                 />
                 {parseNote && (
                   <p className={`mt-1 text-xs ${parseNote.startsWith("⚠") ? "text-amber-400" : "text-gray-400"}`}>
@@ -551,7 +551,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
             placeholder={t("report.desc.placeholder")}
             rows={3}
             maxLength={1000}
-            className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm"
+            className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-y text-[16px] sm:text-sm"
           />
         </div>
       )}
@@ -571,7 +571,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
           onChange={(e) => setContact(e.target.value)}
           placeholder="you@example.com.au"
           maxLength={200}
-          className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-base"
+          className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 text-base"
         />
         <p id="contact-hint" className="mt-1 text-sm text-gray-400">
           {t("report.contact.hint")}{" "}
@@ -581,9 +581,22 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         </p>
       </div>
 
+      {/* What the scrubber removes, named specifically. "Personal details are
+          removed" is a claim the reader cannot check; a list they can match
+          against their own message is one they can. Every item here is a
+          pattern in lib/piiScrubber.ts — see PATTERNS. */}
+      <div className="rounded-xl border border-[var(--rule)] border-l-2 border-l-[var(--clear)] bg-[var(--clear)]/[0.055] px-4 py-3">
+        <p className="text-sm font-semibold text-[var(--foreground)] mb-1">
+          {t("report.privacy.heading")}
+        </p>
+        <p className="text-[13px] text-[var(--text-dim)] leading-relaxed">
+          {t("report.privacy.body")}
+        </p>
+      </div>
+
       {/* Error */}
       {status === "error" && (
-        <div role="alert" className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-red-300 text-sm">
+        <div role="alert" className="bg-[var(--scam)]/12 border border-[var(--scam)]/40 rounded-lg px-4 py-3 text-[var(--scam-text)] text-sm">
           {t("report.error")}
         </div>
       )}
@@ -593,8 +606,18 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         type="submit"
         disabled={!content.trim() || status === "submitting"}
         aria-busy={status === "submitting"}
-        className="w-full py-3 px-6 bg-emerald-500 hover:bg-emerald-400 disabled:bg-gray-800 disabled:text-gray-400 text-gray-900 font-bold rounded-lg transition-all text-sm uppercase tracking-wide"
+        className={`w-full py-3.5 px-6 rounded-xl font-semibold text-base transition-colors inline-flex items-center justify-center gap-2.5 ${
+          status === "submitting"
+            ? "bg-[#00825C] text-[#EAF7F2] cursor-progress"
+            : "bg-[var(--clear)] text-[#08130F] hover:bg-[#00BF88] disabled:bg-[var(--ink-3)] disabled:text-[var(--faint)]"
+        }`}
       >
+        {status === "submitting" && (
+          <span
+            aria-hidden="true"
+            className="w-4 h-4 rounded-full border-2 border-current/30 border-t-current animate-spin"
+          />
+        )}
         {status === "submitting" ? t("report.submitting") : t("report.submit")}
       </button>
 

@@ -198,7 +198,7 @@
   "report.success.body": "Your report has been logged. Every submission helps warn others about this scam.",
   "report.success.reference": "Report reference",
   "report.success.findIt": "Find it later in community reports →",
-  "report.success.total": "{n} reports submitted by Australians like you.",
+  "report.success.total": "{n} reports submitted by people like you.",
   "report.success.viewAll": "View all →",
   "report.success.another": "Report another",
   "report.success.community": "View community submissions →",
@@ -479,5 +479,8 @@
   "check.stage.uploaded": "Sent to our server to be read, then discarded.",
   "check.checked": "Checked",
   "check.checkedLabel": "Checked",
-  "check.editAgain": "Edit & check again"
+  "check.editAgain": "Edit & check again",
+  "report.privacy.heading": "What gets removed before this is published",
+  "report.privacy.body": "Email addresses, phone numbers, IP addresses, and card, bank and tax numbers \u2014 yours and anyone else's. What stays is the scam itself: the link, the sender, and the wording.",
+  "report.submitting.scrub": "Removing personal details\u2026"
 }

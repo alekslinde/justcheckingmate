@@ -33,7 +33,7 @@ import {
 import type { RegionCode } from "@justcheckingmate/engine/regions";
 
 // Matches the card styling used across Learn and About.
-const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
+const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-6";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 // How many not-yet-active seasons get their own "coming up" row. The rest fold
@@ -362,7 +362,7 @@ export default function ScamCalendar({
         </section>
       )}
 
-      <div className="border-t border-gray-800 pt-4 space-y-3">
+      <div className="border-t border-[var(--rule)] pt-4 space-y-3">
         <p className="text-xs text-gray-500">{t("calendar.neutrality")}</p>
         <p className="text-xs text-gray-500">{t("calendar.outro")}</p>
         {/* Only on the standalone page — inline, the surrounding page already

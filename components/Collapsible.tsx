@@ -37,7 +37,7 @@ export default function Collapsible({
     <details
       id={id}
       open={defaultOpen}
-      className="group scroll-mt-20 bg-gray-900 border border-gray-800 rounded-2xl"
+      className="group scroll-mt-20 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl"
     >
       {/* marker:hidden + the webkit rule drop the platform triangle so the SVG
           chevron can sit on the right where the layout wants it. */}

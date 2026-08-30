@@ -9,7 +9,7 @@ const VERDICTS = {
   safe:        { icon: "✅", bg: "bg-green-900/40",  border: "border-green-700",  text: "text-green-400",  bar: "bg-green-500" },
   suspicious:  { icon: "⚠️", bg: "bg-yellow-900/40", border: "border-yellow-700", text: "text-yellow-400", bar: "bg-yellow-500" },
   likely_scam: { icon: "🚨", bg: "bg-red-900/40",    border: "border-red-700",    text: "text-red-400",    bar: "bg-red-500" },
-  unknown:     { icon: "❓", bg: "bg-gray-800",      border: "border-gray-600",   text: "text-gray-300",   bar: "bg-gray-500" },
+  unknown:     { icon: "❓", bg: "bg-[var(--ink-3)]",      border: "border-gray-600",   text: "text-gray-300",   bar: "bg-gray-500" },
 };
 
 // ── Action steps shown for actionable verdicts ────────────────────────────────
@@ -77,7 +77,7 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
   const risk = SPOOFING_RISK_STYLE[intel.spoofingRisk];
 
   return (
-    <div className="border-t border-gray-700 pt-4 space-y-3">
+    <div className="border-t border-[var(--rule)] pt-4 space-y-3">
       <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
         {t("phone.heading")}
       </div>
@@ -166,7 +166,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={t("verdict.riskScore", { n: result.score })}
-          className="w-full bg-gray-800 rounded-full h-2.5"
+          className="w-full bg-[var(--ink-3)] rounded-full h-2.5"
         >
           <div
             className={`${v.bar} h-2.5 rounded-full transition-[width] duration-500`}

@@ -47,7 +47,7 @@ export default function SharePage() {
       <Suspense
         fallback={
           <div
-            className="h-64 rounded-2xl border border-gray-800 bg-gray-900/60 animate-pulse"
+            className="h-64 rounded-2xl border border-[var(--rule)] bg-[var(--ink-2)] animate-pulse"
             aria-hidden="true"
           />
         }

@@ -31,7 +31,7 @@ export default function ReportPage() {
         </p>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6">
         <Suspense>
           <ReportPrefillForm />
         </Suspense>

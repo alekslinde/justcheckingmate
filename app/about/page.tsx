@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 // is deliberately kept in plain English in both language modes — slang
 // variants could blur the meaning of a promise.
 
-const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-8";
+const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-8";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 const P = "text-sm text-gray-300";
 

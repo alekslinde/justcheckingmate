@@ -30,7 +30,7 @@ import {
 import { resolveRegionPack, type RegionCode } from "@justcheckingmate/engine/regions";
 
 // Matches the card styling used across Learn, About and the calendar.
-const CARD = "bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-6";
+const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-6";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
 
 // Coverage is rendered as inline text in the collapsed row rather than as a
@@ -306,7 +306,7 @@ export default function ThreatRadar({
         threats={threatsByStatus(region, "subsided")}
       />
 
-      <div className="border-t border-gray-800 pt-4 space-y-3">
+      <div className="border-t border-[var(--rule)] pt-4 space-y-3">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
             {t("radar.method.heading")}

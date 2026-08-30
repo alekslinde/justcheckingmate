@@ -60,7 +60,7 @@ function FilterSelect({
 }) {
   const { t } = useLang();
   return (
-    <div className="bg-gray-900 px-4 py-3 space-y-1">
+    <div className="bg-[var(--ink-2)] px-4 py-3 space-y-1">
       <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-gray-500">
         {t(labelKey)}
       </label>
@@ -75,7 +75,7 @@ function FilterSelect({
             // The select is transparent to sit on the panel, but the dropdown
             // popup is painted by the OS — without an explicit background the
             // options inherit that transparency and render dark-on-dark.
-            <option key={opt.value} value={opt.value} className="bg-gray-900 text-gray-200">
+            <option key={opt.value} value={opt.value} className="bg-[var(--ink-2)] text-gray-200">
               {t(opt.labelKey)}
             </option>
           ))}
@@ -135,16 +135,16 @@ function pageNumbers(current: number, total: number): (number | "…")[] {
 
 function SkeletonList() {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden" aria-hidden="true">
+    <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden" aria-hidden="true">
       <ul className="divide-y divide-gray-800">
         {[0, 1, 2, 3].map((i) => (
           <li key={i} className="px-5 py-4 space-y-3 animate-pulse">
             <div className="flex items-center justify-between">
-              <div className="h-4 w-32 bg-gray-800 rounded" />
-              <div className="h-3 w-16 bg-gray-800 rounded" />
+              <div className="h-4 w-32 bg-[var(--ink-3)] rounded" />
+              <div className="h-3 w-16 bg-[var(--ink-3)] rounded" />
             </div>
-            <div className="h-4 w-3/4 bg-gray-800 rounded" />
-            <div className="h-3 w-1/2 bg-gray-800 rounded" />
+            <div className="h-4 w-3/4 bg-[var(--ink-3)] rounded" />
+            <div className="h-3 w-1/2 bg-[var(--ink-3)] rounded" />
           </li>
         ))}
       </ul>
@@ -256,7 +256,7 @@ export default function SubmissionsBrowser() {
   return (
     <main>
       {/* Header */}
-      <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-gray-800">
+      <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-[var(--rule)]">
         <div className="max-w-2xl mx-auto px-4 py-8">
           <div>
             <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
@@ -282,7 +282,7 @@ export default function SubmissionsBrowser() {
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t("subs.search.placeholder")}
             aria-label={t("subs.search.label")}
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-11 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 [&::-webkit-search-cancel-button]:hidden"
+            className="w-full bg-[var(--ink-2)] border border-[var(--rule)] rounded-xl pl-9 pr-11 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 [&::-webkit-search-cancel-button]:hidden"
           />
           {searchInput && (
             <button
@@ -296,10 +296,10 @@ export default function SubmissionsBrowser() {
         </div>
 
         {/* Filter panel */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
 
           {/* ── Filter grid ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-800">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-[var(--ink-3)]">
 
             <FilterSelect
               id="subs-filter-type"
@@ -344,7 +344,7 @@ export default function SubmissionsBrowser() {
             </p>
           </div>
         ) : (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
             <ul className="divide-y divide-gray-800">
               {reports.map((r) => {
                 const opt = TYPE_OPTIONS.find((o) => o.value === r.type) ?? TYPE_OPTIONS[TYPE_OPTIONS.length - 1];
@@ -416,7 +416,7 @@ export default function SubmissionsBrowser() {
                       {displayContent && (
                         <SafeDisplay
                           value={displayContent}
-                          className="block text-xs text-gray-400 break-all border-l-2 border-gray-700 pl-2"
+                          className="block text-xs text-gray-400 break-all border-l-2 border-[var(--rule)] pl-2"
                         />
                       )}
                       {r.description && (
@@ -447,7 +447,7 @@ export default function SubmissionsBrowser() {
             <button
               onClick={() => goTo(page - 1)}
               disabled={page === 1 || loading}
-              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-gray-900 border border-gray-700 text-gray-300 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-[var(--ink-2)] border border-[var(--rule)] text-gray-300 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               ← {t("subs.pagination.prev")}
             </button>
@@ -466,7 +466,7 @@ export default function SubmissionsBrowser() {
                     className={`min-w-[44px] min-h-[44px] py-2.5 text-sm rounded-lg border transition-colors ${
                       p === page
                         ? "bg-emerald-500 border-emerald-400 text-gray-900 font-semibold"
-                        : "bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500"
+                        : "bg-[var(--ink-2)] border-[var(--rule)] text-gray-300 hover:border-gray-500"
                     }`}
                   >
                     {p}
@@ -483,7 +483,7 @@ export default function SubmissionsBrowser() {
             <button
               onClick={() => goTo(page + 1)}
               disabled={page === totalPages || loading}
-              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-gray-900 border border-gray-700 text-gray-300 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2.5 min-h-[44px] text-sm rounded-lg bg-[var(--ink-2)] border border-[var(--rule)] text-gray-300 hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {t("subs.pagination.next")} →
             </button>

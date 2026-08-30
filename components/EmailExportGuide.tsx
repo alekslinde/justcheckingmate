@@ -55,7 +55,7 @@ export default function EmailExportGuide({ expandable = true }: { expandable?: b
             className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
               active === c.id
                 ? "bg-emerald-500 text-gray-900"
-                : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                : "bg-[var(--ink-3)] text-gray-300 hover:bg-gray-700"
             }`}
           >
             {t(c.tabKey)}

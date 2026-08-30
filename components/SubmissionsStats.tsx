@@ -87,7 +87,7 @@ function TypeBars({ byType }: { byType: FeedStats["byType"] }) {
         return (
           <li key={type} className="flex items-center gap-2 text-xs">
             <span className="w-24 shrink-0 text-gray-400 truncate">{t(meta.labelKey)}</span>
-            <div className="flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+            <div className="flex-1 bg-[var(--ink-3)] rounded-full h-1.5 overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-[width] duration-500"
                 style={{ width: `${pct}%` }}
@@ -120,9 +120,9 @@ export default function SubmissionsStats() {
   const showCharts = stats.total >= SPARKLINE_MIN;
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+    <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
       {/* Total count header */}
-      <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-[var(--rule)] flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
           {t("subs.stats.activity")}
         </span>
@@ -134,18 +134,18 @@ export default function SubmissionsStats() {
       </div>
 
       {showCharts && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-gray-800">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-[var(--ink-3)]">
           {/* Sparkline panel — flex-end so the graph hugs the bottom of the
               panel when the type-breakdown column makes the row taller. */}
           {stats.byDay.length >= 2 && (
-            <div className="bg-gray-900 px-4 pt-3 pb-2 flex flex-col justify-end space-y-1">
+            <div className="bg-[var(--ink-2)] px-4 pt-3 pb-2 flex flex-col justify-end space-y-1">
               <Sparkline byDay={stats.byDay} />
             </div>
           )}
 
           {/* Type breakdown panel */}
           {stats.byType.length > 0 && (
-            <div className="bg-gray-900 px-4 py-3 space-y-2">
+            <div className="bg-[var(--ink-2)] px-4 py-3 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
                 {t("subs.stats.breakdown")}
               </p>

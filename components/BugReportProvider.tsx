@@ -90,7 +90,7 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
         // semi-transparent backdrop-blur element in dark mode (renders as a grey
         // block / fails to repaint on scroll). The chip sits on a near-black
         // page, so the blur added almost nothing — dropping it is the reliable fix.
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-gray-300 shadow-lg hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+        className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-[var(--rule)] bg-[var(--ink-2)] px-3 py-2 text-xs text-gray-300 shadow-lg hover:border-emerald-500 hover:text-emerald-400 transition-colors"
         aria-haspopup="dialog"
       >
         <span>{t("bug.button")}</span>
@@ -190,7 +190,7 @@ function BugModal({
           dialogRef.current?.close();
         }
       }}
-      className="m-auto w-[calc(100%-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 p-0 text-gray-100 backdrop:bg-black/60"
+      className="m-auto w-[calc(100%-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--rule)] bg-[var(--ink-2)] p-0 text-gray-100 backdrop:bg-black/60"
     >
       <div className="p-6 space-y-4">
         {status === "sent" ? (
@@ -200,7 +200,7 @@ function BugModal({
             </h2>
             <p className="text-sm text-gray-300">{t("bug.sent.body")}</p>
             {bugId && (
-              <div className="inline-block rounded-lg border border-gray-800 bg-gray-950 px-4 py-2">
+              <div className="inline-block rounded-lg border border-[var(--rule)] bg-[var(--ink)] px-4 py-2">
                 <div className="text-xs text-gray-400">{t("bug.sent.reference")}</div>
                 <div className="font-mono font-bold text-emerald-400">{bugId}</div>
               </div>
@@ -208,7 +208,7 @@ function BugModal({
             <div>
               <button
                 onClick={() => dialogRef.current?.close()}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors"
+                className="px-4 py-2 bg-[var(--ink-3)] hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors"
               >
                 {t("bug.close")}
               </button>
@@ -259,7 +259,7 @@ function BugModal({
                 placeholder={t("bug.what.placeholder")}
                 rows={3}
                 maxLength={1000}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 resize-y"
+                className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500 resize-y"
               />
             </div>
 
@@ -274,13 +274,13 @@ function BugModal({
                 onChange={(e) => setContact(e.target.value)}
                 placeholder="you@example.com.au"
                 maxLength={200}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-[var(--ink)] border border-[var(--rule)] rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             {/* The exact diagnostics that will be sent — shown in full so consent
                 is informed. */}
-            <details className="rounded-lg border border-gray-800 bg-gray-950" open>
+            <details className="rounded-lg border border-[var(--rule)] bg-[var(--ink)]" open>
               <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 {t("bug.details.summary")}
               </summary>
@@ -305,7 +305,7 @@ function BugModal({
               <button
                 onClick={() => dialogRef.current?.close()}
                 disabled={status === "sending"}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-40"
+                className="px-4 py-2 bg-[var(--ink-3)] hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors disabled:opacity-40"
               >
                 {t("bug.notNow")}
               </button>
