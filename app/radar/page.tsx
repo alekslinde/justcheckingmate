@@ -28,7 +28,7 @@ export default async function RadarPage({
 
   return (
     <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
-      <ThreatRadar region={region} standalone />
+      <ThreatRadar region={region} />
     </main>
   );
 }

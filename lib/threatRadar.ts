@@ -111,9 +111,18 @@ export interface ThreatEntry {
   lastSeen: string;
   /** One or two sentences: what is happening, in the second person. */
   summary: string;
-  /** Verbatim-style lures. Concrete strings beat description for recognition. */
+  /**
+   * Verbatim-style lures. Concrete strings beat description for recognition.
+   *
+   * Authored for every entry but not currently rendered: the radar's rows show
+   * title, channel, coverage, summary and provenance, because printing lures
+   * and advice for all 28 is what made the page 17,000px on a phone. Kept
+   * deliberately — it is researched content, it costs nothing at runtime, and
+   * it is the obvious source for a per-entry detail view or an email reply. A
+   * test asserts every entry has some, so it cannot rot unnoticed.
+   */
   lures: string[];
-  /** A verifiable habit, not "be careful". Same contract as ScamSeason.advice. */
+  /** A verifiable habit, not "be careful". Same contract as ScamSeason.advice. Also unrendered — see `lures`. */
   advice: string;
   /**
    * What the detector does about it — one sentence, in user-facing terms.
@@ -787,11 +796,6 @@ function isRadarRegion(code: RegionCode): code is RadarRegion {
  */
 export function radarForRegion(code: RegionCode): ThreatEntry[] {
   return isRadarRegion(code) ? RADARS[code] : [];
-}
-
-/** Whether a region has an authored radar — drives nav/link visibility. */
-export function hasRadar(code: RegionCode): boolean {
-  return radarForRegion(code).length > 0;
 }
 
 /** Entries by status, in authored order. */

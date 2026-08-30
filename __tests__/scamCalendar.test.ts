@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   calendarForRegion,
-  hasCalendar,
   isActiveOn,
   activeSeasons,
   upcomingSeasons,
-  remainingSeasons,
   daysUntilStart,
   daysUntilEnd,
   seasonBands,
@@ -56,13 +54,6 @@ describe("calendarForRegion", () => {
     expect(unauthored.length).toBeGreaterThan(0);
     for (const code of unauthored) {
       expect(calendarForRegion(code)).toEqual([]);
-      expect(hasCalendar(code)).toBe(false);
-    }
-  });
-
-  it("reports every authored region as having a calendar", () => {
-    for (const code of authoredCalendarRegions()) {
-      expect(hasCalendar(code)).toBe(true);
     }
   });
 
@@ -310,41 +301,6 @@ describe("daysUntilEnd", () => {
   it("returns zero rather than a wrapped count when inactive", () => {
     const s = season({ startMonth: 7, startDay: 1, endMonth: 10, endDay: 31 });
     expect(daysUntilEnd(s, on(11, 20))).toBe(0);
-  });
-});
-
-describe("remainingSeasons", () => {
-  it("excludes active and upcoming seasons", () => {
-    const date = on(8, 10);
-    const ids = remainingSeasons("AU", date, 2).map((s) => s.id);
-    const shown = [
-      ...activeSeasons("AU", date).map((s) => s.id),
-      ...upcomingSeasons("AU", date, 2).map((s) => s.id),
-    ];
-    for (const id of shown) expect(ids).not.toContain(id);
-  });
-
-  it("orders by soonest start rather than authored order", () => {
-    const date = on(8, 10);
-    const list = remainingSeasons("AU", date, 2);
-    const gaps = list.map((s) => daysUntilStart(s, date));
-    expect([...gaps].sort((a, b) => a - b)).toEqual(gaps);
-  });
-
-  it("accounts for every authored season exactly once across the three groups", () => {
-    const date = on(8, 10);
-    const ids = [
-      ...activeSeasons("AU", date),
-      ...upcomingSeasons("AU", date, 2),
-      ...remainingSeasons("AU", date, 2),
-    ].map((s) => s.id);
-
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.sort()).toEqual(calendarForRegion("AU").map((s) => s.id).sort());
-  });
-
-  it("returns nothing for a region with no calendar", () => {
-    expect(remainingSeasons("ZZ", on(8, 10), 2)).toEqual([]);
   });
 });
 

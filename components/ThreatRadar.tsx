@@ -265,12 +265,12 @@ function ChannelFilter({
 }
 
 /**
- * The honest empty state, shown only on the standalone page.
+ * The honest empty state for a region with no authored radar.
  *
- * Same contract as the calendar's: inline, an unauthored region renders nothing
- * because surrounding content carries the page; as a whole page that would be a
- * dead end, so this says plainly we have no data rather than substituting
- * another country's campaigns.
+ * Rendering nothing would be a dead end, so this says plainly that we have no
+ * data rather than substituting another country's campaigns, and points somewhere
+ * useful. The region bar renders here too, and has to: picking a region we have
+ * no data for is a normal thing to do.
  */
 function EmptyState({ region }: { region: RegionCode }) {
   const { t } = useLang();
@@ -296,20 +296,13 @@ function EmptyState({ region }: { region: RegionCode }) {
   );
 }
 
-export default function ThreatRadar({
-  region,
-  standalone = false,
-}: {
-  region: RegionCode;
-  /** Renders an explanatory empty state instead of nothing when true. */
-  standalone?: boolean;
-}) {
+export default function ThreatRadar({ region }: { region: RegionCode }) {
   const { t } = useLang();
   const all = radarForRegion(region);
   const [channel, setChannel] = useState<ChannelFilterValue>("all");
   const counts = useMemo(() => channelCounts(region), [region]);
 
-  if (all.length === 0) return standalone ? <EmptyState region={region} /> : null;
+  if (all.length === 0) return <EmptyState region={region} />;
 
   const reviewed = lastUpdated(region);
   // Named rather than hardcoded: the intro renders for whichever region has an
@@ -321,28 +314,15 @@ export default function ThreatRadar({
   const byChannel = (entries: ThreatEntry[]) => filterByChannel(entries, channel);
 
   return (
-    <article className={standalone ? "space-y-6" : CARD} id="threat-radar">
-      {/* Standalone, this is the page, so it takes the page header every other
-          page uses. Inline on the home page it is one card among several and
-          keeps the smaller heading, which is why the two differ. */}
-      {standalone ? (
-        <>
-          {/* The neutrality line rides with the lede rather than floating below
-              the header: it qualifies what the lede just promised, and a gap
-              between them reads as a new section starting. */}
-          <PageHeader
-            eyebrow={t("radar.eyebrow")}
-            title={t("radar.headline")}
-            lede={`${t("radar.intro", { region: regionName })} ${t("radar.neutrality")}`}
-          />
-        </>
-      ) : (
-        <section className="space-y-2">
-          <h2 className={H2}>{t("radar.title")}</h2>
-          <p className="text-sm text-[var(--text-dim)]">{t("radar.intro", { region: regionName })}</p>
-          <p className="text-sm text-[var(--faint)]">{t("radar.neutrality")}</p>
-        </section>
-      )}
+    <article className="space-y-6" id="threat-radar">
+      {/* The neutrality line rides with the lede rather than floating below
+          the header: it qualifies what the lede just promised, and a gap
+          between them reads as a new section starting. */}
+      <PageHeader
+        eyebrow={t("radar.eyebrow")}
+        title={t("radar.headline")}
+        lede={`${t("radar.intro", { region: regionName })} ${t("radar.neutrality")}`}
+      />
 
       {/* Order: how fresh, then whose, then how to narrow it. The freshness
           stamp leads because it is the claim the page is making — everything
@@ -354,9 +334,7 @@ export default function ThreatRadar({
         />
       )}
 
-      {/* Standalone only: inline on the home page the check flow already owns
-          region, and a second control for the same thing would be a fork. */}
-      {standalone && <RegionBar region={region} />}
+      <RegionBar region={region} />
 
       {/* Gaps first, before the full board. They are the handful of entries
           where the reader is genuinely on their own, and burying them among the
@@ -417,24 +395,20 @@ export default function ThreatRadar({
           </p>
           <p className="text-xs text-[var(--faint)] leading-relaxed max-w-[70ch]">{t("radar.method.body")}</p>
         </div>
-        {/* Only on the standalone page — inline, the surrounding page carries
-            its own navigation and one of these would link to itself. */}
-        {standalone && (
-          <div className="flex flex-col gap-2">
-            <Link
-              href="/calendar"
-              className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
-            >
-              {t("radar.calendarCta")}
-            </Link>
-            <Link
-              href="/learn"
-              className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
-            >
-              {t("radar.learnCta")}
-            </Link>
-          </div>
-        )}
+        <div className="flex flex-col gap-2">
+          <Link
+            href="/calendar"
+            className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
+          >
+            {t("radar.calendarCta")}
+          </Link>
+          <Link
+            href="/learn"
+            className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
+          >
+            {t("radar.learnCta")}
+          </Link>
+        </div>
       </div>
     </article>
   );

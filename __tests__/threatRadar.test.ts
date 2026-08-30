@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   radarForRegion,
-  hasRadar,
   threatsByStatus,
   activeThreats,
   lastUpdated,
@@ -25,7 +24,6 @@ const AU = radarForRegion("AU");
 describe("radarForRegion", () => {
   it("returns authored entries for AU", () => {
     expect(AU.length).toBeGreaterThan(0);
-    expect(hasRadar("AU")).toBe(true);
   });
 
   it("returns an empty list for regions with no authored radar", () => {
@@ -33,7 +31,6 @@ describe("radarForRegion", () => {
     // Australian campaigns. Same contract as calendarForRegion.
     for (const code of supportedRegions().filter((c) => c !== "AU")) {
       expect(radarForRegion(code)).toEqual([]);
-      expect(hasRadar(code)).toBe(false);
       expect(lastUpdated(code)).toBeNull();
     }
   });

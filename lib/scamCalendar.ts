@@ -1056,10 +1056,6 @@ export function calendarForRegion(code: RegionCode): ScamSeason[] {
   return isCalendarRegion(code) ? CALENDARS[code] : [];
 }
 
-/** Whether any region has an authored calendar — drives nav/link visibility. */
-export function hasCalendar(code: RegionCode): boolean {
-  return calendarForRegion(code).length > 0;
-}
 
 /**
  * The region codes with an authored calendar.
@@ -1225,32 +1221,6 @@ export function daysUntilEnd(season: ScamSeason, date: DateLike): number {
   return diff >= 0 ? diff : diff + 365;
 }
 
-/**
- * Seasons that aren't active and aren't in the "coming up" strip, ordered by
- * how soon they start.
- *
- * Split out from the component because the ordering is the point: taking the
- * authored list and removing what's shown above leaves the remainder in
- * *authoring* order, which for AU interleaves January and June seasons and
- * reads as a bug. Sorting by the same key the strip uses makes the two
- * sections one continuous walk forward through the year, split by a fold.
- */
-export function remainingSeasons(
-  code: RegionCode,
-  date: DateLike,
-  upcomingLimit: number,
-): ScamSeason[] {
-  const shown = new Set([
-    ...activeSeasons(code, date),
-    ...upcomingSeasons(code, date, upcomingLimit),
-  ].map((s) => s.id));
-
-  return calendarForRegion(code)
-    .filter((s) => !shown.has(s.id))
-    .map((season) => ({ season, days: daysUntilStart(season, date) }))
-    .sort((a, b) => a.days - b.days)
-    .map(({ season }) => season);
-}
 
 /**
  * Seasons that aren't active yet, ordered by how soon they start.

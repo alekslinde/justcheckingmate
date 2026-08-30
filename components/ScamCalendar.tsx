@@ -267,12 +267,12 @@ function SeasonSection({
 }
 
 /**
- * The honest empty state, shown only on the standalone page.
+ * The honest empty state for a region with no authored calendar.
  *
- * As a *section* on another page, an unauthored region rendered nothing — right,
- * because there was surrounding content to carry the page. As a whole page that
- * would be a dead end, so this says plainly that we have no data rather than
- * substituting another country's seasons, and points somewhere useful.
+ * Rendering nothing would be a dead end, so this says plainly that we have no
+ * data rather than substituting another country's seasons, and points somewhere
+ * useful. The region bar renders here too, and has to: picking a region we have
+ * no data for is a normal thing to do.
  */
 function EmptyState({ region }: { region: RegionCode }) {
   const { t } = useLang();
@@ -301,7 +301,6 @@ function EmptyState({ region }: { region: RegionCode }) {
 export default function ScamCalendar({
   region,
   today,
-  standalone = false,
 }: {
   region: RegionCode;
   /**
@@ -310,15 +309,13 @@ export default function ScamCalendar({
    * the RSC boundary — a Date would be re-read in the *browser's* timezone.
    */
   today: CivilDate;
-  /** Renders an explanatory empty state instead of nothing when true. */
-  standalone?: boolean;
 }) {
   const { t } = useLang();
   const all = calendarForRegion(region);
 
-  // A region with no authored calendar never borrows another's seasons. Inline
-  // it renders nothing; as a page it explains itself.
-  if (all.length === 0) return standalone ? <EmptyState region={region} /> : null;
+  // A region with no authored calendar never borrows another's seasons — it
+  // says so instead.
+  if (all.length === 0) return <EmptyState region={region} />;
 
   // Freshness signal, derived from the seasons' own review dates so it can't
   // drift — the same contract as the radar's "as at" line.
@@ -331,26 +328,15 @@ export default function ScamCalendar({
   const upcoming = upcomingSeasons(region, today, all.length);
 
   return (
-    <article className={standalone ? "space-y-6" : CARD} id="scam-calendar">
-      {/* Standalone, this is the page, so it takes the page header every other
-          page uses. Inline it is one card among several and keeps the smaller
-          heading, which is why the two differ. */}
-      {standalone ? (
-        // The neutrality line rides with the lede rather than floating below the
-        // header: it qualifies what the lede just promised, and a gap between
-        // them reads as a new section starting.
-        <PageHeader
-          eyebrow={t("calendar.eyebrow")}
-          title={t("calendar.headline")}
-          lede={`${t("calendar.intro")} ${t("calendar.neutrality")}`}
-        />
-      ) : (
-        <section className="space-y-2">
-          <h2 className={H2}>{t("calendar.eyebrow")}</h2>
-          <p className="text-sm text-[var(--text-dim)]">{t("calendar.intro")}</p>
-          <p className="text-sm text-[var(--faint)]">{t("calendar.neutrality")}</p>
-        </section>
-      )}
+    <article className="space-y-6" id="scam-calendar">
+      {/* The neutrality line rides with the lede rather than floating below the
+          header: it qualifies what the lede just promised, and a gap between
+          them reads as a new section starting. */}
+      <PageHeader
+        eyebrow={t("calendar.eyebrow")}
+        title={t("calendar.headline")}
+        lede={`${t("calendar.intro")} ${t("calendar.neutrality")}`}
+      />
 
       {/* Order: how fresh, then whose, then the year. Matches the radar — the
           freshness stamp leads because it is the claim the page is making, and
@@ -362,9 +348,7 @@ export default function ScamCalendar({
         />
       )}
 
-      {/* Standalone only: inline, the surrounding page already owns region and a
-          second control for the same thing would be a fork. */}
-      {standalone && <RegionBar region={region} />}
+      <RegionBar region={region} />
 
       <SeasonGantt region={region} today={today} />
 
@@ -383,16 +367,12 @@ export default function ScamCalendar({
 
       <div className="border-t border-[var(--rule)] pt-4 space-y-3">
         <p className="text-xs text-[var(--faint)] leading-relaxed max-w-[70ch]">{t("calendar.outro")}</p>
-        {/* Only on the standalone page — inline, the surrounding page already
-            carries its own navigation and this would be a link to itself. */}
-        {standalone && (
-          <Link
-            href="/learn"
-            className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
-          >
-            {t("calendar.learnCta")}
-          </Link>
-        )}
+        <Link
+          href="/learn"
+          className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
+        >
+          {t("calendar.learnCta")}
+        </Link>
       </div>
     </article>
   );
