@@ -60,14 +60,12 @@ const TOC = [
 const BLOCK_EMAIL = ["gmail", "outlook", "apple", "yahoo", "any"] as const;
 const BLOCK_PHONE = ["ios", "android", "authorities", "apps"] as const;
 
-// How far down the viewport the sticky chrome reaches, in px: the site header
-// (58) plus the TOC bar that pins beneath it (~46 — py-2.5 around a single chip
-// row). Used to decide which section is "current" — the last one whose top has
-// scrolled up past that chrome. It only needs to be close: an off-by-a-few-px
-// value shifts the active-link hand-off by a few pixels of scroll, nothing more.
-// The anchored sections clear it via their own scroll-mt-24 (96px), comfortably
-// more than this.
-const TOC_BAR_HEIGHT = 104;
+// Height of the sticky site header, in px (min-h-[58px] in SiteHeader). The TOC
+// bar's own height is measured at runtime rather than assumed: the chips wrap,
+// so the bar is one row on a wide screen and three on a narrow one, and a
+// hard-coded total would put the "you are here" hand-off in the wrong place on
+// every width but one.
+const HEADER_HEIGHT = 58;
 
 // Part header — the page is split into two distinct halves: "Spotting scams"
 // (what scams are / how to identify them) and "Getting the most from this tool"
@@ -128,7 +126,7 @@ export default function LearnContent({
   // exactly a top-edge comparison, and the sections are collapsible, so their
   // heights change under the observer's feet.
   const [activeId, setActiveId] = useState<string>(TOC[0].id);
-  const tocRef = useRef<HTMLUListElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const sections = TOC.map(({ id }) => document.getElementById(id)).filter(
@@ -141,7 +139,10 @@ export default function LearnContent({
       // it can be tested without a browser.
       const tops = sections.map((el) => ({ id: el.id, top: el.getBoundingClientRect().top }));
       const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 2;
-      const id = activeSectionId(tops, { barHeight: TOC_BAR_HEIGHT, atBottom });
+      // Measured, not assumed — the bar wraps to two or three rows as the
+      // viewport narrows, and resize fires when it does.
+      const barHeight = HEADER_HEIGHT + (navRef.current?.offsetHeight ?? 0);
+      const id = activeSectionId(tops, { barHeight, atBottom });
       if (id) setActiveId(id);
     };
 
@@ -153,15 +154,6 @@ export default function LearnContent({
       window.removeEventListener("resize", computeActive);
     };
   }, []);
-
-  // Keep the active chip in view within the horizontally-scrolling bar, so on a
-  // narrow screen the highlighted link never sits off-screen. block:"nearest"
-  // holds the page still (the bar is always fully visible); only the bar's own
-  // horizontal scroll moves.
-  useEffect(() => {
-    const chip = tocRef.current?.querySelector<HTMLElement>(`[data-toc="${activeId}"]`);
-    chip?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeId]);
 
   return (
     // Full-width chrome, matching every other page. The prose inside sets its
@@ -178,27 +170,34 @@ export default function LearnContent({
       {/* Table of contents — a sticky, horizontally-scrollable index. The page is
           long and covers several distinct needs, so the fastest route to any one
           is a persistent bar that also shows where you are, not a one-shot list
-          scrolled past once. It pins to the top as the (non-sticky) site header
-          scrolls away; -mx-4 lets the divider span the column while the inner
-          padding keeps the chips aligned with the content. The active chip is
-          highlighted and scrolled into view as you move through the page. */}
+          scrolled past once. It pins beneath the sticky site header; the negative
+          margins let the divider span the column while the inner padding keeps
+          the chips aligned with the content. The active chip is highlighted as
+          you move through the page.
+
+          The chips wrap rather than scrolling sideways. Nine labels, some as long
+          as "If you've already clicked or shared details", do not fit one row at
+          any width, and a horizontal scroller with a hidden scrollbar gives no
+          hint that the rest exist — it just reads as a bar you can drag, with
+          several sections invisible unless you happen to swipe it. */}
       <nav
+        ref={navRef}
         aria-label={t("learn.toc.heading")}
-        className="sticky top-[58px] z-20 -mx-5 sm:-mx-8 border-y border-[var(--rule)] bg-[var(--ink)]/85 backdrop-blur"
+        // The rule and background span the full column via padding on the <ul>
+        // rather than negative margins on the <nav>. -mx-5 made this box wider
+        // than <main>, and since <main> already fills the viewport on a phone,
+        // that pushed the whole page into horizontal overflow.
+        className="sticky top-[58px] z-20 border-y border-[var(--rule)] bg-[var(--ink)]/85 backdrop-blur"
       >
-        <ul
-          ref={tocRef}
-          className="flex gap-1.5 overflow-x-auto px-5 sm:px-8 py-2.5 list-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
+        <ul className="flex flex-wrap gap-1.5 py-2.5 list-none">
           {TOC.map(({ id, labelKey }) => {
             const active = id === activeId;
             return (
               <li key={id}>
                 <a
                   href={`#${id}`}
-                  data-toc={id}
                   aria-current={active ? "location" : undefined}
-                  className={`block whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`block rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                     active
                       ? "border-[var(--clear)]/40 bg-[var(--clear)]/12 text-[var(--clear)]"
                       : "border-transparent text-[var(--text-dim)] hover:text-[var(--foreground)] hover:bg-[var(--ink-2)]"
