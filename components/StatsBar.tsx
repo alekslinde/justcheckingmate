@@ -25,7 +25,7 @@ export default function StatsBar() {
   // The container always renders at full height so the hero doesn't shift
   // when the numbers arrive (or never do).
   return (
-    <div className="flex items-center justify-center gap-6 text-sm text-gray-300 pb-1 min-h-[1.75rem]">
+    <div className="flex items-center gap-6 text-sm text-[var(--text-dim)] pb-1 min-h-[1.75rem]">
       {!empty && (
         <>
           <span>

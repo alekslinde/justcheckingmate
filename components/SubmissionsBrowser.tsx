@@ -257,7 +257,7 @@ export default function SubmissionsBrowser() {
     <main>
       {/* Header */}
       <div className="bg-gradient-to-b from-gray-900 to-gray-950 border-b border-[var(--rule)]">
-        <div className="max-w-2xl mx-auto px-4 py-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
           <div>
             <h1 className="text-2xl font-black text-emerald-400 tracking-tight">
               {t("subs.title")}
@@ -267,7 +267,7 @@ export default function SubmissionsBrowser() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-4">
 
         <SubmissionsStats />
 

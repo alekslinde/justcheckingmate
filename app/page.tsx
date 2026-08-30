@@ -3,6 +3,7 @@ import CheckFlow from "@/components/CheckFlow";
 import HomeHero from "@/components/HomeHero";
 import SeasonTeaser from "@/components/SeasonTeaser";
 import RadarTeaser from "@/components/RadarTeaser";
+import ForwardPanel from "@/components/ForwardPanel";
 import { resolveRegion } from "@/lib/regionResolver";
 import { regionToday } from "@/lib/scamCalendar";
 
@@ -18,14 +19,31 @@ export default async function Home() {
   const today = regionToday(region);
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-6">
       <HomeHero />
-      <CheckFlow />
-      {/* Both below the check box on purpose — see SeasonTeaser's header
-          comment. The radar sits second: the season teaser only renders inside
-          its window, so it is the rarer and more timely of the two. */}
-      <SeasonTeaser region={region} today={today} />
-      <RadarTeaser region={region} />
+
+      {/* The fold holds exactly two things: paste it here, or forward it from
+          your mail app. They are alternatives, so they sit side by side rather
+          than stacked — the old single 672px column pushed the teasers below
+          the fold on a laptop and left the bottom of the page empty.
+
+          The check box takes the wider track: it is the primary action, and the
+          textarea needs the room. Forwarding is a narrow panel because it is
+          three lines and an address. */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
+        <CheckFlow />
+        <ForwardPanel />
+      </div>
+
+      {/* Both below the fold on purpose — see SeasonTeaser's header comment.
+          Side by side from md up: they are peers, and stacking two full-width
+          cards was most of what pushed the page long. The radar sits second:
+          the season teaser only renders inside its window, so it is the rarer
+          and more timely of the two. */}
+      <div className="grid gap-5 md:grid-cols-2 md:items-start">
+        <SeasonTeaser region={region} today={today} />
+        <RadarTeaser region={region} />
+      </div>
     </main>
   );
 }

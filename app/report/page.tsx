@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 // why the email body itself is never among them.
 export default function ReportPage() {
   return (
-    <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-6">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
           Report a scam

@@ -10,7 +10,6 @@ import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
-import { bold } from "@/lib/richText";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
@@ -55,15 +54,6 @@ function EmailFileIcon() {
   );
 }
 
-function ForwardIcon() {
-  return (
-    <svg {...ICON}>
-      <path d="M3 17v-2a6 6 0 0 1 6-6h11" />
-      <path d="m16 5 4 4-4 4" />
-    </svg>
-  );
-}
-
 function SpinnerIcon() {
   return (
     <svg {...ICON} className="w-6 h-6 animate-spin">
@@ -82,8 +72,6 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
 // Forward-to-us address, shown only once inbound mail is live end-to-end. The
 // flag is read at build time (NEXT_PUBLIC_*), so an unconfigured deploy never
 // advertises a dead inbox. Address is overridable for staging/other domains.
-const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
-const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "check@justcheckingmate.com";
 
 // Shared chrome for the four capture options (take photo / upload image /
 // upload .eml / forward). One constant rather than the same 200-character class
@@ -186,7 +174,6 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
   // Forward-address copy confirmation. Copying is the one part of forwarding the
   // web can actually do for someone — the forward itself happens in their mail
   // app, which no page can reach into.
-  const [addressCopied, setAddressCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Full email-source analysis (unwrap → headers → identity flags → tracking),
   // populated in runCheck. null until a check runs. Everything the result page
@@ -400,18 +387,6 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       setTimeout(() => setShareCopied(false), 2500);
     } catch {
       // Clipboard unavailable (rare) — nothing sensible to do.
-    }
-  }
-
-  async function copyInboundAddress() {
-    try {
-      await navigator.clipboard.writeText(INBOUND_ADDRESS);
-      setAddressCopied(true);
-      setTimeout(() => setAddressCopied(false), 2500);
-    } catch {
-      // Clipboard unavailable (older browser, insecure origin) — the address is
-      // rendered as selectable text right beside the button, so there is still
-      // a way through without it.
     }
   }
 
@@ -903,45 +878,6 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
           promising "Forward" that opens an empty email is worse than no button,
           so we do the one thing the page genuinely can (copy the address) and
           state plainly where the rest happens. */}
-      {INBOUND_ENABLED && (
-        <div className="border-t border-[var(--rule)] pt-5 space-y-2">
-          {/* Heading and payoff on one line — the payoff is four words and does
-              not earn a paragraph of its own. */}
-          <p className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <span className="shrink-0 text-gray-500"><ForwardIcon /></span>
-            <span>
-              {t("check.forward.heading")}{" "}
-              <span className="font-normal text-gray-400">{t("check.forward.body")}</span>
-            </span>
-          </p>
-
-          {/* The app flags tracking pixels as a red flag, so it must not tell
-              people to trigger one. Opening a scam email loads its pixel and
-              confirms the address is live; forwarding from the message list
-              doesn't. Guidance, not a prerequisite — someone who already opened
-              it still needs the check. */}
-          <p className="text-xs text-[var(--caution)] bg-[var(--caution)]/10 border border-[var(--caution)]/35 rounded-lg px-3 py-2">
-            {bold(t("check.forward.noopen"))}
-          </p>
-
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--rule)] bg-[var(--ink)] px-3 py-2">
-            {/* Selectable text, so the address is usable even when the clipboard
-                API isn't (insecure origin, older browser, denied permission). */}
-            <code className="flex-1 min-w-0 truncate text-sm text-emerald-400 select-all">
-              {INBOUND_ADDRESS}
-            </code>
-            <button
-              type="button"
-              onClick={copyInboundAddress}
-              className="shrink-0 rounded-md border border-[var(--rule)] px-2.5 py-1 text-xs font-semibold text-gray-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
-            >
-              {addressCopied ? t("check.forward.copied") : t("check.forward.copy")}
-            </button>
-          </div>
-
-          <p className="text-[11px] text-gray-500">{t("check.forward.note")}</p>
-        </div>
-      )}
     </div>
   );
 }
