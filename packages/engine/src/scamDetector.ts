@@ -5,13 +5,102 @@ import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "./regions";
 import { KEYS_BY_POST_PHRASES } from "./regions/base";
-import type { CheckResult } from "./engineTypes";
+import type { CheckResult, Signal, SignalSource } from "./engineTypes";
 
 // ScamType and CheckResult live in engineTypes.ts to break the import cycle
 // with detectType (see the note there). Re-exported here so every existing
 // consumer keeps importing them from the scorer.
 export type { ScamType, CheckResult } from "./engineTypes";
+export type { Signal, SignalSource } from "./engineTypes";
 export type { PhoneIntel };
+
+// ────────────────────────────────────────────────────────────────────────────
+// Evidence collection
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Every checker below builds a Signals list rather than pushing to a bare
+// string[] and mutating a separate score. The two were always meant to move
+// together — a reason without its weight cannot explain a verdict — and keeping
+// them in one call makes it impossible to add a reason and forget the points,
+// or to change a weight and leave the wording describing the old one.
+//
+// `total()` is the pre-clamp sum. Clamping stays at the call sites that already
+// did it, because the ceiling is part of each checker's policy, not of
+// collection: see finalise(), which records the clamp as its own visible row.
+
+class Signals {
+  private readonly list: Signal[] = [];
+
+  /** Record one reason and the points it contributes. Returns the points so a
+   *  caller can still branch on what it just added. */
+  add(source: SignalSource, text: string, points = 0): number {
+    this.list.push({ text, points, source });
+    return points;
+  }
+
+  /**
+   * Fold in a sub-result (the SMS pass over an email body, the header identity
+   * check). Its reasons keep their own wording, and `weight` divides the
+   * sub-total across them in proportion to what each contributed, so the rows
+   * still sum to the weighted score the caller adds. A sub-result that carries
+   * no signals of its own falls back to one row holding the whole amount.
+   */
+  merge(source: SignalSource, sub: { flags: string[]; signals?: Signal[] }, weighted: number): number {
+    const inner = sub.signals?.filter((x) => x.source !== "score") ?? [];
+    const rawTotal = inner.reduce((n, x) => n + x.points, 0);
+    if (inner.length && rawTotal > 0) {
+      let handed = 0;
+      inner.forEach((x, i) => {
+        // Last row takes the remainder so rounding never loses or invents a point.
+        const share = i === inner.length - 1 ? weighted - handed : Math.round((x.points / rawTotal) * weighted);
+        handed += share;
+        this.list.push({ text: x.text, points: share, source });
+      });
+      return weighted;
+    }
+    for (const text of sub.flags) this.list.push({ text, points: 0, source });
+    if (weighted !== 0) {
+      this.list.push({ text: sub.flags[0] ?? "Sub-check contribution", points: weighted, source });
+    }
+    return weighted;
+  }
+
+  /** Pre-clamp sum of every contribution so far. */
+  total(): number {
+    return this.list.reduce((n, s) => n + s.points, 0);
+  }
+
+  get length(): number {
+    return this.list.length;
+  }
+
+  /** Reader-facing sentences, in the order they were found. */
+  texts(): string[] {
+    return this.list.map((s) => s.text);
+  }
+
+  all(): Signal[] {
+    return [...this.list];
+  }
+
+  /**
+   * Close the list off at a final score, appending a "score" row whenever the
+   * clamp actually bit. Without that row the evidence visibly fails to add up:
+   * six signals totalling 130 above a headline reading 100 looks like a bug to
+   * anyone who checks our arithmetic, and we invite them to.
+   */
+  finalise(score: number): Signal[] {
+    const raw = this.total();
+    if (raw !== score) {
+      this.list.push({
+        text: `Signals total ${raw} — the score is capped at ${score}`,
+        points: score - raw,
+        source: "score",
+      });
+    }
+    return this.all();
+  }
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Signal lists
@@ -167,8 +256,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     legitDomains: LEGIT_AU_DOMAINS,
     typosquatBrands: TYPOSQUAT_BRANDS,
   } = PACK;
-  const flags: string[] = [];
-  let score = 0;
+  const sig = new Signals();
   let urlObj: URL | null = null;
 
   const input = raw.trim().startsWith("http") ? raw.trim() : `https://${raw.trim()}`;
@@ -209,35 +297,30 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
 
   // URLhaus live blocklist — hostname confirmed malicious by abuse.ch reporters
   if (blocklist?.has(hostname)) {
-    flags.push("This domain is on the URLhaus live malware/phishing blocklist — reported by security researchers as actively malicious");
-    score += 70;
+    sig.add("link", "This domain is on the URLhaus live malware/phishing blocklist — reported by security researchers as actively malicious", 70);
   }
 
   // Known URL shorteners
   if (SCAM_DOMAINS.some((d) => hostname === d || hostname.endsWith("." + d))) {
-    flags.push("URL shortener detected — hides the real destination");
-    score += 40;
+    sig.add("link", "URL shortener detected — hides the real destination", 40);
   }
 
   // Suspicious TLDs
   const tldMatch = SUSPICIOUS_TLDS.find((t) => hostname.endsWith(t));
   if (tldMatch) {
-    flags.push(`Dodgy top-level domain (${tldMatch}) — commonly used by scammers`);
-    score += 30;
+    sig.add("link", `Dodgy top-level domain (${tldMatch}) — commonly used by scammers`, 30);
   }
 
   // IP address instead of domain
   if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
-    flags.push("IP address used instead of a domain name");
-    score += 35;
+    sig.add("link", "IP address used instead of a domain name", 35);
   }
 
   // IPFS-hosted content (D9 / #56). Decentralised hosting that can't be taken
   // down — increasingly used for phishing. Match known public gateways by
   // hostname OR any host serving the /ipfs/<CID> path convention.
   if (IPFS_GATEWAYS.has(hostname) || /\/ipfs\/[A-Za-z0-9]{20,}/.test(urlObj.pathname)) {
-    flags.push("IPFS-hosted content — stored on a decentralised network that can't be taken down; increasingly used to host phishing pages");
-    score += 40;
+    sig.add("link", "IPFS-hosted content — stored on a decentralised network that can't be taken down; increasingly used to host phishing pages", 40);
   }
 
   // Free-tier cloud dev platforms abused as phishing hosting (D1/D2 / #63).
@@ -245,8 +328,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
   // filters wave them through. Match on the registrable suffix only.
   const hostingMatch = SUSPICIOUS_HOSTING.find((h) => hostname === h || hostname.endsWith("." + h));
   if (hostingMatch) {
-    flags.push(`Hosted on ${hostingMatch} — a free developer platform frequently abused to host phishing pages because it inherits a trusted reputation`);
-    score += HOSTING_SCORES[hostingMatch] ?? 35;
+    sig.add("link", `Hosted on ${hostingMatch} — a free developer platform frequently abused to host phishing pages because it inherits a trusted reputation`, HOSTING_SCORES[hostingMatch] ?? 35);
   }
 
   // Trusted-service redirect abuse (D16 / roadmap). A legitimate host whose
@@ -257,8 +339,7 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
   if (REDIRECT_HOSTS.some((h) => hostname === h || hostname.endsWith("." + h)) ||
       hostname.endsWith("linkedin.com") && urlObj.pathname.includes("/slink") ||
       carriesNestedUrl) {
-    flags.push("Trusted service used as a redirect — the real destination is hidden in the link and may be malicious");
-    score += 15;
+    sig.add("link", "Trusted service used as a redirect — the real destination is hidden in the link and may be malicious", 15);
   }
 
   // Typosquatted brands for this region. Which brands get impersonated is the
@@ -318,14 +399,12 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     for (const brand of TYPOSQUAT_BRANDS.substring) {
       // The brand owning the whole label is the real site, not a squat.
       if (hostname.includes(brand) && registrable !== brand) {
-        flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
-        score += 45;
+        sig.add("link", `Looks like it's impersonating "${brand}" — classic phishing move`, 45);
       }
     }
     for (const brand of TYPOSQUAT_BRANDS.word) {
       if (labelWords.includes(brand) && registrable !== brand) {
-        flags.push(`Looks like it's impersonating "${brand}" — classic phishing move`);
-        score += 45;
+        sig.add("link", `Looks like it's impersonating "${brand}" — classic phishing move`, 45);
       }
     }
   }
@@ -333,37 +412,32 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
   // Excessive hyphens (scam site hallmark)
   const hyphens = (hostname.match(/-/g) || []).length;
   if (hyphens >= 3) {
-    flags.push(`Heaps of hyphens in the domain (${hyphens}) — scammers love this trick`);
-    score += 20;
+    sig.add("link", `Heaps of hyphens in the domain (${hyphens}) — scammers love this trick`, 20);
   }
 
   // HTTP not HTTPS
   if (urlObj.protocol === "http:") {
-    flags.push("No HTTPS — your data wouldn't be encrypted");
-    score += 15;
+    sig.add("link", "No HTTPS — your data wouldn't be encrypted", 15);
   }
 
   // Very long URL
   if (input.length > 200) {
-    flags.push("Suspiciously long URL — often used to hide the real destination");
-    score += 15;
+    sig.add("link", "Suspiciously long URL — often used to hide the real destination", 15);
   }
 
   // Weird subdomains depth
   const parts = hostname.split(".");
   if (parts.length > 5) {
-    flags.push("Too many subdomain levels — used to make fake URLs look legit");
-    score += 20;
+    sig.add("link", "Too many subdomain levels — used to make fake URLs look legit", 20);
   }
 
   // Legit-looking patterns but suspicious
   if (fullUrl.includes("login") || fullUrl.includes("signin") || fullUrl.includes("verify") || fullUrl.includes("secure")) {
-    flags.push("Contains login/verify/secure keywords — common in phishing URLs");
-    score += 10;
+    sig.add("link", "Contains login/verify/secure keywords — common in phishing URLs", 10);
   }
 
-  score = Math.min(score, 100);
-  return scoreToResult(score, flags, "URL", PACK.coverage, PACK.reportingBody);
+  const score = Math.min(sig.total(), 100);
+  return scoreToResult(score, sig, "URL", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -451,14 +525,12 @@ export function checkSms(
     bankIdentifiers: BANK_IDENTIFIERS,
   } = PACK;
   const CRYPTO_TOAD_BRANDS = PACK.cryptoExchanges;
-  const flags: string[] = [];
-  let score = 0;
+  const sig = new Signals();
   const lower = text.toLowerCase();
 
   const urgencyHits = URGENCY_WORDS.filter((w) => mentions(lower, w));
   if (urgencyHits.length > 0) {
-    flags.push(`Urgency language detected: "${urgencyHits.slice(0, 3).join('", "')}"`);
-    score += Math.min(urgencyHits.length * 10, 35);
+    sig.add("message", `Urgency language detected: "${urgencyHits.slice(0, 3).join('", "')}"`, Math.min(urgencyHits.length * 10, 35));
   }
 
   // Address correction presented as blocking a delivery (D1 / 2026-08-29
@@ -487,22 +559,20 @@ export function checkSms(
   const hasDeliveryContext = /\b(parcels?|packages?|shipments?|deliver\w*|courier|consignment|tracking)\b/i.test(text);
   const addressPhraseHit = PACK.parcelAddressPhrases.find((p) => mentions(lower, p));
   if (addressPhraseHit && hasDeliveryContext) {
-    flags.push(
+    sig.add("message", 
       `Asks you to fix an address to release a delivery ("${addressPhraseHit}") — Australia Post warns this is the most common parcel scam. A real carrier tells you about a delivery problem; it doesn't need your address again to hand over goods it already has.`,
+    20,
     );
-    score += 20;
   }
 
   const rewardHits = REWARD_WORDS.filter((w) => mentions(lower, w));
   if (rewardHits.length > 0) {
-    flags.push(`Prize/reward language: "${rewardHits.slice(0, 2).join('", "')}"`);
-    score += Math.min(rewardHits.length * 12, 40);
+    sig.add("message", `Prize/reward language: "${rewardHits.slice(0, 2).join('", "')}"`, Math.min(rewardHits.length * 12, 40));
   }
 
   const requestHits = REQUEST_WORDS.filter((w) => mentions(lower, w));
   if (requestHits.length > 0) {
-    flags.push(`Asks for sensitive info: "${requestHits.slice(0, 2).join('", "')}"`);
-    score += Math.min(requestHits.length * 15, 50);
+    sig.add("message", `Asks for sensitive info: "${requestHits.slice(0, 2).join('", "')}"`, Math.min(requestHits.length * 15, 50));
   }
 
   // Rental/property bond redirect fraud (D5 / #105). Composite: a rental
@@ -518,8 +588,7 @@ export function checkSms(
   const hasBankAsk = /bank details|account number|account no\b/i.test(text) ||
     BANK_IDENTIFIERS.some((w) => lower.includes(w));
   if (hasRentalContext && hasBankAsk) {
-    flags.push("Property bond fraud pattern — scammers intercept rental communications to redirect bond payments. Always verify bank detail changes by calling the agency on a number from their official website, never one in the message.");
-    score += 25;
+    sig.add("message", "Property bond fraud pattern — scammers intercept rental communications to redirect bond payments. Always verify bank detail changes by calling the agency on a number from their official website, never one in the message.", 25);
   }
 
   // Keys-by-post, gated (D3 / #180). On its own this is an ordinary move-in
@@ -529,8 +598,7 @@ export function checkSms(
   // REQUEST_WORDS already carries the main weight, and this only corroborates.
   const hasDepositAsk = /deposit/i.test(text);
   if (KEYS_BY_POST_PHRASES.some((k) => lower.includes(k)) && (hasDepositAsk || hasBankAsk)) {
-    flags.push("Keys promised by post alongside a deposit request — in the fake-landlord script the 'landlord' is always abroad, so there's no viewing and no key handover. Never send a deposit for a property you or someone you trust hasn't physically viewed.");
-    score += 15;
+    sig.add("message", "Keys promised by post alongside a deposit request — in the fake-landlord script the 'landlord' is always abroad, so there's no viewing and no key handover. Never send a deposit for a property you or someone you trust hasn't physically viewed.", 15);
   }
 
   // Payment details presented as *changed* — the core of redirect fraud (D5 /
@@ -546,20 +614,17 @@ export function checkSms(
     /\b(updated?|new|changed|amended|revised)\s+(bank|payment|account|remittance)\s*(details|account|number|info)?/i.test(text) ||
     /\b(bank|payment|account)\s+details\s+have\s+(been\s+)?(updated|changed|amended)/i.test(text);
   if (changedPaymentDetails && hasBankAsk) {
-    flags.push("Payment details presented as recently changed — this is the signature of redirect fraud, where a scammer intercepts a real invoice or tenancy thread and substitutes their own account. Confirm any change by phoning the organisation on a number you already had, never one from the message.");
-    score += 20;
+    sig.add("message", "Payment details presented as recently changed — this is the signature of redirect fraud, where a scammer intercepts a real invoice or tenancy thread and substitutes their own account. Confirm any change by phoning the organisation on a number you already had, never one from the message.", 20);
   }
 
   // Contains a URL
   const urlMatch = text.match(/https?:\/\/[^\s]+/gi);
   if (urlMatch) {
-    flags.push(`Contains link: ${urlMatch[0].slice(0, 50)}...`);
-    score += 15;
+    sig.add("message", `Contains link: ${urlMatch[0].slice(0, 50)}...`, 15);
     // Check the embedded URL too
     const urlCheck = checkUrl(urlMatch[0], blocklist, region);
     if (urlCheck.score > 40) {
-      flags.push("...and that link looks dodgy too");
-      score += 20;
+      sig.add("message", "...and that link looks dodgy too", 20);
     }
   }
 
@@ -573,8 +638,7 @@ export function checkSms(
     /send\s+[Yy](es)?\s+to\s+(get|receive|access|activat)/i.test(text) ||
     /copy\s+(the\s+|this\s+|that\s+)?(link|url)\s+(into|to)\s+your\s+browser/i.test(text);
   if (replyBypass) {
-    flags.push("'Reply Y' trick detected — scammers tell you to reply first so links become tappable, bypassing your phone's spam filters");
-    score += 25;
+    sig.add("message", "'Reply Y' trick detected — scammers tell you to reply first so links become tappable, bypassing your phone's spam filters", 25);
   }
 
   // QR-code "quishing" prompts (D11 / part of roadmap). The URL hides inside an
@@ -591,8 +655,7 @@ export function checkSms(
       // clean. Reuses the flag and +20 score — the existing wording already
       // describes this variant correctly.
       /\b(?:attachment|attached|(?:attached\s+)?(?:pdf|file|document|invoice))\s+(?:\w+\s+){0,2}?(?:contains?|includes?|has)\s+(?:a\s+|the\s+)?qr\s*code\b/i.test(text)) {
-    flags.push("QR code scan prompt — 'quishing' attacks hide malicious URLs inside QR images to dodge link scanners");
-    score += 20;
+    sig.add("message", "QR code scan prompt — 'quishing' attacks hide malicious URLs inside QR images to dodge link scanners", 20);
   }
 
   // Fake voicemail notification lures (D5 / #122). Flubot-era smishing
@@ -611,8 +674,7 @@ export function checkSms(
       /listen\s+(?:to\s+)?(?:your\s+)?(?:new\s+)?voicemail/i.test(text) ||
       /voicemail\s+(?:notification|alert|waiting|received|pending)/i.test(text) ||
       /missed\s+call\s+(?:notification|alert)[\s\S]{0,30}(?:click|tap|visit|listen)/i.test(text)) {
-    flags.push("Fake voicemail notification — scammers send fake 'you have a new voicemail' messages to trick you into clicking a malicious link. Legitimate voicemail services never deliver audio via a separate SMS link.");
-    score += 20;
+    sig.add("message", "Fake voicemail notification — scammers send fake 'you have a new voicemail' messages to trick you into clicking a malicious link. Legitimate voicemail services never deliver audio via a separate SMS link.", 20);
   }
 
   // ClickFix "run a command" social engineering (D3 / #74 / ACSC advisory May
@@ -621,11 +683,9 @@ export function checkSms(
   // this, so the fuzzy match scores near-certain.
   if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
       /powershell\s+-[ec]/i.test(text)) {
-    flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
-    score += 50;
+    sig.add("message", "'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step", 50);
   } else if (isMacClickFix(text)) {
-    flags.push(MAC_CLICKFIX_FLAG);
-    score += 50;
+    sig.add("message", MAC_CLICKFIX_FLAG, 50);
   }
 
   // ACMA SMS Sender ID "Unverified" label override language (D7 / #78 / post-1
@@ -641,8 +701,7 @@ export function checkSms(
   // Only scored where the region actually runs a sender-ID registration
   // scheme — asserting foreign regulation to users elsewhere would be false.
   if (unverifiedOverride && PACK.senderIdFlag) {
-    flags.push(PACK.senderIdFlag);
-    score += 35;
+    sig.add("message", PACK.senderIdFlag, 35);
   }
 
   // Fake task/job recruitment funnel for pig-butchering (D13 / #51). Composite:
@@ -656,8 +715,7 @@ export function checkSms(
     /\bwork\s+from\s+home\b/i,
   ].filter((re) => re.test(text)).length;
   if (jobSignals >= 2) {
-    flags.push("Task/job recruitment pattern — a common funnel into 'pig-butchering' investment scams; real employers don't recruit this way");
-    score += 25;
+    sig.add("message", "Task/job recruitment pattern — a common funnel into 'pig-butchering' investment scams; real employers don't recruit this way", 25);
   }
 
   // WhatsApp/Telegram investment-group pig-butchering funnel (D5 / #76 / ASIC
@@ -675,8 +733,7 @@ export function checkSms(
   const hasCryptoSignal = ["crypto", "bitcoin", "wallet", "connect wallet", "sign transaction"]
     .some((w) => lower.includes(w));
   if (investmentGroupSignals >= 2 || (investmentGroupSignals >= 1 && hasCryptoSignal)) {
-    flags.push("Investment group recruitment pattern — scammers use 'private trading tip' groups as an entry point for pig-butchering investment fraud; real investment groups don't recruit via cold messages");
-    score += 30;
+    sig.add("message", "Investment group recruitment pattern — scammers use 'private trading tip' groups as an entry point for pig-butchering investment fraud; real investment groups don't recruit via cold messages", 30);
   }
 
   // Sender mentions a gov agency but is a random number.
@@ -688,8 +745,7 @@ export function checkSms(
   // suspicious. The domain is matched exactly or as a subdomain, so a lookalike
   // like `auspost.com.au.evil.tk` does not qualify (see isOwnDomainSender).
   if (mentionsAny(lower, PACK.authorityMentions) && !isOwnDomainSender(channel, options?.senderDomain, PACK)) {
-    flags.push("Claims to be from a government agency — verify directly via official channels");
-    score += 25;
+    sig.add("message", "Claims to be from a government agency — verify directly via official channels", 25);
 
     // Senders that have publicly removed links from their unsolicited SMS — a
     // link alongside one of these is a scam. Scoped to the confirmed no-link
@@ -703,8 +759,7 @@ export function checkSms(
     // wrong about what was checked. Found when a genuine Australia Post
     // delivery notification scored 38/suspicious on this rule.
     if (channel === "sms" && urlMatch && mentionsAny(lower, PACK.noLinkSenders)) {
-      flags.push(PACK.noLinkSendersFlag);
-      score += 15;
+      sig.add("message", PACK.noLinkSendersFlag, 15);
     }
   }
 
@@ -714,8 +769,7 @@ export function checkSms(
   // signal on its own, rather than a "verify via official channels" prompt.
   // Scored +35 (vs +25).
   if (mentionsAny(lower, PACK.foreignAuthorityMentions)) {
-    flags.push(PACK.foreignAuthorityFlag);
-    score += 35;
+    sig.add("message", PACK.foreignAuthorityFlag, 35);
   }
 
   // Consumer brands impersonated in SMS but not government agencies, so they get
@@ -726,14 +780,12 @@ export function checkSms(
     new RegExp(`\\b${b}\\b`, "i").test(lower));
 
   if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => lower.includes(b))) {
-    flags.push("Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message");
-    score += 20;
+    sig.add("message", "Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message", 20);
   }
 
   // Asks to call back a number
   if (/call\s+(back|now|us|this number)/i.test(text)) {
-    flags.push("Asks you to call a number — scammers use this to run up your phone bill or gather info");
-    score += 20;
+    sig.add("message", "Asks you to call a number — scammers use this to run up your phone bill or gather info", 20);
   }
 
   // Crypto-exchange TOAD composite (D6 / #123). An exchange name plus a phone
@@ -768,8 +820,7 @@ export function checkSms(
   const hasUrl = /https?:\/\/|www\.|\.[a-z]{2,}\//i.test(text);
 
   if (cryptoToadHit && hasPhoneNumber && mentionsCalling && !hasUrl) {
-    flags.push(`Crypto exchange asking you to phone them — ${cryptoToadHit} and other exchanges never ring customers or ask you to call about account security. The scam happens on the call: they'll talk you through handing over 2FA codes or moving funds to a "safe wallet". Hang up and log in through the official app instead.`);
-    score += 30;
+    sig.add("message", `Crypto exchange asking you to phone them — ${cryptoToadHit} and other exchanges never ring customers or ask you to call about account security. The scam happens on the call: they'll talk you through handing over 2FA codes or moving funds to a "safe wallet". Hang up and log in through the official app instead.`, 30);
   }
 
   // Grammar/typo signals.
@@ -785,8 +836,7 @@ export function checkSms(
   // unambiguous misspellings but are anchored too, for consistency.
   const typos = text.match(/\brecieve\b|\breciept\b|\bur\s+account\b|\bu\s+have\b|\bpls\b|\bplz\b|\bkindly\b/gi);
   if (typos && typos.length > 0) {
-    flags.push("Spelling/grammar patterns common in scam messages");
-    score += 10;
+    sig.add("message", "Spelling/grammar patterns common in scam messages", 10);
   }
 
   // Named fraudulent investment platforms (D4 / #104). ASIC/Scamwatch have
@@ -794,8 +844,7 @@ export function checkSms(
   // high-confidence scam signal with essentially no legitimate use case.
   const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
   if (platformHit) {
-    flags.push(PACK.fakeInvestmentPlatformFlag(platformHit));
-    score += 50;
+    sig.add("message", PACK.fakeInvestmentPlatformFlag(platformHit), 50);
   }
 
   // myID forced re-registration phishing (D6 / #106). Dedicated wording rather
@@ -803,12 +852,11 @@ export function checkSms(
   // an agency name — the govMentions "claims to be a government agency" flag
   // would read wrong here.
   if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
-    flags.push(PACK.identityReregFlag);
-    score += 25;
+    sig.add("message", PACK.identityReregFlag, 25);
   }
 
-  score = Math.min(score, 100);
-  return scoreToResult(score, flags, "SMS", PACK.coverage, PACK.reportingBody);
+  const score = Math.min(sig.total(), 100);
+  return scoreToResult(score, sig, "SMS", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -823,8 +871,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     officialSenderNames: OFFICIAL_SENDER_NAMES,
     trustedHostSuffixes: TRUSTED_HOST_SUFFIXES,
   } = PACK;
-  const flags: string[] = [];
-  let score = 0;
+  const sig = new Signals();
   const lower = text.toLowerCase();
 
   // Reuse SMS signals for body content. The region must be forwarded — without
@@ -838,8 +885,8 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     channel: "email",
     senderDomain: senderHeaders.fromAddress ? domainOf(senderHeaders.fromAddress) : undefined,
   });
-  flags.push(...smsCheck.flags);
-  score += Math.floor(smsCheck.score * 0.7); // Email gets a bit more lenience
+  // Email gets a bit more lenience than the same words in an SMS.
+  sig.merge("message", smsCheck, Math.floor(smsCheck.score * 0.7));
 
   // Header-aware sender analysis: parse From / Reply-To / Return-Path and flag
   // display-name masking and From≠Reply-To spoofing.
@@ -848,8 +895,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     const senderDomain = domainOf(headers.fromAddress);
     const suspTlds = SUSPICIOUS_TLDS.find((t) => senderDomain.endsWith(t));
     if (suspTlds) {
-      flags.push(`Sender email uses a dodgy domain extension (${suspTlds})`);
-      score += 30;
+      sig.add("sender", `Sender email uses a dodgy domain extension (${suspTlds})`, 30);
     }
     // Impersonation pattern: official name in the body but a mismatched domain.
     // Both the names and the domains that count as matching are regional; a
@@ -863,27 +909,23 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     if (TRUSTED_HOST_SUFFIXES.length > 0 &&
         mentionsAny(lower, OFFICIAL_SENDER_NAMES) &&
         senderDomain && !onTrustedSuffix) {
-      flags.push(`Sender claims to be official but domain doesn't match — textbook impersonation`);
-      score += 40;
+      sig.add("sender", `Sender claims to be official but domain doesn't match — textbook impersonation`, 40);
     }
   }
 
   // Identity spoofing signals (display-name masking, From≠Reply-To, Return-Path)
   const identity = analyseEmailIdentities(headers);
-  flags.push(...identity.flags);
-  score += identity.score;
+  sig.merge("sender", identity, identity.score);
 
   // Generic greeting
   if (/dear (customer|user|member|valued|account holder|sir|madam)/i.test(text)) {
-    flags.push("Generic greeting (e.g. 'Dear Customer') — legit orgs use your actual name");
-    score += 15;
+    sig.add("sender", "Generic greeting (e.g. 'Dear Customer') — legit orgs use your actual name", 15);
   }
 
   // Asks to open attachment
   const opensAttachment = /open.{0,20}(attachment|file|document|invoice)/i.test(text);
   if (opensAttachment) {
-    flags.push("Prompts you to open an attachment — common malware delivery method");
-    score += 25;
+    sig.add("sender", "Prompts you to open an attachment — common malware delivery method", 25);
   }
 
   // SVG phishing attachment (D6 / 2026-08-09 roadmap / APWG Q2 2026, Proofpoint,
@@ -937,7 +979,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   const svgMatch = svgPatterns.reduce<RegExpMatchArray | null>(
     (found, re) => found ?? text.match(re), null);
   if (svgMatch) {
-    flags.push("SVG file attached — SVG attachments are a known phishing delivery trick: the file looks like an image but can carry hidden code that opens a fake login page in your browser. Legitimate invoices and statements are not sent as .svg.");
+    sig.add("sender", "SVG file attached — SVG attachments are a known phishing delivery trick: the file looks like an image but can carry hidden code that opens a fake login page in your browser. Legitimate invoices and statements are not sent as .svg.");
     // De-duplicated against the generic open-attachment rule above, but only
     // when both are describing the *same* attachment. "Please open the attached
     // invoice.svg" is one file and both rules match it — charging 25 + 20
@@ -956,7 +998,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     const opensSameFile =
       opensAttachment &&
       new RegExp(String.raw`open.{0,20}(?:attachment|file|document|invoice)[^\n]{0,20}?\.svg\b`, "i").test(text);
-    if (!opensSameFile) score += 20;
+    if (!opensSameFile) sig.add("attachment", "Attachment is presented as a document to open", 20);
   }
 
   // Device code / OAuth token phishing (D4 / #75 / FBI PSA260521). Attackers
@@ -972,8 +1014,7 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
     /activate\s+(your\s+)?new\s+device/i.test(text) ||
     /verify\s+(your\s+)?new\s+device/i.test(text);
   if (deviceCodeHit) {
-    flags.push("Device code phishing — scammers abuse Microsoft's OAuth device login flow to steal your account access without a fake login page. Do not enter any code at microsoft.com/devicelogin unless YOU initiated the login.");
-    score += 30;
+    sig.add("sender", "Device code phishing — scammers abuse Microsoft's OAuth device login flow to steal your account access without a fake login page. Do not enter any code at microsoft.com/devicelogin unless YOU initiated the login.", 30);
   }
 
   // TOAD / callback phishing (D2 / #102). A fake subscription or purchase
@@ -993,15 +1034,13 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   const hasNoUrl = !/https?:\/\//i.test(text);
 
   if (callbackBrandHits >= 1 && hasCallToDispute && hasLargeAmount && hasNoUrl) {
-    flags.push("Fake subscription callback scam — this looks like a fraudulent invoice designed to make you call a scammer. No legitimate company sends a billing dispute this way. Do not call the number.");
-    score += 45;
+    sig.add("sender", "Fake subscription callback scam — this looks like a fraudulent invoice designed to make you call a scammer. No legitimate company sends a billing dispute this way. Do not call the number.", 45);
   } else if (callbackBrandHits >= 2 && hasCallToDispute) {
-    flags.push("Possible fake invoice callback scam — multiple fake-subscription brand names combined with a call-to-dispute pattern.");
-    score += 25;
+    sig.add("sender", "Possible fake invoice callback scam — multiple fake-subscription brand names combined with a call-to-dispute pattern.", 25);
   }
 
-  score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Email", PACK.coverage, PACK.reportingBody);
+  const score = Math.min(sig.total(), 100);
+  return scoreToResult(score, sig, "Email", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1011,63 +1050,83 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
 export function checkPhone(number: string, region?: RegionInput): CheckResult {
   const PACK = resolveRegionPack(region);
   const intel = analysePhone(number, region);
-  const flags: string[] = [];
-  let score = 0;
+  const sig = new Signals();
 
   // Translate intel into score/flags
   const riskScores: Record<PhoneIntel["spoofingRisk"], number> = {
     low: 15, medium: 30, high: 55, very_high: 75,
   };
-  score += riskScores[intel.spoofingRisk];
+  const spoofPoints = riskScores[intel.spoofingRisk];
 
   if (intel.lineType === "premium") {
-    flags.push("Premium rate number — never call or text back, you'll be charged");
-    score += 20;
+    sig.add("phone", "Premium rate number — never call or text back, you'll be charged", 20);
   }
 
   if (intel.lineType === "voip_likely") {
-    flags.push("VoIP / virtual number — trivially easy to spoof; real caller identity is hidden");
-    score += 10;
+    sig.add("phone", "VoIP / virtual number — trivially easy to spoof; real caller identity is hidden", 10);
   }
 
   if (intel.wangiriRisk) {
-    flags.push("Wangiri scam: one-ring trick from a premium-rate international number — do NOT call back");
-    score += 20;
+    sig.add("phone", "Wangiri scam: one-ring trick from a premium-rate international number — do NOT call back", 20);
   }
 
   if (intel.highScamCountry && !intel.wangiriRisk) {
-    flags.push(`Call originates from ${intel.country} — frequently used as a base for scam operations targeting your region`);
+    sig.add("phone", `Call originates from ${intel.country} — frequently used as a base for scam operations targeting your region`);
   }
 
   // Toll-free and shared-cost wording is authored per region on the pack's
   // phonePlan, since the number ranges and impersonated bodies differ; it
   // reaches the user via intel.spoofingNotes below.
   if (intel.lineType === "freecall") {
-    flags.push("Free-call numbers are routinely spoofed by scammers impersonating banks and government agencies");
+    sig.add("phone", "Free-call numbers are routinely spoofed by scammers impersonating banks and government agencies");
   }
 
   if (intel.lineType === "shared_cost") {
-    flags.push("Shared-cost numbers are commonly spoofed by scammers impersonating government agencies");
+    sig.add("phone", "Shared-cost numbers are commonly spoofed by scammers impersonating government agencies");
   }
 
   if (intel.lineType === "fixed") {
-    flags.push("Fixed-line area code — easy to spoof; a local-looking number doesn't mean a local caller");
+    sig.add("phone", "Fixed-line area code — easy to spoof; a local-looking number doesn't mean a local caller");
   }
 
-  if (flags.length === 0) {
-    flags.push("No obvious red flags from the number format alone — caller ID can always be spoofed, so stay cautious");
-    score = Math.max(score, 15);
+  // The spoofing assessment is a property of the number itself rather than of
+  // any one observation, so it rides on the first note that is not already
+  // covered above. With no note to carry it, it becomes its own row: the points
+  // are real and have to be visible somewhere or the evidence stops adding up.
+  // Order matters and matches the original: the "nothing found" floor is
+  // decided on the observations above, BEFORE spoofing notes are appended. A
+  // number whose only evidence is a spoofing note still earns the floor.
+  const fresh = intel.spoofingNotes.filter(
+    (note) => !sig.texts().some((f) => f.includes(note.slice(0, 20))),
+  );
+
+  // The spoofing assessment belongs to the number, not to any one observation,
+  // so it rides on the first row that is not already covered above. Ordering
+  // matches the original: the "nothing found" floor is decided on the
+  // observations, before the spoofing notes are appended, and that row absorbs
+  // the spoofing points when there is no note to carry them -- the original
+  // emitted exactly one flag for a clean number and this keeps that true.
+  const nothingFound = sig.length === 0;
+  if (nothingFound) {
+    // The floor is Math.max(total, 15) against a total that already included
+    // the spoofing points, so this row carries the difference and `fresh`
+    // below carries the rest -- or all of it, when there is no note.
+    sig.add(
+      "phone",
+      "No obvious red flags from the number format alone — caller ID can always be spoofed, so stay cautious",
+      fresh.length ? Math.max(spoofPoints, 15) - spoofPoints : Math.max(spoofPoints, 15),
+    );
+  }
+  if (fresh.length) {
+    fresh.forEach((note, i) => sig.add("phone", note, i === 0 ? spoofPoints : 0));
+  } else if (!nothingFound && spoofPoints !== 0) {
+    // Points with no note of their own would otherwise leave the rows short of
+    // the headline score.
+    sig.add("phone", `Caller-ID spoofing risk for this number type: ${intel.spoofingRisk.replace("_", " ")}`, spoofPoints);
   }
 
-  // Add spoofing notes as flags if not already covered
-  for (const note of intel.spoofingNotes) {
-    if (!flags.some((f) => f.includes(note.slice(0, 20)))) {
-      flags.push(note);
-    }
-  }
-
-  score = Math.min(score, 100);
-  const result = scoreToResult(score, flags, "Phone Number", PACK.coverage, PACK.reportingBody);
+  const score = Math.min(sig.total(), 100);
+  const result = scoreToResult(score, sig, "Phone Number", PACK.coverage, PACK.reportingBody);
   result.phoneIntel = intel;
   return result;
 }
@@ -1085,24 +1144,22 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
     fakeInvestmentPlatforms: FAKE_INVESTMENT_PLATFORMS,
     identityRereg: MYID_REREG_PHRASES,
   } = PACK;
-  const flags: string[] = [];
-  let score = 0;
+  const sig = new Signals();
   const lower = text.toLowerCase();
 
   const allSignals = [...URGENCY_WORDS, ...REWARD_WORDS, ...REQUEST_WORDS];
   const hits = allSignals.filter((w) => lower.includes(w));
 
   if (hits.length > 0) {
-    flags.push(`Suspicious keywords found: "${hits.slice(0, 4).join('", "')}"`);
-    score += Math.min(hits.length * 8, 60);
+    sig.add("message", `Suspicious keywords found: "${hits.slice(0, 4).join('", "')}"`, Math.min(hits.length * 8, 60));
   }
 
   // Check for embedded URLs
   const urls = text.match(/https?:\/\/[^\s]+/gi);
   if (urls) {
-    flags.push(`Contains ${urls.length} link(s) — checked separately`);
+    sig.add("message", `Contains ${urls.length} link(s) — checked separately`);
     const worst = urls.map((u) => checkUrl(u, blocklist, region)).sort((a, b) => b.score - a.score)[0];
-    score += Math.floor(worst.score * 0.5);
+    sig.merge("link", worst, Math.floor(worst.score * 0.5));
   }
 
   // ClickFix "run a command" social engineering (D3 / #74). Pasted fake-CAPTCHA
@@ -1110,37 +1167,32 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   // fuzzy match. No legitimate site tells you to press Win+R and paste a command.
   if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
       /powershell\s+-[ec]/i.test(text)) {
-    flags.push("'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step");
-    score += 50;
+    sig.add("message", "'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step", 50);
   } else if (isMacClickFix(text)) {
     // The macOS variant matters more here than in checkSms: a pasted fake-CAPTCHA
     // page is the likeliest way this reaches us.
-    flags.push(MAC_CLICKFIX_FLAG);
-    score += 50;
+    sig.add("message", MAC_CLICKFIX_FLAG, 50);
   }
 
   // Named fraudulent investment platforms (D4 / #104) — mirror of the checkSms
   // rule so pasted ad text / recruitment messages are caught here too.
   const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
   if (platformHit) {
-    flags.push(PACK.fakeInvestmentPlatformFlag(platformHit));
-    score += 50;
+    sig.add("message", PACK.fakeInvestmentPlatformFlag(platformHit), 50);
   }
 
   // myID forced re-registration phishing (D6 / #106) — mirror for pasted email
   // bodies routed through the free-text checker.
   if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
-    flags.push(PACK.identityReregFlag);
-    score += 25;
+    sig.add("message", PACK.identityReregFlag, 25);
   }
 
-  if (flags.length === 0) {
-    flags.push("No obvious scam signals found in the text");
-    score = 10;
+  if (sig.length === 0) {
+    sig.add("message", "No obvious scam signals found in the text", 10);
   }
 
-  score = Math.min(score, 100);
-  return scoreToResult(score, flags, "Custom", PACK.coverage, PACK.reportingBody);
+  const score = Math.min(sig.total(), 100);
+  return scoreToResult(score, sig, "Custom", PACK.coverage, PACK.reportingBody);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1170,7 +1222,7 @@ function downgradeForCoverage(result: CheckResult, coverage: RegionCoverage): Ch
 
 function scoreToResult(
   score: number,
-  flags: string[],
+  sig: Signals,
   category: string,
   coverage: RegionCoverage = "full",
   // Where to report a confirmed scam. Named per region — telling a UK or US
@@ -1195,7 +1247,13 @@ function scoreToResult(
     details = `Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to ${reportingBody}.`;
   }
 
-  return downgradeForCoverage({ verdict, score, flags, details, category, coverage }, coverage);
+  // finalise() appends the clamp row when the raw total overshot, so signals and
+  // flags are produced from the same list and cannot drift apart.
+  const signals = sig.finalise(score);
+  return downgradeForCoverage(
+    { verdict, score, flags: signals.map((x) => x.text), details, category, coverage, signals },
+    coverage,
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1409,21 +1467,34 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
     // no transport ("unavailable") and a timeout, missing Location or
     // exhausted hop budget ("failed"). The shortener is all we ever saw, and a
     // silent base result would present that as a complete answer.
-    return { ...base, flags: [...base.flags, "Shortened URL — destination could not be checked"] };
+    const note = "Shortened URL — destination could not be checked";
+    return {
+      ...base,
+      flags: [...base.flags, note],
+      signals: [...(base.signals ?? []), { text: note, points: 0, source: "link" as const }],
+    };
   }
 
   const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
   const destDefanged = defang(expandedUrl);
+  // The merged score is the worse of the two, not their sum, so neither side's
+  // rows can be read as adding up to it. They are carried as evidence with no
+  // points rather than re-attributed to weights they did not produce here.
   const mergedScore = Math.min(Math.max(base.score, destResult.score), 100);
-  const mergedFlags = [
-    ...base.flags,
-    `Shortened URL expanded — real destination: ${destDefanged}`,
-    ...destResult.flags,
-    ...(hops.length > 1 ? [`Multi-hop chain (${hops.length} redirects) — extra suspicious`] : []),
-  ];
+  const sig = new Signals();
+  const carry = (from: CheckResult) => {
+    const rows = from.signals?.filter((x) => x.source !== "score");
+    if (rows?.length) for (const r of rows) sig.add(r.source, r.text);
+    else for (const f of from.flags) sig.add("link", f);
+  };
+  carry(base);
+  sig.add("link", `Shortened URL expanded — real destination: ${destDefanged}`);
+  carry(destResult);
+  if (hops.length > 1) sig.add("link", `Multi-hop chain (${hops.length} redirects) — extra suspicious`);
+
   const pack = resolveRegionPack(region);
-  const merged = scoreToResult(mergedScore, mergedFlags, "URL", pack.coverage, pack.reportingBody);
-  return { ...merged, score: mergedScore, flags: mergedFlags, expandedUrl: destDefanged, category: "URL" };
+  const merged = scoreToResult(mergedScore, sig, "URL", pack.coverage, pack.reportingBody);
+  return { ...merged, score: mergedScore, expandedUrl: destDefanged, category: "URL" };
 }
 
 /**
