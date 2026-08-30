@@ -37,7 +37,7 @@ export default function SeasonTeaser({
     <aside className="bg-amber-500/5 border border-amber-500/30 rounded-2xl p-4 space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-amber-400 shrink-0" aria-hidden="true">⚑</span>
-        <h2 className="text-xs font-bold uppercase tracking-wider text-amber-300">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--caution)]">
           {t("home.season.heading")}
         </h2>
       </div>

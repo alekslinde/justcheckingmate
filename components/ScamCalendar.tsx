@@ -17,6 +17,7 @@
 import Link from "next/link";
 import { useLang, type MessageKey } from "@/lib/lang";
 import YearRibbon from "@/components/YearRibbon";
+import FreshnessStamp from "@/components/FreshnessStamp";
 import {
   activeSeasons,
   upcomingSeasons,
@@ -85,6 +86,14 @@ function SeasonMeta({ season }: { season: ScamSeason }) {
   return (
     <>
       {formatWindow(season.window)} · {t(`calendar.confidence.${season.confidence}` as MessageKey)}
+      {/* Each season's own review date, which is what makes the page-level
+          "Reviewed" claim inspectable: a reader can see that most seasons were
+          checked on one date and a few more recently, rather than taking the
+          newest date as covering everything. */}
+      {" · "}
+      <span className="whitespace-nowrap">
+        {t("freshness.label")} {formatReviewedDate(season.reviewed)}
+      </span>
     </>
   );
 }
@@ -162,7 +171,7 @@ function SeasonCard({ season, today }: { season: ScamSeason; today: CivilDate })
         </div>
         {/* How much of the window is left, not just that it's open: ten weeks of
             tax season remaining is more actionable than "active". */}
-        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-full px-2.5 py-1">
+        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-[var(--caution)] bg-amber-500/15 border border-amber-500/30 rounded-full px-2.5 py-1">
           {t("calendar.badge.active")} · {endsInLabel(daysUntilEnd(season, today), t)}
         </span>
       </div>
@@ -295,22 +304,27 @@ export default function ScamCalendar({
           about how we score, and standing it between the reader and the season
           they came for spent the top of the page on a caveat. */}
       <section className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <h2 className={H2}>{t("calendar.title")}</h2>
-          {reviewed && (
-            <p className="text-xs text-gray-500">
-              {t("calendar.reviewed", { date: formatReviewedDate(reviewed) })}
-            </p>
-          )}
-        </div>
+        <h2 className={H2}>{t("calendar.title")}</h2>
         <p className="text-sm text-gray-400">{t("calendar.intro")}</p>
+        {/* Promoted from a grey line beside the heading. The count comes from
+            the region's own seasons, so it can't drift from the data. */}
+        {reviewed && (
+          <div className="pt-1">
+            <FreshnessStamp
+              date={formatReviewedDate(reviewed)}
+              note={t("calendar.freshness.note", {
+                n: String(all.length),
+              })}
+            />
+          </div>
+        )}
       </section>
 
       <YearRibbon region={region} today={today} />
 
       {active.length > 0 && (
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--caution)]">
             {t("calendar.active.heading")}
           </h3>
           <div className="space-y-3">

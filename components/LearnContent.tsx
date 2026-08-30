@@ -323,7 +323,7 @@ export default function LearnContent({
         <h2 className={H2}>{t("learn.calendar.heading")}</h2>
         <p className="text-sm text-gray-400">{t("learn.calendar.body")}</p>
         {activeSeasons.length > 0 && (
-          <p className="text-sm text-amber-300">
+          <p className="text-sm text-[var(--caution)]">
             {t("learn.calendar.active", { seasons: activeSeasons.join(", ") })}
           </p>
         )}

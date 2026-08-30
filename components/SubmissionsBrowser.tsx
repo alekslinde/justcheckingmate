@@ -395,7 +395,7 @@ export default function SubmissionsBrowser() {
                             <span className="text-[11px] uppercase tracking-wider text-gray-500">{t(labelKey)}</span>
                             <SafeDisplay
                               value={value}
-                              className={`font-mono break-all ${i === 0 ? "text-sm text-amber-300" : "text-xs text-amber-300/70"}`}
+                              className={`font-mono break-all ${i === 0 ? "text-sm text-[var(--caution)]" : "text-xs text-amber-300/70"}`}
                             />
                           </div>
                         ))}

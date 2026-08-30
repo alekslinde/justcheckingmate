@@ -28,6 +28,7 @@ import {
   type RadarCoverage,
 } from "@/lib/threatRadar";
 import { resolveRegionPack, type RegionCode } from "@justcheckingmate/engine/regions";
+import FreshnessStamp from "./FreshnessStamp";
 
 // Matches the card styling used across Learn, About and the calendar.
 const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-6";
@@ -100,7 +101,7 @@ function ThreatCard({ threat }: { threat: ThreatEntry }) {
                 {isGap && (
                   <>
                     {" · "}
-                    <span className="text-amber-300">{t(COVERAGE_KEY[threat.coverage])}</span>
+                    <span className="text-[var(--caution)]">{t(COVERAGE_KEY[threat.coverage])}</span>
                   </>
                 )}
                 {threat.coverage === "n/a" && (
@@ -254,16 +255,19 @@ export default function ThreatRadar({
   return (
     <article className={CARD} id="threat-radar">
       <section className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <h2 className={H2}>{t("radar.title")}</h2>
-          {reviewed && (
-            <p className="text-xs text-gray-500">
-              {t("radar.updated", { date: formatRadarDate(reviewed) })}
-            </p>
-          )}
-        </div>
+        <h2 className={H2}>{t("radar.title")}</h2>
         <p className="text-sm text-gray-400">{t("radar.intro", { region: regionName })}</p>
         <p className="text-sm text-gray-500">{t("radar.neutrality")}</p>
+        {/* Promoted from a grey line beside the heading: how current the data
+            is deserves to be read, not found. */}
+        {reviewed && (
+          <div className="pt-1">
+            <FreshnessStamp
+              date={formatRadarDate(reviewed)}
+              note={t("radar.freshness.note", { n: String(summary.total) })}
+            />
+          </div>
+        )}
       </section>
 
       {/* The orienting line. With every card collapsed, the shape of the board

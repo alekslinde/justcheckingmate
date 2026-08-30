@@ -555,7 +555,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
                           key={r.esp}
                           href={r.href}
                           {...(r.kind === "url" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-[var(--caution)] hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
                         >
                           <span aria-hidden="true">🚩</span>
                           {t("verdict.breakdown.reportEsp", { esp: r.esp })}
