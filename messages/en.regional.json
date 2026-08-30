@@ -50,7 +50,7 @@
   "report.error": "Couldn't lodge that report just now. Give it another crack.",
   "report.submit": "Report this mongrel",
   "report.success.title": "Good on ya — you've helped protect others.",
-  "report.success.body": "Your report's been logged. Every one helps warn the next person about this scam.",
+  "report.success.body": "It's searchable in the community reports now, with your personal details stripped out.",
   "report.success.total": "{n} reports lodged by Aussies like you.",
   "report.success.another": "Dob in another",
   "bug.sent.title": "Cheers — that helps us improve",
