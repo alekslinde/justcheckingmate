@@ -35,6 +35,7 @@ import {
 import { resolveRegionPack, type RegionCode } from "@justcheckingmate/engine/regions";
 import FreshnessStamp from "./FreshnessStamp";
 import PageHeader from "./PageHeader";
+import RegionBar from "./RegionBar";
 
 // Matches the card styling used across Learn, About and the calendar.
 const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-6";
@@ -326,21 +327,27 @@ function ChannelFilter({
  * dead end, so this says plainly we have no data rather than substituting
  * another country's campaigns.
  */
-function EmptyState() {
+function EmptyState({ region }: { region: RegionCode }) {
   const { t } = useLang();
   return (
-    <article className={CARD}>
-      <section className="space-y-2">
-        <h2 className={H2}>{t("radar.empty.heading")}</h2>
-        <p className="text-sm text-[var(--text-dim)]">{t("radar.empty.body")}</p>
-      </section>
-      <Link
-        href="/learn"
-        className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
-      >
-        {t("radar.learnCta")}
-      </Link>
-    </article>
+    <div className="space-y-6">
+      {/* The region bar renders here too, and it has to: picking a region we
+          have no radar for is a normal thing to do, and without the control
+          still on screen it would be a dead end with no way back. */}
+      <RegionBar region={region} />
+      <article className={CARD}>
+        <section className="space-y-2">
+          <h2 className={H2}>{t("radar.empty.heading")}</h2>
+          <p className="text-sm text-[var(--text-dim)]">{t("radar.empty.body")}</p>
+        </section>
+        <Link
+          href="/learn"
+          className="text-sm text-[var(--clear)] hover:underline underline-offset-2 font-medium inline-block"
+        >
+          {t("radar.learnCta")}
+        </Link>
+      </article>
+    </div>
   );
 }
 
@@ -357,7 +364,7 @@ export default function ThreatRadar({
   const [channel, setChannel] = useState<ChannelFilterValue>("all");
   const counts = useMemo(() => channelCounts(region), [region]);
 
-  if (all.length === 0) return standalone ? <EmptyState /> : null;
+  if (all.length === 0) return standalone ? <EmptyState region={region} /> : null;
 
   const reviewed = lastUpdated(region);
   // Named rather than hardcoded: the intro renders for whichever region has an
@@ -391,6 +398,13 @@ export default function ThreatRadar({
           <p className="text-sm text-[var(--faint)]">{t("radar.neutrality")}</p>
         </section>
       )}
+
+      {/* Which region's board this is, and how to change it. Standalone only:
+          inline on the home page the check flow already owns region, and a
+          second control for the same thing would be a fork, not a convenience.
+          It sits above the freshness stamp because "whose data" comes before
+          "how fresh" — a fresh review of the wrong country is still wrong. */}
+      {standalone && <RegionBar region={region} />}
 
       {/* Promoted from a grey line beside the heading: how current the data
           is deserves to be read, not found. */}
