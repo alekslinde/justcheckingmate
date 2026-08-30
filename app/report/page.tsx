@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 // why the email body itself is never among them.
 export default function ReportPage() {
   return (
-    <main className="max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
           Report a scam
@@ -31,7 +31,12 @@ export default function ReportPage() {
         </p>
       </div>
 
-      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6">
+      {/* The container matches every other page, but the form does not fill it:
+          a text input stretched to 1180px gives a 1100px-long line to type into,
+          which is harder to use, not easier. Same reasoning as the home page,
+          which constrains its check card to the wider track of a grid rather
+          than spanning the full width. */}
+      <div className="max-w-[760px] bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6">
         <Suspense>
           <ReportPrefillForm />
         </Suspense>

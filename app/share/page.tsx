@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
  */
 export default function SharePage() {
   return (
-    <main className="max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-5">
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-5">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
           Shared with Just Checking, Mate
@@ -44,16 +44,21 @@ export default function SharePage() {
           would run CheckFlow's history/popstate effects twice across the swap.
           An inert placeholder of roughly the right height avoids both, and
           keeps the layout from jumping. */}
-      <Suspense
-        fallback={
-          <div
-            className="h-64 rounded-2xl border border-[var(--rule)] bg-[var(--ink-2)] animate-pulse"
-            aria-hidden="true"
-          />
-        }
-      >
-        <ShareTargetSeed />
-      </Suspense>
+      {/* Constrained inside the full-width container for the same reason as the
+          report form: this resolves into a CheckFlow, and a textarea spanning
+          1180px is worse to paste into than one at a readable width. */}
+      <div className="max-w-[760px]">
+        <Suspense
+          fallback={
+            <div
+              className="h-64 rounded-2xl border border-[var(--rule)] bg-[var(--ink-2)] animate-pulse"
+              aria-hidden="true"
+            />
+          }
+        >
+          <ShareTargetSeed />
+        </Suspense>
+      </div>
     </main>
   );
 }

@@ -11,13 +11,17 @@ export const metadata: Metadata = {
 // is deliberately kept in plain English in both language modes — slang
 // variants could blur the meaning of a promise.
 
-const CARD = "bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-8";
+// The card wraps the prose rather than the container: capping the paragraphs at
+// a readable measure inside a full-width card would leave the card's right half
+// permanently empty. The container still matches every other page.
+const CARD =
+  "max-w-[820px] bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-6 space-y-8";
 const H2 = "font-bold text-emerald-400 text-sm uppercase tracking-wider";
-const P = "text-sm text-gray-300";
+const P = "text-sm text-gray-300 leading-relaxed";
 
 export default function AboutPage() {
   return (
-    <main className="max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
           About &amp; Privacy

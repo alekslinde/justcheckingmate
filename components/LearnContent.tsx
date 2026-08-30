@@ -164,10 +164,11 @@ export default function LearnContent({
   }, [activeId]);
 
   return (
-    // Capped narrower than the 1180px chrome: this page is long-form prose, and
-    // a 1180px measure would run past the ~75 characters a reader can track back
-    // from comfortably.
-    <main className="max-w-[820px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-5">
+    // Full-width chrome, matching every other page. The prose inside sets its
+    // own measure (max-w-[62ch] on the body copy, 60ch on the header) rather
+    // than relying on a narrow container, so lines stay readable while cards and
+    // grids get the full width to lay out in.
+    <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-5">
       <PageHeader
         eyebrow={t("learn.eyebrow")}
         title={t("learn.headline")}
