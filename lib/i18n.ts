@@ -24,6 +24,18 @@ export const BASE_TONE: Tone = "normal";
 export const DEFAULT_MODE: LangMode = { locale: BASE_LOCALE, tone: BASE_TONE };
 
 // en.normal.json is the base bundle; every key must exist there.
+//
+// en.regional.json is deliberately partial, and the line is about surface, not
+// budget. The register belongs where the app speaks to the reader about their
+// own situation: verdicts, the check flow, errors, encouragement. It stays out
+// of three places. Mechanism explanations (auth, tracking, how we source the
+// radar) trade precision for colour and lose. Safety instructions -- what to do
+// right now -- are the wrong place to spend character. And ordered scales
+// (phone.risk.*, radar.coverage.*) read as a different claim rather than a
+// different voice when reworded, so they only ever exist once.
+//
+// Overrides identical to their base string are dead weight: delete them rather
+// than leave them to drift.
 export type MessageKey = keyof typeof enNormalMessages;
 
 type Dict = Partial<Record<MessageKey, string>>;

@@ -63,6 +63,18 @@ describe("translate", () => {
     const orphans = Object.keys(enRegional).filter((k) => !baseKeys.has(k));
     expect(orphans).toEqual([]);
   });
+
+  it("carries no regional override identical to its base string", () => {
+    // A regional bundle is partial by design, so an override that matches base
+    // buys nothing: it resolves the same either way, and only survives to drift
+    // out of sync when the base string is later edited. Editing base copy
+    // should not silently leave a stale duplicate behind in the other tone.
+    const base = enNormal as Record<string, string>;
+    const dupes = Object.entries(enRegional as Record<string, string>)
+      .filter(([k, v]) => base[k] === v)
+      .map(([k]) => k);
+    expect(dupes).toEqual([]);
+  });
 });
 
 describe("parseMode", () => {
