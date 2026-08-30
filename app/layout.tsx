@@ -23,11 +23,14 @@ const inter = Inter({
 });
 
 // Mono carries dates, scores and identifiers — anything the reader may need to
-// compare or copy exactly.
+// compare or copy exactly. 600 is loaded because the small uppercase labels
+// (the card's "Checked on your device", the drop overlay) are set in it; without
+// the real weight the browser synthesises a bold, which thickens the strokes
+// unevenly and is most obvious at exactly the 11px these labels use.
 const plexMono = IBM_Plex_Mono({
   variable: "--font-mono-ui",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400", "500", "600"],
   display: "swap",
 });
 

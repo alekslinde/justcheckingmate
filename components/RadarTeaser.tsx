@@ -3,15 +3,14 @@
 // Home-page teaser for the threat radar — the campaigns circulating right now,
 // with a link to the full radar.
 //
-// Sits below the check box for the same reason SeasonTeaser does: someone
-// arriving mid-panic with a dodgy SMS needs the paste field first, and our
-// background information must not push it down the page.
+// Sits below the check box: someone arriving mid-panic with a dodgy SMS needs
+// the paste field first, and our background information must not push it down
+// the page.
 //
 // Titles only, deliberately. The teaser's job is to say "these are around at the
 // moment" — reprinting each summary would turn it into a second page competing
-// with the check box, which is the failure mode SeasonTeaser's comment warns
-// about. It also names a hard cap: an unbounded list would grow with every
-// sweep until the teaser was the page.
+// with the check box for attention. Hence also the hard cap below: an unbounded
+// list would grow with every sweep until the teaser was the page.
 
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
@@ -32,7 +31,8 @@ export default function RadarTeaser({ region }: { region: RegionCode }) {
   const active = activeThreats(region);
 
   // Nothing circulating, or no radar for this region — render nothing rather
-  // than an empty shell. Same contract as SeasonTeaser.
+  // than an empty shell. The home page's job is the check box; this earns its
+  // space only when it has something to say.
   if (active.length === 0) return null;
 
   const shown = active.slice(0, MAX_SHOWN);

@@ -23,8 +23,12 @@ describe("translate", () => {
   });
 
   it("falls back to the base tone when a key is missing from the regional bundle", () => {
-    // "check.uploadImage" is the same in both dicts — still resolves.
-    expect(translate(REGIONAL, "check.uploadImage")).toBe("Upload image");
+    // "check.uploadImage" has no regional override, so it resolves to the base
+    // string. Asserted against the base bundle rather than a copy literal: the
+    // claim under test is the fallback, and pinning the wording here made an
+    // ordinary copy edit fail a test about lookup.
+    expect(enRegional).not.toHaveProperty("check.uploadImage");
+    expect(translate(REGIONAL, "check.uploadImage")).toBe(enNormal["check.uploadImage"]);
   });
 
   it("falls back to the raw key when it exists in neither dictionary", () => {

@@ -16,7 +16,7 @@ function strongText(seg: unknown): ReactNode {
   expect(isValidElement(seg)).toBe(true);
   const el = seg as ReactElement<{ children: ReactNode; className: string }>;
   expect(el.type).toBe("strong");
-  expect(el.props.className).toContain("text-gray-100");
+  expect(el.props.className).toContain("text-[var(--foreground)]");
   return el.props.children;
 }
 
