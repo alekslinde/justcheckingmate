@@ -820,6 +820,36 @@ export function uncoveredThreats(code: RegionCode): ThreatEntry[] {
   );
 }
 
+/** The channel filter's selection: a channel, or every channel. */
+export type ChannelFilterValue = RadarChannel | "all";
+
+/**
+ * Entries matching the selected channel. "all" passes everything through.
+ *
+ * Pure and here rather than inline in the component so it can be tested without
+ * a browser — the same reason lib/toc.ts holds the table-of-contents selection.
+ */
+export function filterByChannel(
+  entries: ThreatEntry[],
+  channel: ChannelFilterValue,
+): ThreatEntry[] {
+  return channel === "all" ? entries : entries.filter((e) => e.channel === channel);
+}
+
+/**
+ * How many entries each channel has in this region.
+ *
+ * Counted across the whole board rather than the filtered view, so the numbers
+ * on the filter buttons stay put as the reader switches between them. Every
+ * channel is present in the result, including those with zero — the caller
+ * decides whether to offer an empty one.
+ */
+export function channelCounts(code: RegionCode): Record<RadarChannel, number> {
+  const counts: Record<RadarChannel, number> = { sms: 0, email: 0, phone: 0, web: 0, mixed: 0 };
+  for (const entry of radarForRegion(code)) counts[entry.channel] += 1;
+  return counts;
+}
+
 /** Counts behind the at-a-glance line. Derived so they cannot drift. */
 export interface RadarSummary {
   total: number;
