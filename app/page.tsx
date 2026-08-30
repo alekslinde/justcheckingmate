@@ -1,8 +1,7 @@
 import { headers } from "next/headers";
-import CheckFlow from "@/components/CheckFlow";
+import CheckStage from "@/components/CheckStage";
 import HomeHero from "@/components/HomeHero";
 import RadarTeaser from "@/components/RadarTeaser";
-import ForwardPanel from "@/components/ForwardPanel";
 import { resolveRegion } from "@/lib/regionResolver";
 
 // Region comes from request headers, so this page is per-request regardless.
@@ -19,16 +18,10 @@ export default async function Home() {
 
       {/* The fold holds exactly two things: paste it here, or forward it from
           your mail app. They are alternatives, so they sit side by side rather
-          than stacked — the old single 672px column pushed the radar strip below
-          the fold on a laptop and left the bottom of the page empty.
-
-          The check box takes the wider track: it is the primary action, and the
-          textarea needs the room. Forwarding is a narrow panel because it is
-          three lines and an address. */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
-        <CheckFlow />
-        <ForwardPanel />
-      </div>
+          than stacked. Once a check has run the stage collapses to one column
+          and the verdict takes the page — see CheckStage for why that lives
+          there rather than inside the flow. */}
+      <CheckStage />
 
       {/* Below the fold on purpose: someone arriving mid-panic with a dodgy SMS
           needs the paste field first, and background information pushing it down

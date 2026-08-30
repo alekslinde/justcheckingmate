@@ -17,7 +17,13 @@ import VerdictBadge from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
 import ReportForm from "./ReportForm";
 
-type Step = "input" | "result" | "report";
+/**
+ * Which part of the flow is on screen. Exported because CheckStage lifts this
+ * one piece of state out — the layout around the flow changes once a check has
+ * run, and the forwarding panel it needs to hide is CheckFlow's sibling.
+ */
+export type CheckStep = "input" | "result" | "report";
+type Step = CheckStep;
 type Verdict = AnalyzedIdentifier["result"]["verdict"];
 
 // Inline stroke icons for the upload actions — kept local (no icon-library
@@ -152,9 +158,16 @@ interface CheckFlowProps {
    * identical either way — this is attribution only, never behaviour.
    */
   surface?: "web" | "share";
+  /**
+   * Called whenever the visible step changes, including on browser Back. Lets a
+   * parent lay out around the flow without owning the flow's own state.
+   */
+  onStepChange?: (step: CheckStep) => void;
+  /** Called with the content a check was actually run against. */
+  onChecked?: (content: string) => void;
 }
 
-export default function CheckFlow({ initialContent = "", surface = "web" }: CheckFlowProps = {}) {
+export default function CheckFlow({ initialContent = "", surface = "web", onStepChange, onChecked }: CheckFlowProps = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [step, setStep] = useState<Step>("input");
@@ -218,6 +231,14 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
     if (prevStep.current !== step) stepHeadingRef.current?.focus();
     prevStep.current = step;
   }, [step]);
+
+  // Tell the parent which step is showing. Done in an effect on `step` rather
+  // than inside goForward so browser Back — which moves the step via popstate,
+  // not through goForward — is reported too. A parent laying out around the
+  // flow must see every transition, not only the forward ones.
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [step, onStepChange]);
 
   // Image → QR decode (client-side) first, OCR fallback via /api/ocr.
   async function handleImageUpload(file: File) {
@@ -356,6 +377,9 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       // message, not the forwarder's. Same path as ReportForm and /api/inbound.
       setEmailAnalysis(analyseEmailSource(content));
       setShareCopied(false);
+      // Report what was checked, not what the box holds: a region re-check
+      // re-runs against the same content, and the strip should keep naming it.
+      onChecked?.(content);
       if (!overrideRegion) goForward("result");
     } catch (err) {
       setCheckError(t("check.serverError"));
@@ -443,14 +467,11 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
   // ── Result step ───────────────────────────────────────────────────────────────
   if (step === "result") {
     return (
+      // No back link in this header any more: the checked-strip above the
+      // results carries it, alongside the record of what was checked, so the
+      // two live together instead of the affordance floating on its own.
       <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
-        <button
-          onClick={() => history.back()}
-          className="flex items-center gap-1.5 w-full px-6 py-3.5 border-b border-[var(--rule)] text-sm font-semibold text-gray-300 hover:text-emerald-400 transition-colors"
-        >
-          <span aria-hidden="true">‹</span> {t("check.back.edit")}
-        </button>
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
             // Email source can parse to a sender analysis even when there are no
