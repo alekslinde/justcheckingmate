@@ -15,11 +15,11 @@ const REGIONAL: LangMode = { locale: "en", tone: "regional" };
 
 describe("translate", () => {
   it("returns the base-tone string", () => {
-    expect(translate(NORMAL, "check.report")).toBe("Report This Scam");
+    expect(translate(NORMAL, "check.report")).toBe("Report this scam");
   });
 
   it("returns the regional-tone string for the same key", () => {
-    expect(translate(REGIONAL, "check.report")).toBe("Report This Mongrel");
+    expect(translate(REGIONAL, "check.report")).toBe("Report this mongrel");
   });
 
   it("falls back to the base tone when a key is missing from the regional bundle", () => {
@@ -54,7 +54,7 @@ describe("translate", () => {
 
   it("resolves an unknown tone via the base tone rather than the raw key", () => {
     const odd = { locale: "en", tone: "shouty" } as unknown as LangMode;
-    expect(translate(odd, "check.report")).toBe("Report This Scam");
+    expect(translate(odd, "check.report")).toBe("Report this scam");
   });
 
   it("every regional key exists in the base bundle", () => {
