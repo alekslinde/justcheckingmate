@@ -106,14 +106,17 @@ body {
     /* Revamp roles for light. Not a naive inversion: the paper card stays light
        (it is light in both themes by design), and the verdict colours darken
        enough to hold 4.5:1 on a near-white ground. */
+    /* Surfaces must stay distinguishable from the page, so the light ramp
+       goes DOWN in lightness as it goes up in elevation — the inverse of the
+       dark ramp. --ink-2 as pure white on a #FBFAF7 page was invisible. */
     --ink:       #FBFAF7;
-    --ink-2:     #FFFFFF;
-    --ink-3:     #EFEDE7;
-    --rule:      #DDD9D0;
+    --ink-2:     #EFECE3;
+    --ink-3:     #E1DDD2;
+    --rule:      #D5D0C4;
     --paper:     #FFFFFF;
     --paper-dim: #EFEDE7;
     --text-dim:  #4B5563;
-    --faint:     #6B7280;
+    --faint:     #5F6B7A;   /* holds AA on the raised surface, not just the page */
     --clear:     #00734F;
     --caution:   #A66200;
     --scam:      #B3231C;

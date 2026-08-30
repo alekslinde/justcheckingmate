@@ -471,5 +471,13 @@
   "nav.close": "Close",
   "nav.here": "You're here",
   "a11y.openMenu": "Open the menu",
-  "a11y.closeMenu": "Close the menu"
+  "a11y.closeMenu": "Close the menu",
+  "check.stage.qr": "Looking for a QR code",
+  "check.stage.ocrLocal": "Reading the text on your device",
+  "check.stage.ocrServer": "Reading the text on our server",
+  "check.stage.onDevice": "On your device. Nothing has been uploaded.",
+  "check.stage.uploaded": "Sent to our server to be read, then discarded.",
+  "check.checked": "Checked",
+  "check.checkedLabel": "Checked",
+  "check.editAgain": "Edit & check again"
 }
