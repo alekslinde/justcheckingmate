@@ -486,5 +486,22 @@
   "freshness.label": "Reviewed",
   "radar.freshness.note": "The newest sighting across the {n} entries below. Each entry carries its own first-seen and last-seen dates.",
   "calendar.freshness.note": "The newest review date across the {n} seasons below. Each season lists its own sources and when it was last checked.",
-  "check.onDevice": "Checked on your device"
+  "check.onDevice": "Checked on your device",
+  "verdict.evidence.heading": "Evidence",
+  "verdict.evidence.caption": "What we found, and what each finding added to the score.",
+  "verdict.evidence.source.link": "Link",
+  "verdict.evidence.source.message": "Message",
+  "verdict.evidence.source.sender": "Sender",
+  "verdict.evidence.source.phone": "Phone",
+  "verdict.evidence.source.attachment": "Attachment",
+  "verdict.evidence.source.score": "Capped",
+  "verdict.evidence.none": "No individual signals to show for this one.",
+  "verdict.score.label": "Risk score",
+  "verdict.score.caution": "caution",
+  "verdict.score.scam": "scam",
+  "verdict.tactics.heading": "Tactics in play",
+  "verdict.tactics.count": "{n} of {total} matched",
+  "verdict.tactics.matched": "Matched",
+  "verdict.tactics.none": "None of the six common tactics matched this one.",
+  "verdict.tactics.learnMore": "Read how each tactic works →"
 }
