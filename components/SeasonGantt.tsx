@@ -98,7 +98,12 @@ export default function SeasonGantt({
     }`;
 
   return (
-    <figure className="m-0 rounded-xl border border-[var(--rule)] bg-[var(--ink-2)] px-3.5 pt-3.5 pb-2.5 overflow-hidden">
+    // mx-0 only, never m-0: a <figure> carries a default margin on all four
+    // sides that has to go, but the parent spaces its children with space-y,
+    // which works by setting margin-top on the siblings. A blanket m-0 has the
+    // same specificity and lands later in the cascade, so it silently wins and
+    // the figure ends up flush against the heading below it.
+    <figure className="mx-0 rounded-xl border border-[var(--rule)] bg-[var(--ink-2)] px-3.5 pt-3.5 pb-2.5 overflow-hidden">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
         <figcaption className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.09em] text-[var(--text-dim)]">
           {t("calendar.ribbon.label")}
