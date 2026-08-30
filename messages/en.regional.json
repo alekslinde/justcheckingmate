@@ -73,7 +73,6 @@
   "report.success.body": "Your report's been logged. Every one helps warn the next person about this scam.",
   "report.success.total": "{n} reports lodged by Aussies like you.",
   "report.success.another": "Dob in another",
-  "subs.subtitle": "Scams dobbed in by Aussies — unverified, anonymised",
   "subs.empty.title": "No reports match these filters, mate",
   "subs.footer.cta": "Check or dob in a scam →",
   "bug.sent.title": "Cheers — that helps us improve",
@@ -105,5 +104,6 @@
   "radar.coverage.none": "Not caught yet",
   "radar.coverage.na": "Nothing to catch in text",
   "radar.gaps.heading": "Worth knowing we don't catch",
-  "footer.scope": "Checks run worldwide. Full rules where we've done the legwork."
+  "footer.scope": "Checks run worldwide. Full rules where we've done the legwork.",
+  "subs.lede": "Every report gets scrubbed of personal details before it's stored or shown. Reports help people know what's about — they don't change how we score."
 }

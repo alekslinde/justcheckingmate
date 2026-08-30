@@ -1,12 +1,23 @@
 "use client";
 
+// The feed's shape at a glance: how much has been reported, how much of it is
+// recent, and what kinds.
+//
+// Three figures then a breakdown, rather than the previous single "N reports
+// total" line beside a sparkline. The old layout had a structural fault: the
+// sparkline and the type breakdown were two grid columns, so a feed with no
+// activity in the last 30 days — which is any quiet week, not just an edge case
+// — rendered the breakdown in the left column and left the right half of the
+// card visibly empty. Figures that are always present carry the top row now,
+// and the chart appears below only when there is something to plot.
+
 import { useEffect, useState } from "react";
-import { FeedStats } from "@/lib/reportStore";
+import { FeedStats, countRecent } from "@/lib/reportStore";
 import { useLang, MessageKey } from "@/lib/lang";
 import { fmt } from "@/lib/formatters";
 
-// Minimum reports before we bother showing charts at all. Below this threshold
-// the visuals carry no information and just look broken.
+// Minimum reports before the trend chart is worth drawing. Below this the line
+// carries no information and just looks broken.
 const SPARKLINE_MIN = 10;
 
 const TYPE_META: Record<string, { labelKey: MessageKey }> = {
@@ -18,7 +29,27 @@ const TYPE_META: Record<string, { labelKey: MessageKey }> = {
   custom: { labelKey: "subs.type.custom" },
 };
 
-// ── Sparkline ─────────────────────────────────────────────────────────────────
+/** One headline figure. Mono, because these are numbers to compare, not prose. */
+function Figure({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="bg-[var(--ink-2)] px-4 py-3.5">
+      <p className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
+        {label}
+      </p>
+      <p
+        className={`font-[family-name:var(--font-mono-ui)] text-[26px] leading-tight tabular-nums mt-1 ${
+          // Amber marks the recent figure — it's the one that says "this is
+          // live". Never red: red is the verdict colour. A zero is deliberately
+          // not accented: amber is an attention colour, and colouring "0" with
+          // it draws the eye to the one number that has nothing to say.
+          accent ? "text-[var(--caution)]" : "text-[var(--foreground)]"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
 
 function Sparkline({ byDay }: { byDay: FeedStats["byDay"] }) {
   if (byDay.length < 2) return null;
@@ -38,29 +69,23 @@ function Sparkline({ byDay }: { byDay: FeedStats["byDay"] }) {
   });
 
   const polyline = pts.join(" ");
-  // Close the area path under the line
   const first = pts[0].split(",");
   const last  = pts[pts.length - 1].split(",");
-  const area  = `M${first[0]},${H} L${polyline.replace(/(\S+),(\S+)/g, "$1,$2")} L${last[0]},${H} Z`;
+  const area  = `M${first[0]},${H} L${polyline} L${last[0]},${H} Z`;
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-9"
-      aria-hidden="true"
-      preserveAspectRatio="none"
-    >
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-9" aria-hidden="true" preserveAspectRatio="none">
       <defs>
         <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#34d399" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--clear)" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="var(--clear)" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={area} fill="url(#spark-fill)" />
       <polyline
         points={polyline}
         fill="none"
-        stroke="#34d399"
+        stroke="var(--clear)"
         strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -68,8 +93,6 @@ function Sparkline({ byDay }: { byDay: FeedStats["byDay"] }) {
     </svg>
   );
 }
-
-// ── Type bars ─────────────────────────────────────────────────────────────────
 
 function TypeBars({ byType }: { byType: FeedStats["byType"] }) {
   const { t } = useLang();
@@ -79,21 +102,25 @@ function TypeBars({ byType }: { byType: FeedStats["byType"] }) {
   if (max === 0) return null;
 
   return (
-    <ul className="space-y-1.5" aria-label={t("subs.stats.breakdown")}>
+    // Capped: six bars stretched across 1100px turn a compact comparison into a
+    // set of very long lines whose differences are harder to read, not easier.
+    <ul className="space-y-1.5 list-none max-w-[440px]" aria-label={t("subs.stats.breakdown")}>
       {byType.map(({ type, count }) => {
         const meta = TYPE_META[type];
         if (!meta) return null;
         const pct = Math.round((count / max) * 100);
         return (
-          <li key={type} className="flex items-center gap-2 text-xs">
-            <span className="w-24 shrink-0 text-gray-400 truncate">{t(meta.labelKey)}</span>
+          <li key={type} className="flex items-center gap-2.5 text-xs">
+            <span className="w-24 shrink-0 text-[var(--text-dim)] truncate">{t(meta.labelKey)}</span>
             <div className="flex-1 bg-[var(--ink-3)] rounded-full h-1.5 overflow-hidden">
               <div
-                className="h-full bg-emerald-500 rounded-full transition-[width] duration-500"
+                className="h-full bg-[var(--clear)] rounded-full transition-[width] duration-500"
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <span className="w-7 text-right tabular-nums text-gray-500 shrink-0">{fmt(count)}</span>
+            <span className="w-7 text-right tabular-nums text-[var(--faint)] shrink-0 font-[family-name:var(--font-mono-ui)]">
+              {fmt(count)}
+            </span>
           </li>
         );
       })}
@@ -101,55 +128,62 @@ function TypeBars({ byType }: { byType: FeedStats["byType"] }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-
 export default function SubmissionsStats() {
   const { t } = useLang();
   const [stats, setStats] = useState<FeedStats | null>(null);
+  // The clock is read once, when the data lands, rather than on every render:
+  // reading it during render makes the output depend on when React happened to
+  // re-run, which is both a hydration hazard and impossible to test.
+  const [thisWeek, setThisWeek] = useState(0);
 
   useEffect(() => {
     fetch("/api/feed-stats")
       .then((r) => r.json())
-      .then(setStats)
+      .then((data: FeedStats) => {
+        setStats(data);
+        setThisWeek(countRecent(data.byDay ?? [], Date.now()));
+      })
       .catch(() => {});
   }, []);
 
-  // Render nothing until data arrives or if the DB is completely empty.
+  // Render nothing until data arrives or if the feed is completely empty.
   if (!stats || stats.total === 0) return null;
 
-  const showCharts = stats.total >= SPARKLINE_MIN;
+  const showChart = stats.total >= SPARKLINE_MIN && stats.byDay.length >= 2;
 
   return (
-    <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
-      {/* Total count header */}
-      <div className="px-4 py-3 border-b border-[var(--rule)] flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-          {t("subs.stats.activity")}
-        </span>
-        <span className="text-sm font-bold tabular-nums text-emerald-400">
-          {t(stats.total === 1 ? "subs.stats.total.one" : "subs.stats.total.many", {
-            n: fmt(stats.total),
-          })}
-        </span>
+    <div className="grid gap-px overflow-hidden rounded-2xl border border-[var(--rule)] bg-[var(--rule)]">
+      {/* Always three figures, always the same width: a row that changes shape
+          with the data is harder to read across visits than one that sometimes
+          shows a zero. A quiet week is information, not a gap to hide. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-[var(--rule)]">
+        <Figure label={t("subs.stats.reports")} value={fmt(stats.total)} />
+        <Figure label={t("subs.stats.week")} value={fmt(thisWeek)} accent={thisWeek > 0} />
+        <Figure label={t("subs.stats.types")} value={fmt(stats.byType.length)} />
       </div>
 
-      {showCharts && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-[var(--ink-3)]">
-          {/* Sparkline panel — flex-end so the graph hugs the bottom of the
-              panel when the type-breakdown column makes the row taller. */}
-          {stats.byDay.length >= 2 && (
-            <div className="bg-[var(--ink-2)] px-4 pt-3 pb-2 flex flex-col justify-end space-y-1">
-              <Sparkline byDay={stats.byDay} />
-            </div>
-          )}
-
-          {/* Type breakdown panel */}
+      {(showChart || stats.byType.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-[var(--rule)]">
           {stats.byType.length > 0 && (
-            <div className="bg-[var(--ink-2)] px-4 py-3 space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+            <div
+              className={`bg-[var(--ink-2)] px-4 py-3.5 space-y-2 ${showChart ? "" : "sm:col-span-2"}`}
+            >
+              <p className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
                 {t("subs.stats.breakdown")}
               </p>
               <TypeBars byType={stats.byType} />
+            </div>
+          )}
+          {/* The chart only renders when there is a trend to show. Without a
+              sibling to balance it the breakdown spans the row instead of
+              leaving half the card empty, which is what the old two-column
+              layout did on any feed with a quiet month. */}
+          {showChart && (
+            <div className="bg-[var(--ink-2)] px-4 pt-3.5 pb-2.5 flex flex-col justify-end space-y-1.5">
+              <p className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
+                {t("subs.stats.activity")}
+              </p>
+              <Sparkline byDay={stats.byDay} />
             </div>
           )}
         </div>

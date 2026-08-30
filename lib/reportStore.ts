@@ -424,3 +424,20 @@ export async function getFeedStats(): Promise<FeedStats> {
   };
 }
 
+
+/**
+ * How many reports in `byDay` fall within the last `days` days of `now`.
+ *
+ * `now` is a parameter rather than a call to Date.now() inside the function so
+ * this stays pure: the caller is a React component, and reading the clock while
+ * rendering makes the output depend on when the render happened rather than on
+ * the props — which is both a hydration hazard and untestable.
+ *
+ * Compares ISO date strings directly, which is valid because they are
+ * zero-padded and fixed-width, and avoids re-parsing each row into a Date only
+ * to compare it back.
+ */
+export function countRecent(byDay: FeedStats["byDay"], now: number, days = 7): number {
+  const cutoff = new Date(now - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return byDay.reduce((sum, d) => (d.date >= cutoff ? sum + d.count : sum), 0);
+}

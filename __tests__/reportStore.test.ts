@@ -16,6 +16,7 @@ import {
   getStats,
   getPublicReports,
   getPublicReportsCount,
+  countRecent,
 } from "@/lib/reportStore";
 import { getDb } from "@/lib/db";
 
@@ -714,5 +715,45 @@ describe("getPublicReportsCount", () => {
     expect(count).toBe(42);
     const call = mockExecute.mock.calls[0][0] as { sql: string };
     expect(call.sql).not.toContain("LIKE");
+  });
+});
+
+describe("countRecent", () => {
+  // A fixed clock: the whole point of countRecent taking `now` is that its
+  // output doesn't depend on when the test runs.
+  const now = Date.parse("2026-08-30T12:00:00Z");
+  const day = (iso: string, count: number) => ({ date: iso, count });
+
+  it("counts only days inside the window", () => {
+    const byDay = [
+      day("2026-08-01", 100), // well outside
+      day("2026-08-23", 5),   // exactly on the cutoff
+      day("2026-08-28", 3),
+      day("2026-08-30", 2),
+    ];
+    expect(countRecent(byDay, now)).toBe(10);
+  });
+
+  it("returns 0 for an empty feed", () => {
+    // The case that produced the visibly empty half of the stats card: a feed
+    // with nothing recent is normal, and must report zero rather than break.
+    expect(countRecent([], now)).toBe(0);
+  });
+
+  it("returns 0 when everything is older than the window", () => {
+    expect(countRecent([day("2026-01-01", 40)], now)).toBe(0);
+  });
+
+  it("honours a custom window", () => {
+    const byDay = [day("2026-08-02", 7), day("2026-08-29", 1)];
+    expect(countRecent(byDay, now, 1)).toBe(1);
+    expect(countRecent(byDay, now, 365)).toBe(8);
+  });
+
+  it("does not mutate its input", () => {
+    const byDay = [day("2026-08-29", 1)];
+    const copy = structuredClone(byDay);
+    countRecent(byDay, now);
+    expect(byDay).toEqual(copy);
   });
 });
