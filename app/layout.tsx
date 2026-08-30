@@ -62,10 +62,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)",  color: "#030712" },
-    { media: "(prefers-color-scheme: light)", color: "#f9fafb" },
-  ],
+  // Single theme, so a single colour — and it must be the real page ground.
+  themeColor: "#141C2B",
 };
 
 export default function RootLayout({

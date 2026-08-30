@@ -24,7 +24,7 @@ type Verdict = AnalyzedIdentifier["result"]["verdict"];
 // Inline stroke icons for the upload actions — kept local (no icon-library
 // dependency for three glyphs). They inherit the button's text colour via
 // currentColor, so hover/disabled states need no extra wiring.
-const ICON = { className: "w-6 h-6", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+const ICON = { className: "w-[15px] h-[15px]", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
 
 function CameraIcon() {
   return (
@@ -56,7 +56,7 @@ function EmailFileIcon() {
 
 function SpinnerIcon() {
   return (
-    <svg {...ICON} className="w-6 h-6 animate-spin">
+    <svg {...ICON} className="w-[15px] h-[15px] animate-spin">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
   );
@@ -82,11 +82,13 @@ const KIND_META: Record<AnalyzedIdentifier["kind"], { icon: string; labelKey: Me
 // plenty of horizontal room), and icon above centred text from sm up, where
 // three columns leave each option only ~200px and a side-by-side layout would
 // squeeze the description into a narrow ragged column.
+// Chips in the card footer, on the paper surface — so these are light-surface
+// colours, not the page palette. Secondary to the submit beside them.
 const CAPTURE_OPTION =
-  "flex items-center gap-3 text-left px-4 py-3 min-h-[52px] w-full " +
-  "border border-[var(--rule)] rounded-xl text-[var(--text-dim)] " +
-  "hover:border-[var(--clear)] hover:text-[var(--foreground)] transition-colors " +
-  "disabled:opacity-50 disabled:cursor-not-allowed";
+  "inline-flex items-center gap-2 rounded-lg border border-[#D9D5CC] bg-white " +
+  "px-3 py-2 min-h-[40px] text-[13px] font-medium text-[#3D4654] " +
+  "hover:border-[#A8B0BC] transition-colors " +
+  "disabled:opacity-45 disabled:cursor-not-allowed max-sm:w-full max-sm:justify-start";
 
 // The camera is offered only where one exists. A desktop webcam is not how
 // anyone photographs a scam text they were sent, and the picker it opens is a
@@ -665,7 +667,7 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
 
   // ── Input step ──────────────────────────────────────────────────────────────
   return (
-    <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl p-5 sm:p-6 space-y-5">
+    <div className="space-y-4">
       <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.input")}</h2>
 
       {/* Hidden file inputs */}
@@ -676,54 +678,111 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       <input ref={emlRef} type="file" accept=".eml,message/rfc822,text/plain" className="hidden" tabIndex={-1} aria-hidden="true"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleEmlUpload(f); }} />
 
-      {/* Ways to hand this page something to check. "Take photo" and "Upload
-          image" were the same input with the same handler, differing only by a
-          capture hint — so they are one action now, with the camera offered as
-          a compact variant on devices that have one. The .eml option stays
-          separate: it accepts a different file type and runs a different
-          pipeline (SPF/DKIM/DMARC, tracking pixels). Forwarding is deliberately
-          NOT here — see the block below the submit button. */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <button
-          type="button"
-          onClick={() => imageRef.current?.click()}
-          disabled={busy}
-          aria-busy={uploadLoading}
-          className={`${CAPTURE_OPTION} sm:flex-1`}
-        >
-          <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
-          <span className="min-w-0">
-            <span className="block font-medium text-sm">{t("check.uploadImage")}</span>
-            <span className="block text-xs text-[var(--faint)] leading-tight">{t("check.uploadImageDesc")}</span>
+      {/* The check card is deliberately light on a dark page: it reads as paper,
+          the thing you put a message onto. Pasting is the primary action, so the
+          textarea leads and the capture options sit in the footer beside the
+          submit — the old arrangement put three bordered cards above the box and
+          an "or paste below" divider under them, which made paste the fallback. */}
+      <div
+        className={`bg-[var(--paper)] text-[var(--ink)] rounded-2xl overflow-hidden relative shadow-[0_18px_44px_-20px_rgba(0,0,0,0.6)] transition-shadow ${
+          dragOver ? "ring-2 ring-[var(--clear)]" : ""
+        }`}
+        onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+        onDrop={handleDrop}
+      >
+        {/* Names the surface and states the privacy claim at the point of input,
+            which is where the question is actually being asked. */}
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--paper-dim)]">
+          <span className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium tracking-[0.09em] uppercase text-[#5D6675]">
+            {t("check.contentLabel")}
           </span>
-        </button>
+          <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-semibold tracking-[0.03em] text-[#00805B]">
+            <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--clear)] shrink-0" />
+            {t("check.onDevice")}
+          </span>
+        </div>
 
-        {hasCamera && (
+        <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
+        <textarea
+          id="check-content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={t("check.placeholder")}
+          rows={4}
+          className="w-full min-h-[118px] px-4 py-4 bg-transparent text-[var(--ink)] placeholder-[#8A93A1] border-0 resize-y text-base leading-relaxed focus:outline-none block"
+        />
+
+        {/* Capture options and the submit share one bar: they are all ways to
+            start the same check, and the chips are secondary to pasting. */}
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-[var(--paper-dim)] bg-[#F5F3EE]">
           <button
             type="button"
-            onClick={() => cameraRef.current?.click()}
+            onClick={() => imageRef.current?.click()}
             disabled={busy}
-            aria-label={t("check.takePhoto")}
-            className={`${CAPTURE_OPTION} sm:w-auto sm:shrink-0`}
+            aria-busy={uploadLoading}
+            className={CAPTURE_OPTION}
           >
-            <span className="shrink-0"><CameraIcon /></span>
-            <span className="font-medium text-sm">{t("check.takePhoto")}</span>
+            <span className="shrink-0">{uploadLoading ? <SpinnerIcon /> : <ImageIcon />}</span>
+            {t("check.uploadImage")}
           </button>
-        )}
 
-        <button
-          type="button"
-          onClick={() => emlRef.current?.click()}
-          disabled={busy}
-          className={`${CAPTURE_OPTION} sm:flex-1`}
-        >
-          <span className="shrink-0"><EmailFileIcon /></span>
-          <span className="min-w-0">
-            <span className="block font-medium text-sm">{t("check.uploadEml")}</span>
-            <span className="block text-xs text-[var(--faint)] leading-tight">{t("check.uploadEmlDesc")}</span>
-          </span>
-        </button>
+          {hasCamera && (
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              disabled={busy}
+              className={CAPTURE_OPTION}
+            >
+              <span className="shrink-0"><CameraIcon /></span>
+              {t("check.takePhoto")}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => emlRef.current?.click()}
+            disabled={busy}
+            className={CAPTURE_OPTION}
+          >
+            <span className="shrink-0"><EmailFileIcon /></span>
+            {t("check.uploadEml")}
+          </button>
+
+          <button
+            onClick={() => runCheck()}
+            disabled={checkLoading || !content.trim()}
+            aria-busy={checkLoading}
+            className={`ml-auto max-sm:w-full max-sm:ml-0 inline-flex items-center justify-center gap-2.5 rounded-[9px] px-5 py-2.5 font-semibold text-[15px] transition-colors ${
+              checkLoading
+                ? "bg-[#00825C] text-[#EAF7F2] cursor-progress"
+                : "bg-[var(--ink)] text-white hover:bg-[#232F42] disabled:opacity-60 disabled:cursor-not-allowed"
+            }`}
+          >
+            {checkLoading && (
+              <span aria-hidden="true" className="w-4 h-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+            )}
+            {checkLoading ? t("check.analysing") : t("check.submit")}
+          </button>
+        </div>
+
+        {dragOver && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 grid place-items-center bg-[rgba(0,166,118,0.13)] backdrop-blur-[2px] pointer-events-none font-[family-name:var(--font-mono-ui)] text-[13px] tracking-[0.06em] uppercase font-semibold text-[#00674A]"
+          >
+            {t("check.dropHere")}
+          </div>
+        )}
       </div>
+
+      {/* Paste guidance for users who aren't sure how to copy on mobile */}
+      {!content && (
+        <p className="text-xs text-[var(--faint)] px-0.5">
+          {t("check.pasteHint")}{" "}
+          <span className="hidden sm:inline">{t("check.dropHint")}</span>
+        </p>
+      )}
 
       {/* Quiet pointer to the full capture guide on Learn — replaces the inline
           expandables that crowded this flow. */}
@@ -790,75 +849,6 @@ export default function CheckFlow({ initialContent = "", surface = "web" }: Chec
       )}
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
-
-      <div className="flex items-center gap-3" aria-hidden="true">
-        <div className="flex-1 h-px bg-gray-700" />
-        <span className="text-xs text-gray-500">{t("check.orPaste")}</span>
-        <div className="flex-1 h-px bg-gray-700" />
-      </div>
-
-      <div>
-        <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
-        {/* Drop target: dragging a .eml / image / source file onto the textarea
-            fills it in. dragenter/over must preventDefault to mark a valid drop
-            zone; the overlay only appears mid-drag so it never blocks typing. */}
-        <div
-          className="relative"
-          onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
-          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
-          onDrop={handleDrop}
-        >
-          <textarea
-            id="check-content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={t("check.placeholder")}
-            rows={5}
-            className={`w-full bg-[var(--ink)] border rounded-xl px-4 py-3 text-[var(--foreground)] placeholder-[var(--faint)] focus:outline-none focus:border-[var(--clear)] focus:ring-1 focus:ring-[var(--clear)] resize-y text-base font-mono transition-colors ${
-              dragOver ? "border-[var(--clear)] border-dashed" : "border-[var(--rule)]"
-            }`}
-          />
-          {dragOver && (
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--ink)]/90 border-2 border-dashed border-[var(--clear)] pointer-events-none text-[var(--clear)] text-sm font-medium gap-2"
-            >
-              <span>📨</span> {t("check.dropHere")}
-            </div>
-          )}
-        </div>
-        {/* Paste guidance for users who aren't sure how to copy on mobile */}
-        {!content && (
-          <p className="mt-1.5 text-xs text-gray-500">
-            {t("check.pasteHint")}{" "}
-            <span className="hidden sm:inline">{t("check.dropHint")}</span>
-          </p>
-        )}
-      </div>
-
-      {/* The button carries its own working state rather than greying out: it
-          is the only thing on screen that can report progress for the paste
-          path, which is a single request with no stages to show. */}
-      <button
-        onClick={() => runCheck()}
-        disabled={checkLoading || !content.trim()}
-        aria-busy={checkLoading}
-        className={`w-full py-3.5 px-6 rounded-xl font-semibold text-base transition-colors inline-flex items-center justify-center gap-2.5 ${
-          checkLoading
-            // Working is a state with its own colour, not a greyed-out control:
-            // disabled:opacity would wash out the label exactly when it matters.
-            ? "bg-[#00825C] text-[#EAF7F2] cursor-progress"
-            : "bg-[var(--clear)] text-[#08130F] hover:bg-[#00BF88] disabled:bg-[var(--ink-3)] disabled:text-[var(--faint)]"
-        }`}
-      >
-        {checkLoading && (
-          <span
-            aria-hidden="true"
-            className="w-4 h-4 rounded-full border-2 border-current/30 border-t-current animate-spin"
-          />
-        )}
-        {checkLoading ? t("check.analysing") : t("check.submit")}
-      </button>
 
       {checkError && (
         <div role="alert" className="bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
