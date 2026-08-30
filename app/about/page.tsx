@@ -17,7 +17,7 @@ const P = "text-sm text-gray-300";
 
 export default function AboutPage() {
   return (
-    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-6">
+    <main className="max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
           About &amp; Privacy

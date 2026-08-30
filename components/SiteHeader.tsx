@@ -65,10 +65,10 @@ export default function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--rule)] bg-[var(--ink)]">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4 min-h-[56px]">
+      <div className="max-w-[1180px] mx-auto px-5 sm:px-8 flex items-center justify-between gap-4 min-h-[58px]">
         <Link
           href="/"
-          className="flex items-center gap-2 font-semibold tracking-tight text-[15px] shrink-0 min-w-0 py-3 font-[family-name:var(--font-display)]"
+          className="flex items-center gap-[9px] font-bold text-[17px] tracking-[-0.01em] shrink-0 min-w-0 py-3 font-[family-name:var(--font-display)] text-[var(--foreground)]"
         >
           <svg width="19" height="19" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="shrink-0">
             <path
@@ -95,7 +95,7 @@ export default function SiteHeader() {
               key={l.href}
               href={l.href}
               aria-current={isCurrent(l.href) ? "page" : undefined}
-              className={`min-h-[44px] flex items-center px-3 text-sm rounded-lg transition-colors ${
+              className={`min-h-[44px] flex items-center px-2.5 text-sm rounded-[7px] transition-colors ${
                 isCurrent(l.href)
                   ? "text-[var(--foreground)] bg-[var(--ink-2)] font-medium"
                   : "text-[var(--text-dim)] hover:text-[var(--foreground)] hover:bg-[var(--ink-2)]"
@@ -145,7 +145,7 @@ export default function SiteHeader() {
           tabIndex={-1}
           aria-hidden="true"
           onClick={() => setOpen(false)}
-          className="md:hidden fixed inset-0 top-[56px] z-40 bg-[rgba(3,7,18,0.62)] backdrop-blur-[2px] border-0 p-0 cursor-default"
+          className="md:hidden fixed inset-0 top-[58px] z-40 bg-[rgba(3,7,18,0.62)] backdrop-blur-[2px] border-0 p-0 cursor-default"
         />
       )}
 
@@ -154,7 +154,7 @@ export default function SiteHeader() {
       <nav
         id="site-menu"
         hidden={!open}
-        className="md:hidden absolute left-0 right-0 top-full z-50 flex flex-col gap-0.5 bg-[var(--ink)] border-b border-[var(--rule)] px-4 sm:px-6 pt-2 pb-3.5 shadow-[0_18px_34px_-18px_rgba(0,0,0,0.85)]"
+        className="md:hidden absolute left-0 right-0 top-full z-50 flex flex-col gap-0.5 bg-[var(--ink)] border-b border-[var(--rule)] px-5 sm:px-8 pt-2 pb-3.5 shadow-[0_18px_34px_-18px_rgba(0,0,0,0.85)]"
       >
         {LINKS.map((l) => (
           <Link

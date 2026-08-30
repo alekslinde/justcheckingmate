@@ -10,7 +10,7 @@ export default function SiteFooter() {
       className="border-t border-[var(--rule)] bg-[var(--ink)] mt-auto"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[var(--text-dim)] leading-relaxed">
+      <div className="max-w-[1180px] mx-auto px-5 sm:px-8 pt-3 pb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[var(--text-dim)] leading-relaxed">
         <span className="text-[var(--foreground)]">
           {t("footer.built")}{" "}
           <a
