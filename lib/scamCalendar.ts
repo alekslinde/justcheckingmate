@@ -1383,3 +1383,69 @@ export function formatReviewedDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
   return `${day} ${MONTH_NAMES[month]} ${year}`;
 }
+
+/** Where a gantt bar's label can be drawn without clipping or colliding. */
+export type LabelPlacement = "inside" | "left" | "right" | "hidden";
+
+/**
+ * A label's width as a fraction of the chart, estimated from its character
+ * count.
+ *
+ * Estimated rather than measured: measuring means a layout pass per bar on
+ * every resize, for labels that are a convenience on a graphic whose accessible
+ * content is the list below it. The constants are a conservative average
+ * advance for Inter at the bar's text size plus the bar's horizontal padding,
+ * so the estimate errs towards moving a label out of a bar it would just barely
+ * have fitted rather than leaving one that clips.
+ *
+ * Returns Infinity when the chart hasn't been measured yet (width 0), which
+ * makes every label "not fitting" and leaves the chart unlabelled until the
+ * real width is known — a quiet fill-in rather than a flash of labels that then
+ * rearrange.
+ */
+export function labelSpan(title: string, chartWidth: number): number {
+  if (chartWidth <= 0) return Infinity;
+  const LABEL_SIZE = 11;
+  const CHAR_EM = 0.54;
+  const PADDING = 16;
+  return (title.length * CHAR_EM * LABEL_SIZE + PADDING) / chartWidth;
+}
+
+/**
+ * Where to put a bar's label: inside it, in a free gutter beside it, or nowhere.
+ *
+ * A label wider than its bar has to go somewhere, and the two bad answers are
+ * clipping it inside the bar ("Black Frida", which reads as a rendering fault
+ * and still doesn't name the season) or letting it run over the neighbouring
+ * bar in the same lane. So this checks the gutters for an actual gap: the space
+ * to the next bar on that lane, or to the chart edge if there is none.
+ *
+ * Preference order is inside, right, left, hidden. Right before left because a
+ * label trailing its bar reads as belonging to it; a leading label has to be
+ * read backwards. Hidden is a real outcome, not a failure — a bar wedged
+ * between two others has no honest place for a label, and the season is named
+ * in the list below regardless.
+ */
+export function labelPlacement(
+  band: SeasonBand,
+  bands: readonly SeasonBand[],
+  span: number,
+): LabelPlacement {
+  if (span <= band.length) return "inside";
+
+  const end = band.start + band.length;
+  // Only bars sharing this lane can collide — that is what lanes are for.
+  const lane = bands.filter((b) => b.lane === band.lane && b !== band);
+
+  const nextStart = lane
+    .filter((b) => b.start >= end)
+    .reduce((closest, b) => Math.min(closest, b.start), 1);
+  if (nextStart - end >= span) return "right";
+
+  const prevEnd = lane
+    .filter((b) => b.start + b.length <= band.start)
+    .reduce((closest, b) => Math.max(closest, b.start + b.length), 0);
+  if (band.start - prevEnd >= span) return "left";
+
+  return "hidden";
+}

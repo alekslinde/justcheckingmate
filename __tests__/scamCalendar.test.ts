@@ -18,7 +18,10 @@ import {
   lastReviewed,
   formatReviewedDate,
   authoredCalendarRegions,
+  labelSpan,
+  labelPlacement,
   type ScamSeason,
+  type SeasonBand,
 } from "@/lib/scamCalendar";
 import { supportedRegions } from "@justcheckingmate/engine/regions";
 
@@ -742,5 +745,102 @@ describe("formatWindow", () => {
   it("formats a year-wrapping window without special-casing", () => {
     expect(formatWindow({ startMonth: 11, startDay: 20, endMonth: 1, endDay: 15 }))
       .toBe("20 November – 15 January");
+  });
+});
+
+describe("labelSpan", () => {
+  it("grows with the title and shrinks as the chart widens", () => {
+    expect(labelSpan("Tax season", 1000)).toBeLessThan(labelSpan("Tax season for everyone", 1000));
+    expect(labelSpan("Tax season", 2000)).toBeLessThan(labelSpan("Tax season", 1000));
+  });
+
+  it("is Infinity before the chart has been measured", () => {
+    // Drives the "label nothing until we know the width" behaviour, which is
+    // what stops labels rendering server-side and then rearranging on hydration.
+    expect(labelSpan("Tax season", 0)).toBe(Infinity);
+    expect(labelSpan("Tax season", -1)).toBe(Infinity);
+  });
+});
+
+describe("labelPlacement", () => {
+  // Bands are positioned by hand here rather than derived from a region, so
+  // each case states exactly the geometry it is about.
+  const band = (start: number, length: number, lane = 0): SeasonBand => ({
+    season: season({ startMonth: 1, startDay: 1, endMonth: 1, endDay: 2 }),
+    start,
+    length,
+    lane,
+  });
+
+  it("keeps a label inside a bar wide enough to hold it", () => {
+    const b = band(0.2, 0.5);
+    expect(labelPlacement(b, [b], 0.3)).toBe("inside");
+  });
+
+  it("puts an oversized label to the right when the lane is clear", () => {
+    const b = band(0.1, 0.05);
+    expect(labelPlacement(b, [b], 0.2)).toBe("right");
+  });
+
+  it("falls back to the left when the right is blocked", () => {
+    const b = band(0.4, 0.05);
+    const blocker = band(0.5, 0.3);
+    expect(labelPlacement(b, [b, blocker], 0.2)).toBe("left");
+  });
+
+  it("hides a label with no room on either side", () => {
+    // The case the estimate exists to catch: a narrow bar wedged between two
+    // others. Overlapping a neighbour is worse than going unlabelled, and the
+    // season is still named in the list below.
+    const b = band(0.45, 0.05);
+    const before = band(0.1, 0.34);
+    const after = band(0.52, 0.3);
+    expect(labelPlacement(b, [b, before, after], 0.2)).toBe("hidden");
+  });
+
+  it("ignores bars in other lanes", () => {
+    // Lanes exist precisely so bars at the same horizontal position don't
+    // collide, so a neighbour one lane down must not block a label.
+    const b = band(0.1, 0.05, 0);
+    const otherLane = band(0.16, 0.3, 1);
+    expect(labelPlacement(b, [b, otherLane], 0.2)).toBe("right");
+  });
+
+  it("treats the chart edges as the outermost boundaries", () => {
+    // A bar at the very end has no bar after it, but it does have the chart
+    // edge — a label must not be placed into space that doesn't exist.
+    const b = band(0.95, 0.05);
+    expect(labelPlacement(b, [b], 0.2)).toBe("left");
+  });
+
+  it("labels nothing when the chart is unmeasured", () => {
+    const b = band(0.2, 0.5);
+    expect(labelPlacement(b, [b], Infinity)).toBe("hidden");
+  });
+
+  it("never overlaps a neighbour on any authored region", () => {
+    // The real-data guard: for every region, no label may run into the bar
+    // beside it. This is the invariant the hand-built cases above generalise.
+    for (const code of authoredCalendarRegions()) {
+      const bands = seasonBands(code);
+      for (const b of bands) {
+        const span = labelSpan(b.season.title, 1120);
+        const placement = labelPlacement(b, bands, span);
+        if (placement !== "right" && placement !== "left") continue;
+
+        const lane = bands.filter((o) => o.lane === b.lane && o !== b);
+        const [from, to] =
+          placement === "right"
+            ? [b.start + b.length, b.start + b.length + span]
+            : [b.start - span, b.start];
+
+        expect(from).toBeGreaterThanOrEqual(0);
+        expect(to).toBeLessThanOrEqual(1);
+        for (const other of lane) {
+          const overlaps = from < other.start + other.length && other.start < to;
+          expect(overlaps).toBe(false);
+        }
+      }
+    }
   });
 });
