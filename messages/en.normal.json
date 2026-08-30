@@ -245,6 +245,7 @@
   "subs.copyId": "Copy report ID",
   "subs.copied": "copied",
   "subs.stats.activity": "Activity — last 30 days",
+  "subs.stats.quiet": "Nothing reported in the last 30 days.",
   "subs.stats.breakdown": "By type",
   "subs.stats.total.one": "{n} report total",
   "subs.stats.total.many": "{n} reports total",

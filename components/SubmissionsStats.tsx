@@ -74,7 +74,12 @@ function Sparkline({ byDay }: { byDay: FeedStats["byDay"] }) {
   const area  = `M${first[0]},${H} L${polyline} L${last[0]},${H} Z`;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-9" aria-hidden="true" preserveAspectRatio="none">
+    // Fills its panel rather than sitting at a fixed 36px: pinned to the
+    // bottom of a taller panel the line read as a footer rule rather than a
+    // chart, and the area fill had no room to show. preserveAspectRatio="none"
+    // lets the viewBox stretch to whatever the panel gives it, which is what a
+    // sparkline wants — the shape of the trend matters, not its proportions.
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full min-h-[52px]" aria-hidden="true" preserveAspectRatio="none">
       <defs>
         <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--clear)" stopOpacity="0.25" />
@@ -162,30 +167,35 @@ export default function SubmissionsStats() {
         <Figure label={t("subs.stats.types")} value={fmt(stats.byType.length)} />
       </div>
 
-      {(showChart || stats.byType.length > 0) && (
+      {stats.byType.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-[var(--rule)]">
           {stats.byType.length > 0 && (
-            <div
-              className={`bg-[var(--ink-2)] px-4 py-3.5 space-y-2 ${showChart ? "" : "sm:col-span-2"}`}
-            >
+            <div className="bg-[var(--ink-2)] px-4 py-3.5 space-y-2">
               <p className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
                 {t("subs.stats.breakdown")}
               </p>
               <TypeBars byType={stats.byType} />
             </div>
           )}
-          {/* The chart only renders when there is a trend to show. Without a
-              sibling to balance it the breakdown spans the row instead of
-              leaving half the card empty, which is what the old two-column
-              layout did on any feed with a quiet month. */}
-          {showChart && (
-            <div className="bg-[var(--ink-2)] px-4 pt-3.5 pb-2.5 flex flex-col justify-end space-y-1.5">
-              <p className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
-                {t("subs.stats.activity")}
+          {/* The activity panel always renders, and says so when there is no
+              trend to draw. An empty half of a card reads as something that
+              failed to load; "nothing reported in the last 30 days" is the same
+              fact stated deliberately, and it is a real thing to know about a
+              feed of scam reports. */}
+          <div className="bg-[var(--ink-2)] px-4 pt-3.5 pb-2.5 flex flex-col space-y-1.5">
+            <p className="font-[family-name:var(--font-mono-ui)] text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]">
+              {t("subs.stats.activity")}
+            </p>
+            {showChart ? (
+              <div className="flex-1 min-h-[52px]">
+                <Sparkline byDay={stats.byDay} />
+              </div>
+            ) : (
+              <p className="text-[13px] text-[var(--faint)] leading-relaxed">
+                {t("subs.stats.quiet")}
               </p>
-              <Sparkline byDay={stats.byDay} />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
