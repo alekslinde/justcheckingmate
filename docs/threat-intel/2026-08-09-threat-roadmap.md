@@ -301,9 +301,16 @@ stored before the `region` column existed and are not representative of
 production traffic.
 
 No meaningful demand data is available this run. The `npm run region-demand`
-script documented in `docs/internationalisation-plan.md` requires Turso
-credentials and should be run in a context where they are available (e.g.
-a local dev environment or a CI job with the Turso secrets injected).
+script requires Turso credentials and should be run in a context where they are
+available (e.g. a local dev environment or a CI job with the Turso secrets
+injected). It reports submission volume per region, flagging any volume from
+outside the six covered packs (AU, GB, US, NZ, CA, IE).
+
+That number gates a real decision: meaningful non-AU volume argues for adding
+locales or further English regions, while volume concentrated in AU/GB argues
+for spending the effort on detection depth in the regions already covered.
+(This was previously documented in `docs/internationalisation-plan.md`, removed
+2026-08-31 — see git history for the full region-pack plan.)
 
 ---
 
