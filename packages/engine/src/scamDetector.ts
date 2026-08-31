@@ -785,6 +785,128 @@ export function checkSms(
     sig.add("message", "Task/job recruitment pattern — a common funnel into 'pig-butchering' investment scams; real employers don't recruit this way", 25);
   }
 
+  // The task-scam payment gate (D2 / #226 / Scamwatch alert, 7 Aug 2026).
+  //
+  // jobSignals above already catches the recruitment half — the e-commerce
+  // assistant lure measured suspicious (25) before this, which is why the
+  // issue's proposed REWARD_WORDS entries were dropped: "rate products to earn
+  // commission" would have double-scored against the composite's own regex.
+  //
+  // What was uncovered is the step that takes the money. After some real
+  // payouts the victim is told their earnings are locked behind a deposit —
+  // "complete the task to withdraw", "your account is frozen, top up to
+  // continue". That inverts the employment relationship, and it is scored
+  // separately rather than as another jobSignal because it is the tell on its
+  // own: no employer has ever required payment to release wages. Measured at
+  // safe (0) before this.
+  const taskPaymentGate =
+    // "receive" is deliberately absent from the outcome verbs, and the outcome
+    // must name money. "Complete the task to receive your certificate" is
+    // ordinary compliance-training mail and measured 40 against a looser form.
+    /\b(complete|finish|unlock|activate)\b[^.!?]{0,30}\btasks?\b[^.!?]{0,30}\b(to|before|and)\b[^.!?]{0,20}\b(withdraw|withdrawal|release|unlock|claim)\b[^.!?]{0,30}\b(earnings?|commission|balance|funds|payment|money|salary|wages?|\$\d)/i.test(text) ||
+    /\b(withdraw|release|unlock)\b[^.!?]{0,40}\b(earnings|commission|balance|funds)\b[^.!?]{0,40}\b(complete|finish|deposit|top\s?up|recharge|prepay|pre-?fund)\b/i.test(text) ||
+    /\b(deposit|top\s?up|recharge|prepay|pre-?fund)\b[^.!?]{0,40}\b(to|before)\b[^.!?]{0,30}\b(unlock|withdraw|release|continue)\b[^.!?]{0,30}\b(earnings|commission|tasks?|balance|funds)\b/i.test(text) ||
+    // "You have unfinished tasks" is the scam's own phrasing, but it is also
+    // exactly what a project tracker sends — "Reminder from Asana: you have 3
+    // unfinished tasks" scored 40 while this branch stood alone, telling the
+    // reader their money was gone. Unlike the three above it carries no payment
+    // half of its own, so it needs the money context the others state outright.
+    (/\byou\s+have\s+(?:\d+\s+)?unfinished\s+tasks?\b/i.test(text) &&
+      /\b(withdraw|withdrawal|earnings?|commission|balance|deposit|top\s?up|recharge|unlock|frozen|payout)\b/i.test(text));
+  if (taskPaymentGate) {
+    sig.add("message", "Earnings held behind a task you must pay to complete — this is the moment a task-scam takes the money. A real employer never asks you to deposit funds to release your own wages, and the small payouts that came before exist to make this step feel safe. Anything sent here is gone, and the 'balance' on screen is not real.", 40);
+  }
+
+  // Verification-code harvesting — messaging-app account takeover (D3 / #227 /
+  // FBI IC3 PSA260320, updated June 2026).
+  //
+  // The signal is not the code. Every legitimate 2FA message contains one, and
+  // "your verification code is 482910" must stay silent. The signal is being
+  // asked to SEND one somewhere — forward it, reply with it, share it, read it
+  // out. No service that issues a code ever asks for it back through the same
+  // channel; the whole point of the code is that only you see it, which is why
+  // every legitimate one carries "don't share this with anyone".
+  //
+  // Requires the send verb and the code noun in one clause, so a delivery
+  // ("123456 is your WhatsApp code") has no verb to latch onto and a bare
+  // "reply STOP" has no code noun.
+  // A negated ask is the opposite signal, and it is what every legitimate 2FA
+  // message and bank fraud warning actually says. "Never share your
+  // verification code with anyone" measured likely_scam (45) against a rule
+  // that only looked for the verb — the single worst false positive available
+  // here, since it flags the anti-fraud advice itself.
+  //
+  // The negation is evaluated PER CLAUSE, not across the message. Scoped to the
+  // whole text it was a bypass: appending one reassurance sentence disarmed the
+  // signal entirely, and "Send me the verification code that just arrived.
+  // Never share it with anyone else." scored 0. Smishing routinely carries that
+  // kind of trailing boilerplate — it is copied from the real notices it
+  // imitates — so the guard has to ask whether *this* clause is a warning, not
+  // whether the message contains one anywhere.
+  const NEGATED_ASK =
+    /\b(never|do\s?n'?o?t|don't|no\s+one|nobody|will\s+never|would\s+never)\b[^.!?]{0,40}\b(share|forward|send|give|disclose|reveal|ask)\b/i;
+  const DISREGARD_NOTICE =
+    /\b(if\s+you\s+did\s?n'?o?t\s+request|ignore\s+this\s+message)\b/i;
+  // "confirm" is deliberately absent from the verbs: confirming a code you
+  // hold is what legitimate flows ask for ("confirm the security code on
+  // your statement"). The scam asks you to TRANSMIT it onward.
+  //
+  // The code noun must be one that only a service issues. "security code" and
+  // "access code" are excluded: they are the ordinary words for a door, gate or
+  // alarm code, and "forward me the security code for the gate" scored
+  // likely_scam — the engine's top severity — on an entirely benign message.
+  // They are still reachable via the app-context branch below.
+  const CODE_ASK =
+    /\b(forward|send|share|reply\s+with|text\s+(?:me|us)|give\s+(?:me|us)|read\s+(?:me|us)\s+out)\b[^.!?]{0,40}\b(?:the\s+|your\s+|that\s+|this\s+|a\s+)?(?:\d[\s-]?)?(?:verification|authentication|login|one[\s-]?time|activation|otp|6[\s-]?digit|4[\s-]?digit)\b[^.!?]{0,20}\bcode\b/i;
+  const CODE_RETURN =
+    /\bcode\b[^.!?]{0,30}\b(?:back\s+to\s+(?:me|us)|to\s+(?:me|us)\s+to\s+(?:verify|restore|confirm|unlock))\b/i;
+  // A weaker noun ("security code", "access code") only counts where the
+  // message is already about an account being verified or restored, which is
+  // what separates the takeover script from a gate code.
+  const WEAK_CODE_ASK =
+    /\b(forward|send|share|reply\s+with|text\s+(?:me|us)|give\s+(?:me|us))\b[^.!?]{0,40}\b(?:the\s+|your\s+|that\s+)?(?:security|access|sms)\b[^.!?]{0,20}\bcode\b/i;
+  const accountContext =
+    /\b(account|verify|verification|restore|unlock|suspend|suspended|locked\s+out|log\s?in|sign\s?in|2fa|two[\s-]factor)\b/i.test(text);
+  const codeHarvest = text
+    .split(/[.!?\n]+/)
+    .some((clause) => {
+      if (NEGATED_ASK.test(clause) || DISREGARD_NOTICE.test(clause)) return false;
+      if (CODE_ASK.test(clause) || CODE_RETURN.test(clause)) return true;
+      return WEAK_CODE_ASK.test(clause) && accountContext;
+    });
+  if (codeHarvest) {
+    sig.add("message", "Asks you to pass on a verification code — no legitimate service ever asks for a code it just sent you. Anyone with that code can take over the account it belongs to, which is how messaging and bank accounts are stolen. Never send it on, even to someone who seems to be a contact.", 45);
+  }
+
+  // Messaging-app account-status lures (D3 / #227). The takeover script opens
+  // by claiming the account is in trouble, then steers to a QR link or a code.
+  // Signal and WhatsApp do not send account-status notices by SMS, email or
+  // any third-party channel at all — everything they tell you appears inside
+  // the app — so naming one of them alongside a suspension claim is
+  // self-identifying. Scored below the code ask: on its own it is a pretext,
+  // and it is the code or QR step that does the damage.
+  //
+  // "signal" is a very common noun — reception, traffic lights, wifi — so it
+  // only counts in the app sense: followed by an account word, or capitalised
+  // mid-sentence as a proper noun. Matched bare it read "poor signal in the
+  // tunnel so my phone data was restricted" and "the traffic signal at the
+  // intersection is under review" as account lures, both scoring 30 on
+  // completely ordinary SMS. WhatsApp and Telegram have no such ambiguity.
+  const STATUS = "(?:flagged|restricted|suspended|locked|limited|deactivated|under\\s+review)";
+  // WhatsApp and Telegram are unambiguous, so they match case-insensitively.
+  const UNAMBIGUOUS_APP = "(?:whatsapp|telegram)";
+  // "signal" only counts in the app sense: qualified by an account noun, or
+  // capitalised where a proper noun is the only reading. Matched bare and
+  // case-insensitively it read ordinary reception and traffic talk as lures.
+  const SIGNAL_APP = "(?:[Ss]ignal\\s+(?:account|messenger|app)|Signal(?=\\s+(?:has|is|was|account)))";
+  const messagingAppStatusLure =
+    new RegExp(`\\b${UNAMBIGUOUS_APP}\\b[^.!?]{0,70}\\b(?:has\\s+been\\s+)?${STATUS}\\b`, "i").test(text) ||
+    new RegExp(`\\b${SIGNAL_APP}\\b[^.!?]{0,70}\\b(?:has\\s+been\\s+)?${STATUS}\\b`).test(text) ||
+    new RegExp(`\\b${STATUS}\\b[^.!?]{0,40}\\b(?:${UNAMBIGUOUS_APP}|signal)\\s+account\\b`, "i").test(text);
+  if (messagingAppStatusLure) {
+    sig.add("message", "Claims a messaging account has been flagged or restricted — Signal, WhatsApp and Telegram never send account notices by SMS or email. Anything they need to tell you appears inside the app itself, so a message like this arriving any other way is the scam.", 30);
+  }
+
   // Withdrawal-gate lure — fake gambling platforms, "scambling" (D1 / #225 /
   // ACCC 14 Aug 2026, NASC fusion cell to Dec 2026; 927% H1 2026 report surge).
   //

@@ -9,8 +9,8 @@
 | Proposal | Issue | Shipped in | Status |
 |---|---|---|---|
 | D1 — Scambling (fake gambling platforms) | #225 | #231 | ✅ Shipped |
-| D2 — Task / e-commerce-rating job scam | #226 | — | ⬜ Outstanding — rescope, see below |
-| D3 — Signal / WhatsApp account hijacking | #227 | — | ⬜ Outstanding — rescope, see below |
+| D2 — Task / e-commerce-rating job scam | #226 | #237 | ✅ Shipped (rescoped) |
+| D3 — Signal / WhatsApp account hijacking | #227 | #237 | ✅ Shipped (rescoped) |
 | D4 — Energy support allowance phrases | — | — | ⬜ Not filed |
 | D5 — Money mule recruitment | — | — | ⬜ Not filed |
 | D6 — Veterans benefits scam | — | — | ⬜ Not filed |
@@ -64,9 +64,37 @@ against the live engine after filing.
   also rated LOW FP in the issue; it is generic account-security boilerplate,
   unlike the four app-specific phrases, and needs its own assessment.
 
-Both issues need rescoping before implementation. This is the gap that prompted
-the live-engine verification step now in
+Both issues needed rescoping before implementation. This is the gap that
+prompted the live-engine verification step now in
 [`README.md`](README.md#verify-against-the-live-engine-before-filing).
+
+**Both shipped rescoped in #237**, to roughly half their proposed surface:
+
+- **D2** — only the payment gate was implemented, as its own composite. The
+  recruitment half was dropped: `jobSignals` already scored the e-commerce
+  assistant lure at 25, and `"rate products to earn commission"` would have
+  double-scored against that composite's own `/\brate\s+products\b/` regex.
+  The gate is scored separately rather than as another `jobSignal` because it
+  is the tell on its own — no employer requires payment to release wages.
+- **D3** — the code ask and the account-status pretext were implemented; the QR
+  half was dropped as already covered by the quishing regex. The proposed
+  `"verify your identity to avoid account suspension"` was **not** added as a
+  phrase: the issue rated it LOW FP alongside four app-specific strings, but it
+  is generic account-security boilerplate. It is caught by the composite when
+  it appears with a code ask, and stays silent alone.
+
+Two false positives were found during implementation, both invisible from the
+proposed phrase lists:
+
+- The code-ask rule flagged **the anti-fraud advice itself** — "Never share
+  your verification code with anyone" scored likely_scam (45). A negation guard
+  now recognises the warning form, which is what every legitimate 2FA message
+  and bank notice actually says.
+- `"confirm"` was dropped from the verb list: confirming a code you already
+  hold is a legitimate flow ("confirm the security code on your statement"),
+  while transmitting one onward is not.
+- The task gate flagged compliance training ("complete the task to receive your
+  certificate") at 40 until its outcome was required to name money.
 
 ---
 
