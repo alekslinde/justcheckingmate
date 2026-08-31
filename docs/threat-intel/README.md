@@ -233,9 +233,61 @@ decay the archive exists to prevent.
 
 ---
 
+## Verify against the live engine before filing
+
+**Every proposed phrase is measured against the live detector before it reaches
+an issue.** Same before/after discipline a probe uses — a sweep looks outward
+for threats, but a proposal is a claim about *our code*, and that claim is
+checked the same way either direction.
+
+The region word lists are not the whole detector. `packages/engine/src/scamDetector.ts`
+carries composite signals — `jobSignals`, `investmentGroupSignals`, the quishing
+regex — that already cover patterns a word-list grep reports as missing. Grep
+both, or the proposal describes a gap that isn't there.
+
+For each candidate phrase, record the current verdict and score, then:
+
+- **Already ≥ `suspicious` on the phrase alone** — drop it, or state in the
+  proposal what the addition buys beyond the existing signal. It may still be
+  worth adding to sharpen a generic hit into a specific one; that is an argument
+  to make explicitly, not to leave implied.
+- **Substring of an existing entry** — drop it. Lists are substring-matched and
+  `checkCustom` sums every hit, so an overlapping entry scores one phrase twice
+  and can move a verdict on its own. The engine records three prior instances of
+  exactly this bug: `mygovid` and `new bsb` (`regions/au.ts`), and `updated bank details`
+  (`regions/base.ts`, with the fix in `scamDetector.ts`).
+- **Covered by a composite** — propose extending the composite, not the word
+  list. A phrase bolted onto a list to catch something a composite nearly
+  catches will usually double-score against the composite's own regex.
+
+**Acceptance criteria must assert a verdict the engine does not already return.**
+A criterion of "→ `suspicious` or `likely_scam`" on a phrase that already scores
+24 passes before anyone writes a line of code, which makes the issue unfalsifiable
+and the eventual PR unreviewable. Name the target verdict, the score, or the
+specific signal that must fire.
+
+### Why this is a gate and not a review note
+
+This check already exists in this archive as a *correction*. The 2026-07-26
+roadmap proposed two QR patterns; testing them against the live regex on
+2026-08-02 found one already caught and one a genuine gap — "half right", as the
+correction puts it. That is the useful shape of the result, and it arrived
+during implementation, after the proposal was written and filed. Running the
+same test before the issue is opened costs one scratch test file instead of a
+wasted implementation PR, and files an issue scoped to the half that is real.
+
+The audit of the 2026-08-31 cycle is the argument for the move: of three HIGH
+proposals, one was already fully caught by `jobSignals`, one was half-caught by
+the quishing regex, and both carried a phrase that would have double-scored.
+None of that was visible from the word lists alone.
+
+---
+
 ## Workflow
 
 1. Branch `threat-intel/YYYY-MM-DD`, write the roadmap, open a docs PR.
+   Every proposed phrase carries a measured before-score — see
+   [Verify against the live engine](#verify-against-the-live-engine-before-filing).
 2. Open one issue per HIGH-priority proposal, tagged `[threat-intel]`, each
    linking back to the roadmap file and its D-number.
 3. Implement in a **separate** PR, with tests in `__tests__/` — detection
