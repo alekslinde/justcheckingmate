@@ -785,6 +785,78 @@ export function checkSms(
     sig.add("message", "Task/job recruitment pattern — a common funnel into 'pig-butchering' investment scams; real employers don't recruit this way", 25);
   }
 
+  // The task-scam payment gate (D2 / #226 / Scamwatch alert, 7 Aug 2026).
+  //
+  // jobSignals above already catches the recruitment half — the e-commerce
+  // assistant lure measured suspicious (25) before this, which is why the
+  // issue's proposed REWARD_WORDS entries were dropped: "rate products to earn
+  // commission" would have double-scored against the composite's own regex.
+  //
+  // What was uncovered is the step that takes the money. After some real
+  // payouts the victim is told their earnings are locked behind a deposit —
+  // "complete the task to withdraw", "your account is frozen, top up to
+  // continue". That inverts the employment relationship, and it is scored
+  // separately rather than as another jobSignal because it is the tell on its
+  // own: no employer has ever required payment to release wages. Measured at
+  // safe (0) before this.
+  const taskPaymentGate =
+    // "receive" is deliberately absent from the outcome verbs, and the outcome
+    // must name money. "Complete the task to receive your certificate" is
+    // ordinary compliance-training mail and measured 40 against a looser form.
+    /\b(complete|finish|unlock|activate)\b[^.!?]{0,30}\btasks?\b[^.!?]{0,30}\b(to|before|and)\b[^.!?]{0,20}\b(withdraw|withdrawal|release|unlock|claim)\b[^.!?]{0,30}\b(earnings?|commission|balance|funds|payment|money|salary|wages?|\$\d)/i.test(text) ||
+    /\b(withdraw|release|unlock)\b[^.!?]{0,40}\b(earnings|commission|balance|funds)\b[^.!?]{0,40}\b(complete|finish|deposit|top\s?up|recharge|prepay|pre-?fund)\b/i.test(text) ||
+    /\b(deposit|top\s?up|recharge|prepay|pre-?fund)\b[^.!?]{0,40}\b(to|before)\b[^.!?]{0,30}\b(unlock|withdraw|release|continue)\b[^.!?]{0,30}\b(earnings|commission|tasks?|balance|funds)\b/i.test(text) ||
+    /\byou\s+have\s+(\d+\s+)?unfinished\s+tasks?\b/i.test(text);
+  if (taskPaymentGate) {
+    sig.add("message", "Earnings held behind a task you must pay to complete — this is the moment a task-scam takes the money. A real employer never asks you to deposit funds to release your own wages, and the small payouts that came before exist to make this step feel safe. Anything sent here is gone, and the 'balance' on screen is not real.", 40);
+  }
+
+  // Verification-code harvesting — messaging-app account takeover (D3 / #227 /
+  // FBI IC3 PSA260320, updated June 2026).
+  //
+  // The signal is not the code. Every legitimate 2FA message contains one, and
+  // "your verification code is 482910" must stay silent. The signal is being
+  // asked to SEND one somewhere — forward it, reply with it, share it, read it
+  // out. No service that issues a code ever asks for it back through the same
+  // channel; the whole point of the code is that only you see it, which is why
+  // every legitimate one carries "don't share this with anyone".
+  //
+  // Requires the send verb and the code noun in one clause, so a delivery
+  // ("123456 is your WhatsApp code") has no verb to latch onto and a bare
+  // "reply STOP" has no code noun.
+  // A negated ask is the opposite signal, and it is what every legitimate 2FA
+  // message and bank fraud warning actually says. "Never share your
+  // verification code with anyone" measured likely_scam (45) against a rule
+  // that only looked for the verb — the single worst false positive available
+  // here, since it flags the anti-fraud advice itself.
+  const negatedCodeAsk =
+    /\b(never|do\s?n'?o?t|don't|no\s+one|nobody|will\s+never|would\s+never)\b[^.!?]{0,40}\b(share|forward|send|give|disclose|reveal|ask)\b/i.test(text) ||
+    /\b(if\s+you\s+did\s?n'?o?t\s+request|ignore\s+this\s+message)\b/i.test(text);
+  const codeHarvest =
+    !negatedCodeAsk &&
+    // "confirm" is deliberately absent from the verbs: confirming a code you
+    // hold is what legitimate flows ask for ("confirm the security code on
+    // your statement"). The scam asks you to TRANSMIT it onward.
+    (/\b(forward|send|share|reply\s+with|text\s+(?:me|us)|give\s+(?:me|us)|read\s+(?:me|us)\s+out)\b[^.!?]{0,40}\b(?:the\s+|your\s+|that\s+|this\s+|a\s+)?(?:\d[\s-]?)?(?:verification|security|authentication|login|one[\s-]?time|activation|access|otp|sms|6[\s-]?digit|4[\s-]?digit)\b[^.!?]{0,20}\bcode\b/i.test(text) ||
+      /\bcode\b[^.!?]{0,30}\b(?:back\s+to\s+(?:me|us)|to\s+(?:me|us)\s+to\s+(?:verify|restore|confirm|unlock))\b/i.test(text));
+  if (codeHarvest) {
+    sig.add("message", "Asks you to pass on a verification code — no legitimate service ever asks for a code it just sent you. Anyone with that code can take over the account it belongs to, which is how messaging and bank accounts are stolen. Never send it on, even to someone who seems to be a contact.", 45);
+  }
+
+  // Messaging-app account-status lures (D3 / #227). The takeover script opens
+  // by claiming the account is in trouble, then steers to a QR link or a code.
+  // Signal and WhatsApp do not send account-status notices by SMS, email or
+  // any third-party channel at all — everything they tell you appears inside
+  // the app — so naming one of them alongside a suspension claim is
+  // self-identifying. Scored below the code ask: on its own it is a pretext,
+  // and it is the code or QR step that does the damage.
+  const messagingAppStatusLure =
+    /\b(signal|whatsapp|telegram)\b[^.!?]{0,60}\b(has\s+been\s+)?(flagged|restricted|suspended|locked|limited|deactivated|under\s+review)\b/i.test(text) ||
+    /\b(flagged|restricted|suspended|locked)\b[^.!?]{0,40}\b(signal|whatsapp|telegram)\s+account\b/i.test(text);
+  if (messagingAppStatusLure) {
+    sig.add("message", "Claims a messaging account has been flagged or restricted — Signal, WhatsApp and Telegram never send account notices by SMS or email. Anything they need to tell you appears inside the app itself, so a message like this arriving any other way is the scam.", 30);
+  }
+
   // Withdrawal-gate lure — fake gambling platforms, "scambling" (D1 / #225 /
   // ACCC 14 Aug 2026, NASC fusion cell to Dec 2026; 927% H1 2026 report surge).
   //
