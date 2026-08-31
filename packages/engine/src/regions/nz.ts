@@ -19,8 +19,7 @@ import { CHINESE_AUTHORITY_MENTIONS } from "./base";
 // recipient who has driven one.
 const URGENCY_TOLL = [
   "unpaid toll", "outstanding toll", "overdue toll", "toll payment",
-  "toll notice", "toll invoice", "final toll notice",
-  "northern gateway", "tauranga eastern link", "takitimu drive",
+  "toll notice", "toll invoice", "northern gateway", "tauranga eastern link", "takitimu drive",
   // Vehicle licensing — the NZ analogue of AU "rego": the rego/WoF pair is the
   // recurring cover, and both are genuinely enforceable, which is the lure.
   "vehicle licence expired", "rego expired", "your rego is due",
@@ -43,7 +42,7 @@ const URGENCY_UTILITY = [
   "broadband will be disconnected", "internet will be disconnected",
   "fibre will be disconnected", "service will be disconnected",
   "power will be disconnected", "electricity will be disconnected",
-  "disconnected within 24 hours", "chorus technician",
+  "chorus technician",
   "account will be cut off",
 ];
 
@@ -71,8 +70,7 @@ const URGENCY_RECALL = [
 const URGENCY_TAX = [
   "tax refund", "tax rebate", "you are eligible for a refund",
   "ird refund", "refund is waiting", "claim your refund",
-  "tax assessment is ready", "end of year tax refund",
-  "cost of living payment", "winter energy payment",
+  "tax assessment is ready", "cost of living payment", "winter energy payment",
   "working for families", "accommodation supplement",
   "best start payment",
 ];

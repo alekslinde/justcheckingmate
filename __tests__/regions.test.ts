@@ -94,12 +94,28 @@ describe("pack invariants (every region)", () => {
   // drift from what actually double-scores.
   const canMatchInside = (needle: string, hay: string) => mentions(hay, needle);
 
-  it.each(packs)("%s: no requestWord can match inside another requestWord", (_code, pack) => {
-    const offenders = pack.requestWords.filter((w) =>
-      pack.requestWords.some((other) => other !== w && canMatchInside(other, w)),
-    );
-    expect(offenders).toEqual([]);
-  });
+  // Every scored list, not just requestWords (#234). The rule had only ever
+  // been applied to one list, and the other two had accumulated 22 overlapping
+  // pairs between them — "tax refund" inside "council tax refund", "final
+  // notice" inside "final notice of unpaid toll", "reward" inside "reward
+  // points". Each scored one phrase as two findings and quoted both in the
+  // flag, so the evidence shown to the reader was doubled too.
+  //
+  // The longer entry in such a pair is unreachable: the shorter one always
+  // matches first, so it can never be the sole hit. It contributes nothing but
+  // the duplicate, which is why the fix was to delete it rather than to
+  // re-weight around it.
+  const SCORED_LISTS = ["urgencyWords", "rewardWords", "requestWords"] as const;
+
+  for (const list of SCORED_LISTS) {
+    it.each(packs)(`%s: no ${list} entry can match inside another`, (_code, pack) => {
+      const entries = pack[list] as string[];
+      const offenders = entries.filter((w) =>
+        entries.some((other) => other !== w && canMatchInside(other, w)),
+      );
+      expect(offenders).toEqual([]);
+    });
+  }
 
   it.each(packs)("%s: only lists eligibility-restricted trusted suffixes", (_code, pack) => {
     // A trusted suffix suppresses brand scoring entirely, so an open

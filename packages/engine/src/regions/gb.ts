@@ -30,8 +30,7 @@ const URGENCY_TOLL = [
   "penalty charge notice", "pcn issued",
   // DVLA vehicle-tax variant — the UK's closest analogue to AU "rego
   // restrictions": the threat is to the vehicle's road-legal status.
-  "vehicle tax refund", "vehicle tax is due", "car tax refund",
-  "your vehicle is untaxed", "untaxed vehicle",
+  "vehicle tax is due", "your vehicle is untaxed", "untaxed vehicle",
 ];
 
 // Royal Mail / Evri / DPD parcel-redelivery lures. "Redelivery fee" and
@@ -50,16 +49,14 @@ const URGENCY_PARCEL = [
 const URGENCY_UTILITY = [
   "broadband will be disconnected", "internet will be disconnected",
   "broadband will be cut off", "service will be disconnected",
-  "your line will be disconnected", "disconnected within 24 hours",
-  "energy account suspended", "meter reading required urgently",
-];
+  "your line will be disconnected", ];
 
 // Pension phishing — the UK analogue of superannuation scams. Pension freedoms
 // (access from 55/57) created a large cold-calling fraud market; pension
 // cold-calling has been illegal in the UK since 2019, so an unsolicited
 // approach is itself the tell.
 const URGENCY_PENSION = [
-  "pension review", "free pension review", "pension health check",
+  "pension review", "pension health check",
   "release your pension", "unlock your pension", "pension transfer",
   "access your pension early", "pension liberation",
   "state pension underpayment", "your pension is at risk",
@@ -84,7 +81,7 @@ const URGENCY_TAX = [
   "hmrc refund", "refund is waiting", "claim your refund",
   "cost of living payment", "cost of living support",
   "winter fuel payment", "energy bill support", "energy rebate",
-  "council tax refund", "council tax rebate", "council tax reduction",
+  "council tax reduction",
   "universal credit payment", "budgeting advance",
   // Generic benefit-entitlement framing (D1 / #178 / Merseyside Police and
   // Isle of Wight Trading Standards advisories, Aug 2026). The winter-fuel

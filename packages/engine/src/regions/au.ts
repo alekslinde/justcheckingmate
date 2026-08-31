@@ -74,15 +74,13 @@ export const PARCEL_ADDRESS_PHRASES = [
 // NBN Co disconnection-threat smishing (D7 / #67).
 const URGENCY_UTILITY = [
   "internet will be disconnected", "broadband will be cut off",
-  "nbn technician", "service disconnected within", "disconnected within 24 hours",
-  "internet disconnected", "broadband disconnected",
+  "nbn technician", "service disconnected within", "internet disconnected", "broadband disconnected",
 ];
 
 // Superannuation phishing urgency (D3/D4/D11 / #64).
 const URGENCY_PENSION = [
   "secure your super", "your super balance", "preservation age",
-  "super fund deadline", "super account suspended",
-  // "Rule change" credential lures (D5 / 2026-08-09 roadmap / ATO + ASIC
+  "super fund deadline", // "Rule change" credential lures (D5 / 2026-08-09 roadmap / ATO + ASIC
   // MoneySmart Aug 2026). The July 2026 preservation-age reforms gave scammers a
   // real policy change to point at: "a new super rule change affects your
   // balance — verify your details to avoid losing access."

@@ -51,7 +51,7 @@ const URGENCY_UTILITY = [
   "internet will be disconnected", "service will be disconnected",
   "hydro will be disconnected", "power will be disconnected",
   "your hydro account", "disconnection notice",
-  "disconnected within 24 hours", "past due utility",
+  "past due utility",
 ];
 
 // Retirement-account phishing — the Canadian analogue of AU superannuation.
@@ -79,8 +79,7 @@ const URGENCY_TAX = [
   "cra refund", "refund is waiting", "claim your refund",
   "gst credit", "gst/hst credit", "hst rebate",
   "canada child benefit", "ccb payment",
-  "climate action incentive", "carbon rebate", "carbon tax rebate",
-  "cost of living payment", "grocery rebate",
+  "climate action incentive", "carbon rebate", "cost of living payment", "grocery rebate",
   "ei payment", "employment insurance payment",
 ];
 
