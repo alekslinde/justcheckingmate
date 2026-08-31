@@ -53,37 +53,22 @@ const SCORED_LISTS = [
  * entry changes no verdict. They are kept for readability — "an garda
  * siochana" documents the campaign better than "garda" alone.
  *
- * Two are worth a closer look if anyone revisits this list, because the
- * shadowing entry is broad enough to fire on ordinary English:
- *   · "unclaimed" <- "claim"  — "claim your unclaimed book" scores as reward
- *     language on "claim" alone
- *   · "risk-free investment" <- "free"
- * Both predate this guard and are left as-is; changing them is a detection
- * decision, not a test fix. See #196.
+ * Both of the pairs this note once flagged for a closer look are gone:
+ * "unclaimed" <- "claim" stopped being a pair when #233 made single tokens
+ * match on word boundaries, and "risk-free investment" <- "free" was deleted
+ * in #234 along with the other 21 entries that only duplicated a shorter one.
+ * See #196 for the guard's origin.
  */
 const KNOWN_SHADOWING = new Set([
   // base — reward
-  "reward points <- reward",
-  "risk-free investment <- free",
   // base — urgency
-  "disconnected within 24 hours <- within 24 hours",
-  "respond immediately <- immediately",
   // AU
-  "super account suspended <- account suspended",
   // CA
   "canadian anti-fraud centre <- anti-fraud centre",
   "royal canadian mounted police <- police",
-  "carbon tax rebate <- tax rebate",
   // GB
   "metropolitan police <- police",
   "nhs england <- nhs",
-  "car tax refund <- tax refund",
-  "council tax rebate <- tax rebate",
-  "council tax refund <- tax refund",
-  "vehicle tax refund <- tax refund",
-  "energy account suspended <- account suspended",
-  "free pension review <- pension review",
-  "meter reading required urgently <- urgent",
   // IE
   "an garda siochana <- garda",
   "an garda siochana <- garda siochana",
@@ -91,28 +76,19 @@ const KNOWN_SHADOWING = new Set([
   "central bank of ireland <- central bank",
   "department of social protection <- social protection",
   "revenue commissioners <- revenue",
-  "emergency tax refund <- tax refund",
-  "motor tax refund <- tax refund",
   // NZ
   "new zealand police <- police",
   "nz police <- police",
-  "end of year tax refund <- tax refund",
-  "final toll notice <- toll notice",
   // US
   "centers for medicare <- medicare",
   "social security administration <- social security",
   "united states postal service <- postal service",
-  "unclaimed tax refund <- tax refund",
-  "final notice of unpaid toll <- unpaid toll",
-  "unpaid tolls on your account <- unpaid toll",
   // US. "final notice" is broad, but it scores +10 and leaves an ordinary
   // message ("Final notice: our newsletter is moving") at 10 / safe, which is
   // the intended weak-signal behaviour — it needs corroboration to matter.
   // The bare "your account" pair that used to sit here is gone: that entry was
   // removed, since a noun phrase is not pressure language. See the note on
   // URGENCY_GENERIC in lib/regions/base.ts.
-  "final notice of intent to levy <- final notice",
-  "final notice of unpaid toll <- final notice",
 ]);
 
 // Two pairs left this allowlist with #233: "unclaimed <- claim" and

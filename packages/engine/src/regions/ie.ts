@@ -26,7 +26,7 @@ const URGENCY_TOLL = [
   "unpaid passage", "penalty notice issued",
   // Motor tax and NCT — the Irish analogue of AU "rego": the threat is to the
   // vehicle's road-legal status, and both are genuinely enforceable.
-  "motor tax is due", "motor tax refund", "your motor tax",
+  "motor tax is due", "your motor tax",
   "nct expired", "nct is due", "vehicle is untaxed",
 ];
 
@@ -48,8 +48,6 @@ const URGENCY_UTILITY = [
   "broadband will be disconnected", "internet will be disconnected",
   "service will be disconnected", "electricity will be disconnected",
   "your electricity account", "disconnection notice",
-  "disconnected within 24 hours", "meter reading required urgently",
-  "energy account suspended",
 ];
 
 // Pension phishing — the Irish analogue of AU superannuation and UK pension
@@ -57,7 +55,7 @@ const URGENCY_UTILITY = [
 // the Central Bank warns that unsolicited investment approaches are themselves
 // the tell.
 const URGENCY_PENSION = [
-  "pension review", "free pension review", "pension health check",
+  "pension review", "pension health check",
   "release your pension", "unlock your pension", "pension transfer",
   "access your pension early", "prsa transfer",
   "state pension underpayment", "your pension is at risk",
@@ -77,8 +75,8 @@ const URGENCY_RECALL = [
 const URGENCY_TAX = [
   "tax refund", "tax rebate", "you are eligible for a refund",
   "revenue refund", "refund is waiting", "claim your refund",
-  "tax credit refund", "usc refund", "emergency tax refund",
-  "cost of living payment", "fuel allowance", "electricity credit",
+  "tax credit refund", "usc refund", "cost of living payment",
+  "fuel allowance", "electricity credit",
   "energy credit", "social welfare payment", "child benefit payment",
   "working family payment",
 ];

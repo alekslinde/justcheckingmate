@@ -36,7 +36,9 @@ const URGENCY_GENERIC = [
   "account has been locked", "account has been suspended",
   "account will be closed", "account will be suspended",
   "click here", "click link", "tap here", "don't ignore", "action required",
-  "respond immediately", "within 24 hours", "within 48 hours",
+  // "respond immediately" is deliberately absent: "immediately" above already
+  // matches it, so listing both scored one phrase twice (#234).
+  "within 24 hours", "within 48 hours",
 ];
 
 // AI voice-clone scams. The first block is the original "Hi Mum" follow-up
@@ -55,12 +57,13 @@ const REWARD_WORDS = [
   "winner", "won", "congratulations", "prize", "reward", "free",
   "gift card", "voucher", "lucky", "selected", "chosen", "claim",
   "unclaimed", "$1000", "$500", "cash", "jackpot",
-  // Loyalty-points expiry phishing (D6 / #57). "reward points"/"loyalty
-  // points" are deliberately the longer two-word phrases, not bare "points",
-  // to keep legitimate transactional mail from tripping on a single word —
-  // and the scorer only reaches likely_scam when these compound with a URL
-  // or urgency signal.
-  "points will expire", "points expiring", "reward points",
+  // Loyalty-points expiry phishing (D6 / #57). "loyalty points" is
+  // deliberately the longer two-word phrase, not bare "points", to keep
+  // legitimate transactional mail from tripping on a single word — and the
+  // scorer only reaches likely_scam when these compound with a URL or urgency
+  // signal. "reward points" is not listed: "reward" above already matches it,
+  // so the pair scored one phrase twice (#234).
+  "points will expire", "points expiring",
   "loyalty points", "points forfeited",
   // Celebrity-deepfake investment bait (D6 / #85 / WA Gov 2026). Promising
   // "guaranteed returns" or "risk-free" investment is prohibited conduct for
@@ -68,7 +71,9 @@ const REWARD_WORDS = [
   // are red flags regardless of region. Regulator-endorsement claims
   // ("verified by <regulator>") live in the region packs, since the named
   // body differs.
-  "guaranteed returns", "guaranteed profit", "risk-free investment",
+  // "risk-free investment" is not listed: "free" above already matches inside
+  // it, so the pair scored one phrase twice (#234).
+  "guaranteed returns", "guaranteed profit",
   "double your money", "exclusive investment opportunity",
   // Second-victimisation recovery-fraud bait (D2 / #179 / CAFC advisory Jul
   // 2026). Scammers target people who have already lost money to a scam,
