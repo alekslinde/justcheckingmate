@@ -71,9 +71,64 @@ describe("#227 — code-harvest false-positive controls", () => {
   });
 });
 
+describe("#227 — the code ask survives trailing reassurance", () => {
+  // The negation guard was scoped to the whole message, so any negated-verb
+  // sentence anywhere disarmed the +45 signal. Appending one line of
+  // boilerplate — copied from the real notices these messages imitate — took
+  // the contact-compromise lure to safe (0) with no flags at all.
+  const withSuffix: [string, string][] = [
+    ["never share it", "Hi it's me, I'm locked out. Send me the verification code that just arrived. Never share it with anyone else."],
+    ["do not share this message", "Forward the verification code to restore access. Do not share this message with anyone."],
+    ["staff will never ask", "Reply with the 6-digit code. Our staff will never ask for your PIN."],
+    ["ignore if not requested", "Send us the login code to restore your account. If you did not request this, ignore this message."],
+  ];
+
+  it.each(withSuffix)("still flags when the message ends with '%s'", (_label, text) => {
+    const r = checkSms(text, undefined, "AU");
+    expect(codeFlag(r)).toBeTruthy();
+  });
+
+  it("still suppresses when the warning is the whole message", () => {
+    // The guard has to keep working clause-by-clause, not just stop existing.
+    for (const text of [
+      "Never share your verification code with anyone, including our staff.",
+      "We will never ask you to share your one-time code.",
+    ]) {
+      expect(codeFlag(checkSms(text, undefined, "AU")), text).toBeFalsy();
+    }
+  });
+});
+
+describe("#227 — 'code' nouns that are not account codes", () => {
+  // "security code" and "access code" are the ordinary words for a door, gate
+  // or alarm code. Matched as freely as "verification code" they took a
+  // completely benign message to likely_scam, the engine's top severity.
+  it("leaves a gate or door code alone", () => {
+    for (const text of [
+      "Can you forward me the security code for the gate?",
+      "Send me the access code for the storage unit please.",
+      "The security code for the front door is on the fridge.",
+    ]) {
+      expect(codeFlag(checkSms(text, undefined, "AU")), text).toBeFalsy();
+    }
+  });
+
+  it("still flags those nouns where an account is the subject", () => {
+    // The weaker noun is reachable, but only with account context — which is
+    // what separates the takeover script from a gate code.
+    const r = checkSms("Your account is locked. Send us the security code to restore access.", undefined, "AU");
+    expect(codeFlag(r)).toBeTruthy();
+  });
+});
+
 describe("#227 — messaging-app status lures", () => {
   it("flags an account-flagged claim naming a messaging app", () => {
     const r = checkSms("Your Signal account has been flagged for unusual activity.", undefined, "AU");
+    expect(statusFlag(r)).toBeTruthy();
+  });
+
+  it("flags the lower-case spelling too", () => {
+    const r = checkSms("Your whatsapp account has been suspended.", undefined, "AU");
     expect(statusFlag(r)).toBeTruthy();
   });
 
@@ -83,6 +138,19 @@ describe("#227 — messaging-app status lures", () => {
       "I flagged that message in Signal so we can find it later.",
       "Your WhatsApp backup completed successfully.",
       "Telegram is down for everyone apparently.",
+    ]) {
+      expect(statusFlag(checkSms(text, undefined, "AU")), text).toBeFalsy();
+    }
+  });
+
+  it("does not read the common noun 'signal' as the app", () => {
+    // Reception and traffic talk is very common in SMS. Matched bare, these
+    // all scored 30 as account lures.
+    for (const text of [
+      "Poor signal in the tunnel so my phone data was restricted",
+      "The traffic signal at the intersection is under review by council",
+      "The wifi signal is weak and my account keeps getting locked out",
+      "No signal here, my phone is locked to the wrong network",
     ]) {
       expect(statusFlag(checkSms(text, undefined, "AU")), text).toBeFalsy();
     }
@@ -120,6 +188,11 @@ describe("#226 — task-scam payment gate", () => {
       "Please complete the compliance training task to receive your certificate.",
       "Top up your Opal card to continue travelling.",
       "Finish the task and release the branch for review.",
+      // The "unfinished tasks" branch carries no payment half of its own, so
+      // it needs the money context the other branches state outright. Without
+      // that it told a project-tracker reminder their money was gone.
+      "Reminder from Asana: you have 3 unfinished tasks.",
+      "You have unfinished tasks in the onboarding checklist.",
     ]) {
       expect(gateFlag(checkSms(text, undefined, "AU")), text).toBeFalsy();
     }
