@@ -118,13 +118,31 @@ function useHasCamera() {
   );
 }
 
-// The image pipeline's real stages, in the order the code runs them.
-const STAGES = ["qr", "ocr-local", "ocr-server"] as const;
+// The two pipelines' real stages, in the order the code runs them. Every row
+// here maps onto a branch that genuinely executes — nothing is a decorative
+// step, and nothing is padded with a timer. A row goes "done" when its work has
+// actually finished, so a fast check simply flashes through them.
+//
+// The paste path used to have no list on the grounds that it was a single
+// request. That was true of the old shape, not of this one: reading the box and
+// pulling identifiers out of it are synchronous client-side work (the same
+// engine call the result view uses), and only the scoring is the round trip.
+// Naming those three is describing the work, not inventing it.
+const PASTE_STAGES = ["reading", "extracting", "scoring"] as const;
+const IMAGE_STAGES = ["qr", "ocr-local", "ocr-server"] as const;
+
+type PasteStage = (typeof PASTE_STAGES)[number];
+type ImageStage = (typeof IMAGE_STAGES)[number];
+type Stage = PasteStage | ImageStage;
+
 const STAGE_LABEL = {
   "qr": "check.stage.qr",
   "ocr-local": "check.stage.ocrLocal",
   "ocr-server": "check.stage.ocrServer",
-} as const satisfies Record<(typeof STAGES)[number], MessageKey>;
+  "reading": "check.stage.reading",
+  "extracting": "check.stage.extracting",
+  "scoring": "check.stage.scoring",
+} as const satisfies Record<Stage, MessageKey>;
 
 // Status-dot colour per verdict for the neutral breakdown rows. VERDICT_RANK,
 // defangValue and defangFlag now live in lib/verdictSummary so the email reply
@@ -136,10 +154,133 @@ const STATUS_DOT: Record<Verdict, string> = {
   likely_scam: "bg-red-500",
 };
 
+/**
+ * Yield to the browser between two synchronous stages.
+ *
+ * React batches state updates inside a single task, so setting three stages in
+ * a row without yielding commits only the last one and the list appears to skip
+ * straight to the end. One frame is the smallest possible yield that still lets
+ * each stage paint — it is a rendering concern, not a simulated delay.
+ */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 // kind → ScamType for prefilling the report form.
 function kindToType(kind: AnalyzedIdentifier["kind"], content: string): ScamType {
   if (kind === "url" || kind === "email" || kind === "phone") return kind;
   return detectType(content);
+}
+
+/**
+ * What the check is doing, stage by stage, on the paper surface of the card
+ * itself — in place of the box it is working on.
+ *
+ * It sat below the card before, which read as a second, separate thing that had
+ * appeared; putting it where the text was makes the check one continuous
+ * surface, and makes plain that the work is being done *to* what you pasted.
+ *
+ * Every row is a branch the code genuinely takes. Rows are marked done when
+ * their work has finished, so a fast check flashes through — the panel measures
+ * the work rather than performing it.
+ */
+function CheckPipeline({
+  stages,
+  stage,
+  done,
+  t,
+}: {
+  stages: readonly Stage[];
+  /** Null once every stage has completed — the closing frame. */
+  stage: Stage | null;
+  done: boolean;
+  t: (k: MessageKey) => string;
+}) {
+  const cur = stage ? stages.indexOf(stage) : stages.length;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="check-pipe-in border-t border-[var(--paper-dim)] bg-[var(--paper)]"
+    >
+      <div className="px-4 pt-3 pb-1 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium tracking-[0.09em] uppercase text-[#5D6675]">
+        {t(done ? "check.stage.done" : "check.stage.working")}
+      </div>
+      <ul className="list-none m-0 pt-1.5 pb-2.5">
+        {stages.map((sKey) => {
+          const idx = stages.indexOf(sKey);
+          const state = done || idx < cur ? "done" : idx === cur ? "active" : "wait";
+          return (
+            <li
+              key={sKey}
+              className={`grid grid-cols-[20px_1fr_auto] gap-[11px] items-center px-4 py-[7px] text-sm transition-colors ${
+                state === "active"
+                  ? "text-[var(--ink)] font-medium"
+                  : state === "done"
+                    ? "text-[#5D6675]"
+                    : "text-[#8A93A1]"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`w-3.5 h-3.5 box-border rounded-full border-[1.5px] grid place-items-center ${
+                  state === "active"
+                    ? "border-[#00805B] border-t-transparent motion-safe:animate-spin"
+                    : state === "done"
+                      ? "border-[#00805B] bg-[var(--clear)]/[0.16]"
+                      : "border-[#D2CEC4]"
+                }`}
+              >
+                {/* The tick lands only on a finished row — it is the one mark
+                    that says the work behind that line actually happened. */}
+                {state === "done" && (
+                  <svg viewBox="0 0 12 12" fill="none" className="w-[9px] h-[9px]">
+                    <path d="m1.8 6.2 2.8 2.8L10.2 3.4" stroke="#00A676" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <span>{t(STAGE_LABEL[sKey])}</span>
+              {/* A word, not an icon: the dot already carries the state
+                  visually, and this is what a screen reader reads out. */}
+              <span
+                className={`font-[family-name:var(--font-mono-ui)] text-[10.5px] tracking-[0.06em] uppercase whitespace-nowrap ${
+                  state === "active" ? "text-[#00805B]" : state === "done" ? "text-[#8A93A1]" : "text-transparent"
+                }`}
+              >
+                {state === "active" ? t("check.stage.stepWorking") : t("check.stage.stepDone")}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * The privacy claim, restated at the moment it is being tested.
+ *
+ * Pinned below the controls rather than inside the step list, because it is a
+ * statement about the whole run and not about any one row — and because it is
+ * the last thing on the card, which is where a reassurance belongs when the
+ * thing it reassures about is still happening. The server-OCR path makes a
+ * materially different promise, so it says a different thing.
+ */
+function CheckPipelineFoot({ onDevice, done, t }: { onDevice: boolean; done: boolean; t: (k: MessageKey) => string }) {
+  return (
+    <p className="px-4 py-2.5 border-t border-[var(--paper-dim)] text-[12.5px] text-[#5D6675] bg-[#F5F3EE]">
+      {onDevice ? (
+        <>
+          <b className="text-[#00805B] font-semibold">
+            {t(done ? "check.stage.finished" : "check.stage.onDeviceLead")}
+          </b>{" "}
+          {t(done ? "check.stage.finishedNote" : "check.stage.onDeviceNote")}
+        </>
+      ) : (
+        t("check.stage.uploaded")
+      )}
+    </p>
+  );
 }
 
 interface CheckFlowProps {
@@ -178,11 +319,20 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const [checkLoading, setCheckLoading] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
-  // Which stage the image pipeline is actually in. These map 1:1 onto the
-  // branches in handleImageUpload — there is no stage here that the code does
-  // not really pass through, and the paste path deliberately has none because
-  // it is a single request.
-  const [stage, setStage] = useState<null | "qr" | "ocr-local" | "ocr-server">(null);
+  // Which stage the running pipeline is in, and which pipeline it is. Both map
+  // 1:1 onto branches in handleImageUpload / runCheck — there is no stage here
+  // that the code does not really pass through.
+  const [stage, setStage] = useState<Stage | null>(null);
+  const [pipeline, setPipeline] = useState<"paste" | "image" | null>(null);
+  // Which OCR path this run actually took. Kept separately from `stage` because
+  // the closing frame has no live stage to read it off, and the two paths make
+  // different privacy promises — deriving it from a cleared `stage` would have
+  // the confirmation claim the work stayed on the device when it had not.
+  const [ocrPath, setOcrPath] = useState<"local" | "server">("local");
+  // Held for a beat after the last stage completes so the panel can say
+  // "Checked" rather than vanishing mid-spin. Purely the closing frame of work
+  // that has genuinely finished — it never gates the result.
+  const [pipelineDone, setPipelineDone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   // Forward-address copy confirmation. Copying is the one part of forwarding the
@@ -240,10 +390,29 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     onStepChange?.(step);
   }, [step, onStepChange]);
 
+  // The closing "Checked" frame is a confirmation, not a state to sit in: it
+  // holds just long enough to be read, then the card comes back with the text
+  // the read produced. Cleared early if another run starts in the meantime.
+  useEffect(() => {
+    if (!pipelineDone) return;
+    const timer = setTimeout(() => {
+      setPipelineDone(false);
+      setPipeline(null);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [pipelineDone]);
+
   // Image → QR decode (client-side) first, OCR fallback via /api/ocr.
   async function handleImageUpload(file: File) {
     setUploadError(null);
     setUploadLoading(true);
+    setPipelineDone(false);
+    setPipeline("image");
+    // Whether this run got as far as text. Tracked locally rather than read
+    // back off state in the `finally`, which closes over the render that
+    // started the run and cannot see anything set since.
+    let read = false;
+    setOcrPath("local");
     try {
       let qrData: string | null = null;
       setStage("qr");
@@ -281,6 +450,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       }
 
       if (cleaned === null) {
+        setOcrPath("server");
         setStage("ocr-server");
         const formData = new FormData();
         formData.append("image", file);
@@ -300,8 +470,14 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         cleaned = (data.text ?? "").trim();
       }
 
-      if (cleaned) setContent(cleaned);
-      else setUploadError(t("check.ocr.noText"));
+      if (cleaned) {
+        setContent(cleaned);
+        // The image path returns to the card rather than to a verdict, so the
+        // panel's last frame is the only confirmation that the read finished
+        // and that it finished where we said it would.
+        read = true;
+        setPipelineDone(true);
+      } else setUploadError(t("check.ocr.noText"));
     } catch (err) {
       console.error("[Upload] failed:", err);
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
@@ -316,6 +492,11 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     } finally {
       setUploadLoading(false);
       setStage(null);
+      // `pipeline` is deliberately left set when the run produced text: it is
+      // what keeps the closing "Checked" frame addressed to the right list, and
+      // the effect on `pipelineDone` clears both a beat later. Anything that
+      // ends without a read (an error, no text found) takes the panel with it.
+      if (!read) setPipeline(null);
       if (imageRef.current) imageRef.current.value = "";
       if (cameraRef.current) cameraRef.current.value = "";
     }
@@ -356,7 +537,26 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     if (!content.trim()) return;
     setCheckLoading(true);
     setCheckError(null);
+    setPipelineDone(false);
+    setPipeline("paste");
     try {
+      // Stage 1 — reading the box. Trimming and measuring what was pasted is
+      // the work; it is instant, so this row exists to name the starting point
+      // rather than to occupy time.
+      setStage("reading");
+      const text = content.trim();
+
+      // Stage 2 — pulling identifiers out. Real, synchronous, on-device: the
+      // same engine call the rest of the flow uses. Awaiting a frame here is
+      // not padding — without yielding, React batches all three stage updates
+      // into one commit and the list would jump straight to the last row.
+      setStage("extracting");
+      await nextFrame();
+      extractIdentifiers(text);
+
+      // Stage 3 — scoring. This one spans the actual round trip, which is the
+      // only part of the check that takes real time.
+      setStage("scoring");
       const res = await fetch("/api/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -380,12 +580,16 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // Report what was checked, not what the box holds: a region re-check
       // re-runs against the same content, and the strip should keep naming it.
       onChecked?.(content);
+      // No "Checked" hold on this path: the verdict *is* the completion, and
+      // pausing on a tick before showing it would be padding the very wait the
+      // panel exists to explain.
       if (!overrideRegion) goForward("result");
     } catch (err) {
       setCheckError(t("check.serverError"));
       reportFailure("check", err);
     } finally {
       setCheckLoading(false);
+      setStage(null);
     }
   }
 
@@ -416,6 +620,18 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   }
 
   const busy = uploadLoading || checkLoading;
+  // The panel is on screen while a pipeline is running, and for the closing
+  // frame after an image read finishes. `pipeline` alone is the switch — both
+  // paths set it, and both clear it.
+  const pipeStages: readonly Stage[] | null =
+    pipeline === "paste"
+      ? PASTE_STAGES
+      : pipeline === "image"
+        // The two OCR stages are alternatives, not a sequence: only the one
+        // actually taken is listed, so the panel never shows a row that this
+        // particular run will not reach.
+        ? IMAGE_STAGES.filter((sk) => (sk === "ocr-local" ? ocrPath === "local" : sk === "ocr-server" ? ocrPath === "server" : true))
+        : null;
   const hasCamera = useHasCamera();
 
   // ── Report step ─────────────────────────────────────────────────────────────
@@ -723,8 +939,15 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
           </span>
         </div>
 
+        {/* The pasted text steps aside for the work being done on it, rather
+            than the two stacking — the panel is about that text, so occupying
+            its place is what makes them read as one thing rather than two.
+            Hidden, not unmounted: unmounting a focused textarea drops focus to
+            the body, and the box must come back with its content and scroll
+            position intact. */}
         <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
         <textarea
+          hidden={!!pipeStages}
           id="check-content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -732,6 +955,15 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
           rows={4}
           className="w-full min-h-[118px] px-4 py-4 bg-transparent text-[var(--ink)] placeholder-[#8A93A1] border-0 resize-y text-base leading-relaxed focus:outline-none block"
         />
+
+        {pipeStages && (
+          <CheckPipeline
+            stages={pipeStages}
+            stage={pipelineDone ? null : stage}
+            done={pipelineDone}
+            t={t}
+          />
+        )}
 
         {/* Capture options and the submit share one bar: they are all ways to
             start the same check, and the chips are secondary to pasting. */}
@@ -769,22 +1001,40 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             {t("check.uploadEml")}
           </button>
 
+          {/* The button carries the same three states the panel does, so the
+              primary control never contradicts the list beside it: waiting,
+              working, and — on the image path, which comes back here — done.
+              A fixed min-width stops the footer reflowing as the label changes. */}
           <button
             onClick={() => runCheck()}
-            disabled={checkLoading || !content.trim()}
+            disabled={busy || pipelineDone || !content.trim()}
             aria-busy={checkLoading}
-            className={`ml-auto max-sm:w-full max-sm:ml-0 inline-flex items-center justify-center gap-2.5 rounded-[9px] px-5 py-2.5 font-semibold text-[15px] transition-colors ${
-              checkLoading
-                ? "bg-[#00825C] text-[#EAF7F2] cursor-progress"
-                : "bg-[var(--ink)] text-white hover:bg-[#232F42] disabled:opacity-60 disabled:cursor-not-allowed"
+            className={`ml-auto max-sm:w-full max-sm:ml-0 min-w-[172px] inline-flex items-center justify-center gap-2.5 rounded-[9px] px-5 py-2.5 font-semibold text-[15px] transition-colors ${
+              pipelineDone
+                ? "bg-[#00805B] text-white cursor-default disabled:opacity-100"
+                : checkLoading
+                  ? "bg-[#00825C] text-[#EAF7F2] cursor-progress disabled:opacity-100"
+                  : "bg-[var(--ink)] text-white hover:bg-[#232F42] disabled:opacity-60 disabled:cursor-not-allowed"
             }`}
           >
-            {checkLoading && (
-              <span aria-hidden="true" className="w-4 h-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
-            )}
-            {checkLoading ? t("check.analysing") : t("check.submit")}
+            {pipelineDone ? (
+              <svg viewBox="0 0 12 12" fill="none" aria-hidden="true" className="w-[13px] h-[13px]">
+                <path d="m1.8 6.2 2.8 2.8L10.2 3.4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : checkLoading ? (
+              <span aria-hidden="true" className="w-4 h-4 rounded-full border-2 border-current/30 border-t-current motion-safe:animate-spin" />
+            ) : null}
+            <span className="truncate">
+              {pipelineDone ? t("check.checkedButton") : checkLoading ? t("check.analysing") : t("check.submit")}
+            </span>
           </button>
         </div>
+
+        {/* Below the controls, so the last word on the card while it works is
+            where the work is happening. */}
+        {pipeStages && (
+          <CheckPipelineFoot onDevice={pipeline !== "image" || ocrPath === "local"} done={pipelineDone} t={t} />
+        )}
 
         {dragOver && (
           <div
@@ -797,68 +1047,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       </div>
 
       {/* Paste guidance for users who aren't sure how to copy on mobile */}
-      {!content && (
+      {!content && !pipeStages && (
         <p className="text-xs text-[var(--faint)] px-0.5">
           {t("check.pasteHint")}{" "}
           <span className="hidden sm:inline">{t("check.dropHint")}</span>
         </p>
       )}
 
-      {/* What the image pipeline is actually doing, stage by stage. Each row
-          maps onto a real branch in handleImageUpload — nothing here is a
-          decorative step. OCR can take up to a minute on a cold start, so
-          naming the current stage stops a long wait reading as a hang.
-
-          The paste path deliberately has no stage list: it is a single request
-          to /api/check, and inventing steps for it would misrepresent the work. */}
-      {uploadLoading && stage && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-xl border border-[var(--rule)] bg-[var(--ink-2)] overflow-hidden"
-        >
-          <ul className="py-1.5">
-            {STAGES.map((sKey) => {
-              const idx = STAGES.indexOf(sKey);
-              const cur = STAGES.indexOf(stage);
-              // The two OCR stages are alternatives, not a sequence: only the
-              // one actually taken is shown.
-              if (sKey === "ocr-local" && stage === "ocr-server") return null;
-              if (sKey === "ocr-server" && stage !== "ocr-server") return null;
-              const state = idx < cur ? "done" : idx === cur ? "active" : "wait";
-              return (
-                <li
-                  key={sKey}
-                  className={`grid grid-cols-[20px_1fr] gap-3 items-center px-4 py-2 text-sm ${
-                    state === "active"
-                      ? "text-[var(--foreground)] font-medium"
-                      : state === "done"
-                        ? "text-[var(--text-dim)]"
-                        : "text-[var(--faint)]"
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`w-3.5 h-3.5 rounded-full border-[1.5px] grid place-items-center ${
-                      state === "active"
-                        ? "border-[var(--clear)] border-t-transparent animate-spin"
-                        : state === "done"
-                          ? "border-[var(--clear)] bg-[var(--clear)]/20"
-                          : "border-[var(--ink-3)]"
-                    }`}
-                  />
-                  <span>{t(STAGE_LABEL[sKey])}</span>
-                </li>
-              );
-            })}
-          </ul>
-          {/* Where the work is happening. The local and server paths make
-              materially different privacy promises, so the line changes. */}
-          <p className="px-4 py-2.5 border-t border-[var(--rule)] text-xs text-[var(--faint)] bg-black/15">
-            {t(stage === "ocr-server" ? "check.stage.uploaded" : "check.stage.onDevice")}
-          </p>
-        </div>
-      )}
 
       {uploadError && <p className="text-sm text-red-400" role="alert">{uploadError}</p>}
 

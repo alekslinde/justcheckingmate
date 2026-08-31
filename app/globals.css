@@ -117,3 +117,20 @@ body:has(dialog[open]) {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* The check panel arrives in place of the textarea it replaces. A fade rather
+   than a slide: the two occupy the same space, so movement would read as the
+   card growing rather than as one surface becoming another. Honoured only where
+   motion is welcome — the panel's meaning is in its words, not its entrance. */
+@keyframes check-pipe-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.check-pipe-in {
+  animation: check-pipe-in 0.28s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-pipe-in { animation: none; }
+}
