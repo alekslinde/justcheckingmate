@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveRegionPack, supportedRegions } from "@justcheckingmate/engine/regions";
-import { checkSms } from "@justcheckingmate/engine/scamDetector";
+import { checkSms, mentions } from "@justcheckingmate/engine/scamDetector";
 
 // Guards the substring-collision failure mode for multi-word entries (#196).
 //
@@ -27,17 +27,10 @@ import { checkSms } from "@justcheckingmate/engine/scamDetector";
 // stood when the guard was added; a new pair fails until it is either fixed or
 // added here with a reason.
 
-// Mirrors mentions() in scamDetector: single tokens match on word boundaries,
-// multi-word phrases match as substrings. Kept in step with the engine by hand —
-// a divergence here shows up as a shadowing pair the engine does not actually
-// have, or worse, hides one it does.
-function matches(needle: string, hay: string): boolean {
-  if (/\s/.test(needle)) return hay.includes(needle);
-  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const left = /^\w/.test(needle) ? "\\b" : "";
-  const right = /\w$/.test(needle) ? "(?:s|es|ed|d|ing|ly)?\\b" : "";
-  return new RegExp(`${left}${escaped}${right}`, "i").test(hay);
-}
+// The engine's own matcher, not a mirror of it. This guard models which entries
+// can shadow which, so a hand-copied rule that drifts from mentions() reports
+// pairs the engine does not have — or hides ones it does.
+const matches = (needle: string, hay: string) => mentions(hay, needle);
 
 /** The scoring lists matched by substring against message text. */
 const SCORED_LISTS = [

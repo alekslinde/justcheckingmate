@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, checkCustom } from "@justcheckingmate/engine/scamDetector";
+import { checkSms, checkCustom, mentions } from "@justcheckingmate/engine/scamDetector";
 
 // Regression cover for #233 — keyword entries firing inside ordinary words.
 //
@@ -62,6 +62,42 @@ describe("#233 — entries do not fire inside longer words", () => {
   });
 });
 
+// The first cut of this file tested only PREFIX collisions, which is exactly
+// why the suffix hole below shipped invisibly: an unconditional inflection
+// allowance let "pin" reach "pins", "free" reach "freed" and "cash" reach
+// "cashed", and all 1728 tests still passed. Both directions are covered now.
+describe("#233 — short entries do not pick up inflections", () => {
+  const benign: [string, string][] = [
+    ["pin inside pins", "The pins fell over on the bowling lane."],
+    ["free inside freed", "The prisoner was freed after the appeal."],
+    ["cash inside cashed", "The cheque was cashed yesterday at the branch."],
+  ];
+
+  it.each(benign)("checkSms stays clean: %s", (_label, text) => {
+    const r = checkSms(text, undefined, "AU");
+    expect(keywordFlag(r), r.flags.join(" | ")).toBeFalsy();
+    expect(r.verdict).toBe("safe");
+  });
+
+  it.each(benign)("checkCustom stays clean: %s", (_label, text) => {
+    const r = checkCustom(text, undefined, "AU");
+    expect(keywordFlag(r), r.flags.join(" | ")).toBeFalsy();
+  });
+
+  it("does not stack short-entry inflections into a verdict", () => {
+    // Measured at suspicious (39) on sms and 24 on custom while the inflection
+    // allowance was unconditional — three fragments of ordinary English.
+    const text = "The pins fell over and the cheque was cashed and the prisoner freed.";
+    expect(checkSms(text, undefined, "AU").verdict).toBe("safe");
+    expect(checkCustom(text, undefined, "AU").verdict).toBe("safe");
+  });
+
+  it("still matches those same short entries as whole words", () => {
+    const r = checkSms("ATO: confirm your TFN and PIN to release your refund", undefined, "AU");
+    expect(r.flags.some((f) => /Asks for sensitive info/i.test(f))).toBe(true);
+  });
+});
+
 describe("#233 — the half that needs #234", () => {
   it("halves the score on 'unclaimed baggage' but does not clear it", () => {
     // "unclaimed" is a legitimately listed reward word, so it still matches
@@ -87,11 +123,35 @@ describe("#233 — real signals still fire", () => {
     expect(r.flags.some((f) => f.startsWith("Prize/reward language"))).toBe(true);
   });
 
-  it("follows an entry into its own inflections", () => {
+  it("follows a long entry into its own inflections", () => {
     // "urgent" is the listed entry; "urgently" is the same signal. An
     // exact-match rule dropped the bareHostname evasion case to safe.
     const r = checkSms("claim now at freemoney.tk urgently", undefined, "AU");
     expect(r.verdict).not.toBe("safe");
+  });
+
+  it("draws the inflection line at the #196 threshold", () => {
+    // Pins the rule directly rather than through a verdict, so a change to
+    // INFLECTION_MIN_LEN fails here rather than surfacing as a false positive
+    // somewhere unrelated. Above four characters an entry is a real word that
+    // inflects; at four and under it is a token whose "inflections" are other
+    // people's words.
+    expect(mentions("act urgently", "urgent")).toBe(true);
+    expect(mentions("claiming now", "claim")).toBe(true);
+    expect(mentions("vouchers issued", "voucher")).toBe(true);
+
+    expect(mentions("the pins fell over", "pin")).toBe(false);
+    expect(mentions("the prisoner was freed", "free")).toBe(false);
+    expect(mentions("the cheque was cashed", "cash")).toBe(false);
+  });
+
+  it("blocks prefix collisions at every length", () => {
+    expect(mentions("unclaimed baggage", "claim")).toBe(false);
+    expect(mentions("the prizewinning entry", "prize")).toBe(false);
+    expect(mentions("voucherless option", "voucher")).toBe(false);
+    expect(mentions("reclaiming the deposit", "claim")).toBe(false);
+    expect(mentions("spins class", "pin")).toBe(false);
+    expect(mentions("atomic clock", "ato")).toBe(false);
   });
 
   it("still matches across punctuation and domains", () => {

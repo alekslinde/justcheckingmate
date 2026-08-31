@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, checkUrl } from "@justcheckingmate/engine/scamDetector";
+import { checkSms, checkUrl, mentions } from "@justcheckingmate/engine/scamDetector";
 import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@justcheckingmate/engine/regions";
 import { BASE_SIGNALS, CHINESE_AUTHORITY_MENTIONS } from "@justcheckingmate/engine/regions/base";
 import { AU } from "@justcheckingmate/engine/regions/au";
@@ -90,13 +90,9 @@ describe("pack invariants (every region)", () => {
   // "mygovid" and both can be listed. A multi-word phrase still matches as a
   // substring, so "bank details" inside "updated bank details" would still
   // double-score and is still forbidden.
-  const canMatchInside = (needle: string, hay: string) => {
-    if (/\s/.test(needle)) return hay.includes(needle);
-    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const left = /^\w/.test(needle) ? "\\b" : "";
-    const right = /\w$/.test(needle) ? "(?:s|es|ed|d|ing|ly)?\\b" : "";
-    return new RegExp(`${left}${escaped}${right}`, "i").test(hay);
-  };
+  // The engine's own matcher — a hand-copied rule here would let the invariant
+  // drift from what actually double-scores.
+  const canMatchInside = (needle: string, hay: string) => mentions(hay, needle);
 
   it.each(packs)("%s: no requestWord can match inside another requestWord", (_code, pack) => {
     const offenders = pack.requestWords.filter((w) =>

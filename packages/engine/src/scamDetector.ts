@@ -151,14 +151,38 @@ class Signals {
  * protection without anyone remembering to opt in.
  */
 /**
- * Inflectional endings tolerated after a single-token entry. Deliberately a
- * closed set of grammatical suffixes rather than "any letters": the point is to
- * follow a word into its own inflections without letting it wander into a
+ * Inflectional endings tolerated after a long single-token entry. Deliberately
+ * a closed set of grammatical suffixes rather than "any letters": the point is
+ * to follow a word into its own inflections without letting it wander into a
  * different word ("voucher" must not reach "voucherless").
  */
 const INFLECTION = "(?:s|es|ed|d|ing|ly)?";
 
-function mentions(text: string, entry: string): boolean {
+/**
+ * Entries this long or shorter get no inflection tolerance.
+ *
+ * The suffix allowance was originally unconditional, which quietly undid the
+ * #196 protection from the other end: "pin" reached "pins", "free" reached
+ * "freed", "cash" reached "cashed". Those stack — "The pins fell over and the
+ * cheque was cashed and the prisoner freed" scored 39 (suspicious) on three
+ * fragments of ordinary English, worse than the behaviour #233 set out to fix.
+ *
+ * The threshold is the one #196 established, kept deliberately: at four
+ * characters and under, every entry across the packs is a standalone word or
+ * identifier (tfn, ppsn, nino, $500, 401k, ato, pin, free, cash) whose
+ * inflections are either meaningless or someone else's word. Above it, entries
+ * are real words that inflect — "urgent"/"urgently", "claim"/"claiming".
+ */
+const INFLECTION_MIN_LEN = 4;
+
+/**
+ * How a pack entry is matched against text.
+ *
+ * Exported so the pack guards in __tests__ can model matching with the engine's
+ * own rule instead of a hand-copied mirror — three copies of this logic drifted
+ * apart once already (#233 review).
+ */
+export function mentions(text: string, entry: string): boolean {
   const needle = entry.toLowerCase();
   // Multi-word phrases keep substring matching — their specificity is their
   // own protection, and \b would break matching across punctuation.
@@ -177,7 +201,9 @@ function mentions(text: string, entry: string): boolean {
   // in the same message. An exact-match rule measured that as a live
   // regression, dropping the "claim now at freemoney.tk urgently" evasion case
   // in bareHostname.test.ts from suspicious to safe.
-  const right = /\w$/.test(needle) ? `${INFLECTION}\\b` : "";
+  // Short entries get a hard right anchor: their inflections are other words.
+  const suffix = needle.length > INFLECTION_MIN_LEN ? INFLECTION : "";
+  const right = /\w$/.test(needle) ? `${suffix}\\b` : "";
   return new RegExp(`${left}${escaped}${right}`, "i").test(text);
 }
 
