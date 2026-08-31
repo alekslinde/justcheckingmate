@@ -128,7 +128,7 @@ function useHasCamera() {
 // pulling identifiers out of it are synchronous client-side work (the same
 // engine call the result view uses), and only the scoring is the round trip.
 // Naming those three is describing the work, not inventing it.
-const PASTE_STAGES = ["reading", "extracting", "scoring"] as const;
+const PASTE_STAGES = ["reading", "scoring"] as const;
 const IMAGE_STAGES = ["qr", "ocr-local", "ocr-server"] as const;
 
 type PasteStage = (typeof PASTE_STAGES)[number];
@@ -140,7 +140,6 @@ const STAGE_LABEL = {
   "ocr-local": "check.stage.ocrLocal",
   "ocr-server": "check.stage.ocrServer",
   "reading": "check.stage.reading",
-  "extracting": "check.stage.extracting",
   "scoring": "check.stage.scoring",
 } as const satisfies Record<Stage, MessageKey>;
 
@@ -258,26 +257,72 @@ function CheckPipeline({
 }
 
 /**
- * The privacy claim, restated at the moment it is being tested.
+ * Where the work is happening, restated at the moment the claim is being tested.
  *
  * Pinned below the controls rather than inside the step list, because it is a
  * statement about the whole run and not about any one row — and because it is
  * the last thing on the card, which is where a reassurance belongs when the
- * thing it reassures about is still happening. The server-OCR path makes a
- * materially different promise, so it says a different thing.
+ * thing it reassures about is still happening.
+ *
+ * Deliberately driven by an explicit claim rather than an `onDevice` boolean.
+ * The first version took a boolean that the paste path always passed as true,
+ * so the footer promised "Nothing has been uploaded" during the very request
+ * that uploads the pasted text. A boolean invites that mistake, because the
+ * reassuring value is also the default one; naming the claim forces each caller
+ * to say which of them is true for the phase it is actually in.
  */
-function CheckPipelineFoot({ onDevice, done, t }: { onDevice: boolean; done: boolean; t: (k: MessageKey) => string }) {
+export type PrivacyClaim = "on-device" | "on-device-done" | "sending" | "sent" | "server-ocr";
+
+const PRIVACY_COPY = {
+  // Reading a screenshot, or reading and parsing pasted text: genuinely local.
+  "on-device":      ["check.stage.onDeviceLead", "check.stage.onDeviceNote"],
+  "on-device-done": ["check.stage.finished",     "check.stage.finishedNote"],
+  // Scoring. The content is POSTed to /api/check, so this says so while it is
+  // in flight and after it lands. The server keeps a counter, not the content.
+  "sending":        ["check.stage.sending",      "check.stage.sendingNote"],
+  "sent":           ["check.stage.scored",       "check.stage.scoredNote"],
+} as const satisfies Record<Exclude<PrivacyClaim, "server-ocr">, readonly [MessageKey, MessageKey]>;
+
+/**
+ * What is true about where the content is, for the phase the run is in.
+ *
+ * The paste path crosses the line mid-run — the local pass happens in the
+ * browser and scoring POSTs the content — so the claim is derived per stage
+ * rather than per pipeline. Exported for the tests, because getting this wrong
+ * is a false statement about a user's data rather than a rendering bug, and
+ * asserting on it through the source text could not tell the two apart.
+ */
+export function privacyClaimFor({
+  pipeline,
+  stage,
+  ocrPath,
+  done,
+}: {
+  pipeline: "paste" | "image" | null;
+  stage: Stage | null;
+  ocrPath: "local" | "server";
+  done: boolean;
+}): PrivacyClaim {
+  if (pipeline === "paste") {
+    // Scoring is the round trip, and the closing frame comes after it: once the
+    // content has been sent, no later frame may claim it wasn't.
+    if (stage === "scoring") return "sending";
+    return stage === null ? "sent" : "on-device";
+  }
+  if (ocrPath === "server") return "server-ocr";
+  return done ? "on-device-done" : "on-device";
+}
+
+function CheckPipelineFoot({ claim, t }: { claim: PrivacyClaim; t: (k: MessageKey) => string }) {
   return (
     <p className="px-4 py-2.5 border-t border-[var(--paper-dim)] text-[12.5px] text-[#5D6675] bg-[#F5F3EE]">
-      {onDevice ? (
-        <>
-          <b className="text-[#00805B] font-semibold">
-            {t(done ? "check.stage.finished" : "check.stage.onDeviceLead")}
-          </b>{" "}
-          {t(done ? "check.stage.finishedNote" : "check.stage.onDeviceNote")}
-        </>
-      ) : (
+      {claim === "server-ocr" ? (
         t("check.stage.uploaded")
+      ) : (
+        <>
+          <b className="text-[#00805B] font-semibold">{t(PRIVACY_COPY[claim][0])}</b>{" "}
+          {t(PRIVACY_COPY[claim][1])}
+        </>
       )}
     </p>
   );
@@ -430,7 +475,17 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         // Not a QR or unreadable — fall through to OCR
       }
 
-      if (qrData) { setContent(qrData); return; }
+      // A decoded QR is the most on-device outcome there is — the image never
+      // left the machine and no OCR was needed — so it gets the same closing
+      // confirmation as every other successful read. Returning early without
+      // one inverted the reassurance: the server path confirmed itself and the
+      // local path stayed silent.
+      if (qrData) {
+        setContent(qrData);
+        read = true;
+        setPipelineDone(true);
+        return;
+      }
 
       // OCR on-device first: the image never leaves the machine, and it costs
       // us nothing. /api/ocr is the fallback for browsers that can't run the
@@ -540,22 +595,26 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     setPipelineDone(false);
     setPipeline("paste");
     try {
-      // Stage 1 — reading the box. Trimming and measuring what was pasted is
-      // the work; it is instant, so this row exists to name the starting point
-      // rather than to occupy time.
+      // Stage 1 — the on-device pass. Unwraps a forwarded message to the
+      // original, parses its headers, derives the sender identity flags and
+      // finds tracking pixels. All of it runs here, none of it is sent, and its
+      // output is what the sender card and tracking section on the result are
+      // built from — so this row names work whose product the reader goes on to
+      // see. It ran after the fetch before, purely by habit.
+      //
+      // An earlier version of this panel split this into two rows ("reading",
+      // then "extracting") over a trim() and a discarded extractIdentifiers()
+      // call. Both were decoration: the identifiers a reader actually sees come
+      // back from the server. Two honest rows beat three that flatter the wait.
       setStage("reading");
-      const text = content.trim();
-
-      // Stage 2 — pulling identifiers out. Real, synchronous, on-device: the
-      // same engine call the rest of the flow uses. Awaiting a frame here is
-      // not padding — without yielding, React batches all three stage updates
-      // into one commit and the list would jump straight to the last row.
-      setStage("extracting");
+      // Without a yield React batches both stage updates into one commit and
+      // the list jumps straight to the last row. One frame, for paint — not a
+      // delay, and not tied to how long the work takes.
       await nextFrame();
-      extractIdentifiers(text);
+      const analysis = analyseEmailSource(content);
 
-      // Stage 3 — scoring. This one spans the actual round trip, which is the
-      // only part of the check that takes real time.
+      // Stage 2 — scoring, which is the round trip. The content leaves the
+      // device here and the footer says so while it does.
       setStage("scoring");
       const res = await fetch("/api/check", {
         method: "POST",
@@ -572,10 +631,9 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // Remember which pack actually ran, so the coverage notice reflects the
       // server's decision rather than being re-derived on the client.
       setRegion(data.region ?? null);
-      // Run the shared email-source analysis — unwraps a forwarded email to the
-      // original first, so tracking and sender analysis cover the scammer's
-      // message, not the forwarder's. Same path as ReportForm and /api/inbound.
-      setEmailAnalysis(analyseEmailSource(content));
+      // Computed above, in the stage that named it. Same path as ReportForm
+      // and /api/inbound.
+      setEmailAnalysis(analysis);
       setShareCopied(false);
       // Report what was checked, not what the box holds: a region re-check
       // re-runs against the same content, and the strip should keep naming it.
@@ -590,6 +648,20 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     } finally {
       setCheckLoading(false);
       setStage(null);
+      // Take the panel down with the run, on every exit.
+      //
+      // Both of these matter and neither is optional. `pipeline` is the single
+      // switch gating the panel *and* the textarea's visibility, so leaving it
+      // set on the error path hid the box behind an all-ticked panel with no
+      // way back to it but a reload — the primary input, unreachable, after
+      // precisely the failure that makes someone want to retry. And a region
+      // re-check returns here without navigating, so the same latch wedged the
+      // input step invisibly, only surfacing when the user pressed Back.
+      //
+      // The success path has already navigated to the result by this point, so
+      // clearing here costs it nothing.
+      setPipeline(null);
+      setPipelineDone(false);
     }
   }
 
@@ -621,8 +693,9 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
 
   const busy = uploadLoading || checkLoading;
   // The panel is on screen while a pipeline is running, and for the closing
-  // frame after an image read finishes. `pipeline` alone is the switch — both
-  // paths set it, and both clear it.
+  // frame after an image read finishes. `pipeline` alone is the switch, and it
+  // also gates the textarea's visibility — so every exit from every path must
+  // clear it, including the ones that fail.
   const pipeStages: readonly Stage[] | null =
     pipeline === "paste"
       ? PASTE_STAGES
@@ -1033,7 +1106,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         {/* Below the controls, so the last word on the card while it works is
             where the work is happening. */}
         {pipeStages && (
-          <CheckPipelineFoot onDevice={pipeline !== "image" || ocrPath === "local"} done={pipelineDone} t={t} />
+          <CheckPipelineFoot claim={privacyClaimFor({ pipeline, stage, ocrPath, done: pipelineDone })} t={t} />
         )}
 
         {dragOver && (
