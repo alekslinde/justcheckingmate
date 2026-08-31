@@ -260,6 +260,26 @@ const REWARD_WORDS = [
   // with the ASIC-endorsement claims above and base's investment reward words.
   "stock tips group", "investment club", "exclusive trading group",
   "closed trading group",
+  // Fake gambling platform ("scambling") bait (D1 / #225 / ACCC 14 Aug 2026,
+  // NASC fusion cell to Dec 2026 — 927% H1 2026 report surge, >$40m losses).
+  //
+  // Only the phrases with no licensed-operator equivalent are listed. Measured
+  // before adding: "exclusive bonus for new members" and "vip access - limited
+  // spots" scored safe (0) alone but sit close to legitimate promotional SMS,
+  // so they are deliberately NOT here — a real Sportsbet bonus-bet text would
+  // have picked them up. "claim your free spins" already reaches suspicious
+  // (24) on the existing "free"/"claim" reward words, so adding it would have
+  // double-scored one phrase without catching anything new.
+  //
+  // "free spins" is deliberately absent: this list is substring-matched, and
+  // base's "free" already matches it, so listing both scored one phrase twice
+  // and pushed a legitimate "10 free spins added to your account" promo from
+  // 12 to 24 (suspicious). Same failure mode as the mygovid and new bsb notes
+  // in requestWords above.
+  //
+  // What is left is the phrasing with no licensed-operator equivalent. A real
+  // operator states a wagering requirement; it never advertises waiving one.
+  "wagering requirement waived", "wagering requirements waived",
 ];
 
 // Domains of organisations in authorityMentions whose real mail does NOT come

@@ -718,6 +718,36 @@ export function checkSms(
     sig.add("message", "Task/job recruitment pattern — a common funnel into 'pig-butchering' investment scams; real employers don't recruit this way", 25);
   }
 
+  // Withdrawal-gate lure — fake gambling platforms, "scambling" (D1 / #225 /
+  // ACCC 14 Aug 2026, NASC fusion cell to Dec 2026; 927% H1 2026 report surge).
+  //
+  // The campaign's tell is not the bonus offer — licensed operators promote by
+  // SMS constantly, and "exclusive bonus"/"VIP access"/"free spins" measured
+  // safe-to-24 in isolation, hitting a legitimate Crown registration SMS at 22.
+  // Flat REWARD_WORDS entries would have scored that FP higher.
+  //
+  // The tell is the *withdrawal gate*: winnings exist, but releasing them
+  // requires an out-of-band verification step. Real operators run KYC at signup
+  // or before a payout completes; none withhold a stated balance behind an SMS
+  // instruction to verify. Requires both halves — a verify/confirm instruction
+  // AND the withdrawal-of-winnings framing — in the same message, so a bare
+  // "verify your account" (already +10 urgency) and a plain withdrawal
+  // confirmation both stay clear.
+  //
+  // The gated noun is deliberately "winnings"/"payout" and not "funds" or
+  // "balance". Legitimate one-time KYC does say "verify your identity before
+  // you can withdraw funds" — measured at 40 (suspicious) against the looser
+  // form, a false positive on ordinary regulated onboarding. Winnings are the
+  // distinguishing claim: the scam asserts a balance the victim has already
+  // won, then gates it. An exchange or bookmaker verifying identity before a
+  // first withdrawal is describing a limit, not withholding a stated prize.
+  const withdrawalGate =
+    /\b(verify|confirm|validate|activate)\b[^.!?]{0,60}\b(withdraw|withdrawal|release|unlock|claim)\b[^.!?]{0,40}\b(winnings|prize|jackpot|payout)\b/i.test(text) ||
+    /\b(withdraw|release|unlock)\b[^.!?]{0,40}\b(winnings|prize|jackpot|payout)\b[^.!?]{0,60}\b(verify|confirm|validate)\b/i.test(text);
+  if (withdrawalGate) {
+    sig.add("message", "Winnings held behind a verification step — the signature of fake gambling platform scams. A licensed operator verifies your identity when you sign up or when a payout is processed; none hold a balance you can see behind an extra 'verification' fee or ID upload. Money or documents sent at this step are not recoverable.", 40);
+  }
+
   // WhatsApp/Telegram investment-group pig-butchering funnel (D5 / #76 / ASIC
   // 26-063MR). Distinct from jobSignals: this targets the investing aspiration,
   // not the side-gig one. Require ≥2 signals, or 1 signal plus a crypto term, so

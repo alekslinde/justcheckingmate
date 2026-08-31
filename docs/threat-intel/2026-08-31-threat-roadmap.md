@@ -4,6 +4,72 @@
 
 ---
 
+## Status — as at 2026-08-31
+
+| Proposal | Issue | Shipped in | Status |
+|---|---|---|---|
+| D1 — Scambling (fake gambling platforms) | #225 | #231 | ✅ Shipped |
+| D2 — Task / e-commerce-rating job scam | #226 | — | ⬜ Outstanding — rescope, see below |
+| D3 — Signal / WhatsApp account hijacking | #227 | — | ⬜ Outstanding — rescope, see below |
+| D4 — Energy support allowance phrases | — | — | ⬜ Not filed |
+| D5 — Money mule recruitment | — | — | ⬜ Not filed |
+| D6 — Veterans benefits scam | — | — | ⬜ Not filed |
+
+### Deviations
+
+- **D1** — shipped as a **composite in `scamDetector.ts`, not as `REWARD_WORDS`
+  entries**, and only one of the six proposed phrases was added.
+
+  The proposal's own FP section had it right: licensed operators promote by SMS
+  constantly. Measured before implementing, the bait phrases were either already
+  covered or too close to legitimate marketing to add — `"claim your free spins"`
+  already reached suspicious (24) on the existing `free`/`claim` reward words, and
+  a legitimate Crown registration SMS measured 22. Flat entries would have raised
+  that false positive, not the scam.
+
+  The real gap was the **withdrawal gate** — `"verify your account to withdraw
+  your winnings"` measured **safe (10)**. That is now a composite requiring both
+  a verify instruction and withdrawal-of-winnings framing in one message
+  (+40); the canonical lure moves safe (10) → **likely_scam (50)**.
+
+  Two false positives were found and fixed during implementation, both invisible
+  from the word lists:
+  - Gating on `funds`/`balance` flagged ordinary one-time KYC ("verify your
+    identity before you can withdraw funds") at 40. The composite now gates on
+    `winnings`/`prize`/`jackpot`/`payout` — a stated prize, not a limit.
+  - `"free spins"` added to `REWARD_WORDS` double-scored against base's `"free"`,
+    pushing a legitimate "10 free spins added to your account" promo from 12 to
+    24. Dropped; this is the same failure mode as the `mygovid` and `new bsb`
+    notes in the engine.
+
+  Only `"wagering requirement waived"` was added to AU `REWARD_WORDS` — a real
+  operator states a wagering requirement and never advertises waiving one.
+
+### Corrections
+
+**Correction (2026-08-31):** D2 and D3 overstate the gap; both were audited
+against the live engine after filing.
+
+- **D2** — "not covered in `REWARD_WORDS` or `REQUEST_WORDS`" is true as written
+  but misleading. The `jobSignals` composite (`scamDetector.ts`) already catches
+  the recruitment framing: the e-commerce-assistant lure measured **suspicious
+  (25)** before any change. Only the payment-gate phrasing (`"complete tasks to
+  withdraw"`, `"you have unfinished tasks"`) is a real gap, at safe (0).
+  `"rate products to earn commission"` would double-score against the
+  composite's own `/\brate\s+products\b/` regex.
+- **D3** — half covered. The QR half of the lure measured **suspicious (20)**
+  via the existing quishing regex, so `"scan this qr code to link your device"`
+  is redundant. The genuine gap is `"forward the verification code to restore
+  access"` (safe, 0). `"verify your identity to avoid account suspension"` is
+  also rated LOW FP in the issue; it is generic account-security boilerplate,
+  unlike the four app-specific phrases, and needs its own assessment.
+
+Both issues need rescoping before implementation. This is the gap that prompted
+the live-engine verification step now in
+[`README.md`](README.md#verify-against-the-live-engine-before-filing).
+
+---
+
 ## Executive summary
 
 Six proposals this cycle — three HIGH, three MEDIUM.
