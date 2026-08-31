@@ -167,7 +167,9 @@ const IDENTITY_REREG = [
 
 // Matched case-insensitively by the scorer, so entries are lower-case only.
 const AUTHORITY_MENTIONS = [
-  "ato", "mygov", "centrelink", "medicare", "services australia",
+  // "mygovid" is listed alongside "mygov" because entries match on word
+  // boundaries (#233) — "mygov" does not reach inside "mygovid".
+  "ato", "mygov", "mygovid", "centrelink", "medicare", "services australia",
   "afp", "police",
   // ACSC/ASD impersonation (D7 / #55)
   "acsc", "asd", "cyber security centre", "australian signals directorate",
@@ -207,7 +209,7 @@ const AUTHORITY_MENTIONS = [
 // senders is a scam. Scoped to the confirmed no-link senders so the flag
 // wording stays accurate (toll operators, by contrast, do use links).
 const NO_LINK_SENDERS = [
-  "ato", "mygov", "myid", "medicare", "centrelink",
+  "ato", "mygov", "mygovid", "myid", "medicare", "centrelink",
   "services australia", "australia post", "auspost",
 ];
 
@@ -219,14 +221,16 @@ const FOREIGN_AUTHORITY_MENTIONS = [...CHINESE_AUTHORITY_MENTIONS];
 // terms (tax file number, Medicare, BSB, superannuation) with no meaning in
 // other markets, so they sit here rather than in the base request list.
 const REQUEST_WORDS = [
-  // "mygovid" is deliberately absent: this list is substring-matched and
-  // "mygov" already matches it, so listing both scored one phrase twice. That
-  // was enough to change the verdict on its own — "Confirm your myGovID"
-  // reached likely_scam (55) while the identical "Confirm your myGov" was only
-  // suspicious (40), for no detection reason. The myID/myGovID rebrand lures are
-  // covered by identityRereg and authorityMentions, which carry the specific
-  // wording.
-  "medicare", "tax file number", "tfn", "mygov", "centrelink",
+  // "mygovid" is listed explicitly, and must stay that way.
+  //
+  // It was deliberately absent while this list was substring-matched: "mygov"
+  // matched inside it, so listing both scored one phrase twice, and that alone
+  // moved the verdict — "Confirm your myGovID" reached likely_scam (55) where
+  // the identical "Confirm your myGov" was suspicious (40), for no detection
+  // reason. Since #233 entries are matched on word boundaries, so "mygov" no
+  // longer reaches inside "mygovid" and the double-score it guarded against
+  // cannot happen. Without its own entry the myGovID lure scored 0.
+  "medicare", "tax file number", "tfn", "mygov", "mygovid", "centrelink",
   "ato", "bsb",
   // Superannuation early-access phishing (D3/D4/D11 / #64). "smsf" and "early
   // super release" are AU-specific regulatory terms rarely seen outside a scam.

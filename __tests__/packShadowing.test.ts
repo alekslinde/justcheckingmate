@@ -1,16 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { resolveRegionPack, supportedRegions } from "@justcheckingmate/engine/regions";
-import { checkSms } from "@justcheckingmate/engine/scamDetector";
+import { checkSms, mentions } from "@justcheckingmate/engine/scamDetector";
 
-// Guards the substring-collision failure mode above the WORD_MATCH_MAX_LEN
-// threshold (#196).
+// Guards the substring-collision failure mode for multi-word entries (#196).
 //
-// scamDetector documents the short-token half of this problem and automates
-// protection for entries of 3 characters or fewer, so "acc" can't fire inside
-// "account". Longer entries keep plain substring matching, and the membership
-// tests all use .some()/.filter() — which short-circuit. So when one entry is a
-// substring of another, the longer one is unreachable: it can never be the
-// matching entry.
+// scamDetector's mentions() matches single tokens on word boundaries, so
+// "acc" can't fire inside "account" and — since #233 — "claim" can't fire
+// inside "unclaimed". Multi-word phrases still match as substrings, and the
+// membership tests all use .some()/.filter() — which short-circuit. So when one
+// phrase is a substring of another, the longer one is unreachable: it can never
+// be the matching entry.
 //
 // Most shadowing is harmless. "metropolitan police" is unreachable because
 // "police" matches first, but both live in authorityMentions and score the
@@ -28,14 +27,10 @@ import { checkSms } from "@justcheckingmate/engine/scamDetector";
 // stood when the guard was added; a new pair fails until it is either fixed or
 // added here with a reason.
 
-/** Mirrors mentions() in scamDetector — keep in sync if that rule changes. */
-const WORD_MATCH_MAX_LEN = 3;
-function matches(needle: string, hay: string): boolean {
-  if (needle.length <= WORD_MATCH_MAX_LEN) {
-    return new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(hay);
-  }
-  return hay.includes(needle);
-}
+// The engine's own matcher, not a mirror of it. This guard models which entries
+// can shadow which, so a hand-copied rule that drifts from mentions() reports
+// pairs the engine does not have — or hides ones it does.
+const matches = (needle: string, hay: string) => mentions(hay, needle);
 
 /** The scoring lists matched by substring against message text. */
 const SCORED_LISTS = [
@@ -70,7 +65,6 @@ const KNOWN_SHADOWING = new Set([
   // base — reward
   "reward points <- reward",
   "risk-free investment <- free",
-  "unclaimed <- claim",
   // base — urgency
   "disconnected within 24 hours <- within 24 hours",
   "respond immediately <- immediately",
@@ -94,7 +88,6 @@ const KNOWN_SHADOWING = new Set([
   "an garda siochana <- garda",
   "an garda siochana <- garda siochana",
   "garda siochana <- garda",
-  "gardai <- garda",
   "central bank of ireland <- central bank",
   "department of social protection <- social protection",
   "revenue commissioners <- revenue",
@@ -121,6 +114,14 @@ const KNOWN_SHADOWING = new Set([
   "final notice of intent to levy <- final notice",
   "final notice of unpaid toll <- final notice",
 ]);
+
+// Two pairs left this allowlist with #233: "unclaimed <- claim" and
+// "gardai <- garda". Both were single tokens reaching inside a longer entry,
+// which word-boundary matching makes impossible — the longer entry is now
+// reachable on its own.
+//
+// "meter reading required urgently <- urgent" stays: mentions() tolerates an
+// inflectional suffix, so "urgent" still matches "urgently" by design.
 
 describe("region pack substring shadowing", () => {
   it("has no unreviewed shadowed entries in any scoring list", () => {
@@ -182,11 +183,12 @@ describe("region pack substring shadowing", () => {
 // innocuous text, and the flag then quoted the fragment as evidence — "Asks for
 // sensitive info: 'pin'" on a message about a pinned document.
 //
-// scamDetector's `mentions()` already solved this for the authority lists (see
-// the note above WORD_MATCH_MAX_LEN); these lists simply never adopted it. The
-// threshold is 4 rather than 3 so "free" and "cash" are covered — every 4-char
-// entry across the packs is a standalone word or identifier ($500, 401k, nino,
-// ppsn, prsa, tfn), none of which needs to match inside a longer word.
+// scamDetector's `mentions()` already solved this for the authority lists;
+// these lists simply never adopted it. #196 extended the protection to entries
+// of 4 characters or fewer, which covered "pin", "free" and "ato" but stopped
+// one letter short of "claim", "prize" and "voucher" — see #233 and the
+// regression cover in keywordWordBoundaries.test.ts. The rule is now
+// token-based rather than length-based: every single-token entry is anchored.
 
 describe("short scored entries do not fire inside longer words", () => {
   const INNOCUOUS = [

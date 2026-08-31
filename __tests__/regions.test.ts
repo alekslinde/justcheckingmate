@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, checkUrl } from "@justcheckingmate/engine/scamDetector";
+import { checkSms, checkUrl, mentions } from "@justcheckingmate/engine/scamDetector";
 import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@justcheckingmate/engine/regions";
 import { BASE_SIGNALS, CHINESE_AUTHORITY_MENTIONS } from "@justcheckingmate/engine/regions/base";
 import { AU } from "@justcheckingmate/engine/regions/au";
@@ -81,17 +81,22 @@ describe("pack composition", () => {
 describe("pack invariants (every region)", () => {
   const packs = supportedRegions().map((code) => [code, resolveRegionPack(code)] as const);
 
-  // requestWords is substring-matched, so a phrase containing another scores
-  // twice for one match. The overlap is invisible in the flag text (both
-  // phrases are listed, which reads as two findings) but doubles the score.
+  // A phrase that another entry can match inside scores twice for one match.
+  // The overlap is invisible in the flag text (both phrases are listed, which
+  // reads as two findings) but doubles the score.
   //
-  // No exemptions: the two pre-existing overlaps this originally grandfathered
-  // ("updated bank details" in base, "mygovid" in AU) are now fixed. The AU one
-  // was verdict-changing on its own — "Confirm your myGovID" reached
-  // likely_scam while the identical "Confirm your myGov" was only suspicious.
-  it.each(packs)("%s: no requestWord contains another requestWord", (_code, pack) => {
+  // Overlap is tested the way mentions() actually matches (#233): a single
+  // token only shadows on word boundaries, so "mygov" no longer reaches inside
+  // "mygovid" and both can be listed. A multi-word phrase still matches as a
+  // substring, so "bank details" inside "updated bank details" would still
+  // double-score and is still forbidden.
+  // The engine's own matcher — a hand-copied rule here would let the invariant
+  // drift from what actually double-scores.
+  const canMatchInside = (needle: string, hay: string) => mentions(hay, needle);
+
+  it.each(packs)("%s: no requestWord can match inside another requestWord", (_code, pack) => {
     const offenders = pack.requestWords.filter((w) =>
-      pack.requestWords.some((other) => other !== w && w.includes(other)),
+      pack.requestWords.some((other) => other !== w && canMatchInside(other, w)),
     );
     expect(offenders).toEqual([]);
   });
