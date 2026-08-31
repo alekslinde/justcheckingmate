@@ -11,8 +11,8 @@ SMS, phishing email, or phone number and get an instant rule-based verdict.
 Detection is **hardcoded pattern/heuristic logic, not an LLM** — no ML, no
 external analysis APIs, nothing sent off-device for scoring.
 
-**Stack:** Next.js 15.5 (App Router) + React 19, Tailwind CSS v4
-**Package manager:** npm
+**Stack:** Next.js 16.3 (App Router) + React 19, Tailwind CSS v4
+**Package manager:** npm (npm workspaces — `packages/*`)
 **Primary language:** TypeScript (strict)
 **Tests:** Vitest
 **DB:** libSQL / Turso in prod; falls back to local SQLite (`local.db`) in dev
@@ -22,32 +22,52 @@ external analysis APIs, nothing sent off-device for scoring.
 ## Project Structure
 
 ```
-app/            ← Routes (App Router): page.tsx, about/, learn/, submissions/
+app/            ← Routes (App Router): page.tsx, about/, learn/, radar/,
+                  calendar/, report/, share/, submissions/
   api/          ← Route handlers: check, report, reports, ocr, inbound, bug,
                   stats, feed-stats
 components/     ← UI components (check here first) — CheckFlow, ReportForm,
                   VerdictBadge, SubmissionsBrowser, etc.
-lib/            ← Core logic. Detection: scamDetector.ts, phoneIntel.ts,
-                  urlSanitizer.ts, urlhausBlocklist.ts, urlExpander.ts,
-                  detectType.ts. Email: emailHeaders.ts, emailDistiller.ts,
-                  forwardedEmail.ts, emailSource.ts, emailTracking.ts.
-                  Data: db.ts, reportStore.ts, bugStore.ts. Safety:
-                  piiScrubber.ts, submissionGuard.ts. i18n: i18n.ts, lang.tsx.
-messages/       ← i18n string bundles
-__tests__/      ← Vitest tests (one per lib module)
+packages/engine ← The detection engine, as its own workspace package
+                  (@justcheckingmate/engine). src/: scamDetector.ts,
+                  phoneIntel.ts, urlSanitizer.ts, urlExpander.ts,
+                  detectType.ts, emailHeaders.ts, engineTypes.ts,
+                  regions/ (au, gb, us, ca, ie, nz, rest-of-world).
+                  No framework imports, no ambient network access.
+lib/            ← App-side logic — everything that is NOT scoring.
+                  Teaching/presentation: signalTactics.ts, verdictSummary.ts,
+                  threatRadar.ts, scamCalendar.ts, richText.tsx, formatters.ts.
+                  Email: emailDistiller.ts, forwardedEmail.ts, emailSource.ts,
+                  emailTracking.ts, trackingPixel.ts. Data: db.ts,
+                  reportStore.ts, bugStore.ts. Safety: piiScrubber.ts,
+                  submissionGuard.ts. Region/i18n: regionResolver.ts, geo.ts,
+                  i18n.ts, lang.tsx. Blocklist: urlhausBlocklist.ts.
+messages/       ← i18n string bundles (en.normal.json, en.regional.json)
+__tests__/      ← Vitest tests (engine + lib)
 scripts/        ← seed-db.ts, generate-icons.mjs
 workers/        ← inbound-email worker
 ```
+
+**Import detection from the package, not `lib/`:**
+`import { analyzeContent } from "@justcheckingmate/engine/scamDetector"`.
+Top-level entry points are `checkUrl`, `checkSms`, `checkEmail`, `checkPhone`,
+`checkCustom` and `analyzeContent` — the last returns an **array**, one result
+per identifier found in the input.
 
 ---
 
 ## Component & Code Reuse
 
 - Check `components/` before building anything new; extend before creating
-- Shared logic lives in `lib/` — check there before writing detection or
-  parsing helpers
+- Scoring logic lives in `packages/engine/src/` — check there before writing
+  any detection or URL/phone parsing helper
+- App-side logic lives in `lib/` — check there before writing presentation,
+  email, data or safety helpers
 - New components → `components/ComponentName.tsx`
-- Extract logic used in 2+ places into `lib/`
+- Extract logic used in 2+ places into `lib/` (or the engine, if it scores)
+- Keep the engine framework-free: no React, no `next/*`, no network calls.
+  A teaching layer over detection (like `lib/signalTactics.ts`) belongs in
+  `lib/`, so the engine can reword a signal without a taxonomy following it.
 
 ---
 
@@ -68,7 +88,8 @@ workers/        ← inbound-email worker
 
 Use these scopes in commit messages:
 
-- `(detector)` — Detection logic in `lib/` (scamDetector, phoneIntel, etc.)
+- `(detector)` — Detection logic in `packages/engine/` (scamDetector,
+  phoneIntel, region packs, etc.)
 - `(ui)` — Components and screens
 - `(api)` — Route handlers under `app/api/`
 - `(email)` — Email parsing / inbound / distiller
@@ -91,7 +112,7 @@ Use these scopes in commit messages:
 ```bash
 npm run dev      ← Start dev server (http://localhost:3000)
 npm test         ← Run Vitest tests (run before committing)
-npm run lint     ← ESLint (Next 15.5 + strict react-hooks rules)
+npm run lint     ← ESLint (Next 16.3 + strict react-hooks rules)
 npm run seed     ← Seed the database
 npm run build    ← Production build
 ```
@@ -106,7 +127,6 @@ npm run build    ← Production build
   sophisticated scammers.
 - Next.js 16.3 / React 19 / Tailwind v4 are newer than most training data —
   check the official docs rather than assuming older behaviour.
-```
 
 ---
 
