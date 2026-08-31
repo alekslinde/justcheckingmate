@@ -114,7 +114,8 @@ class Signals {
 // unrecognised, so omitting the argument preserves the original AU behaviour.
 
 /**
- * Substring match, but with word boundaries for short entries.
+ * Match a pack entry against text: word boundaries for single tokens,
+ * substring for multi-word phrases.
  *
  * Agency lists (`authorityMentions`, `noLinkSenders`, `foreignAuthorityMentions`)
  * are plain string arrays rather than a BrandSet, so they have no explicit
@@ -124,20 +125,60 @@ class Signals {
  * government impersonation (NZ "acc" ⊂ "account") and would have read "message"
  * as the SSA, "security" as the SEC, and "weird"/"third" as the IRD.
  *
- * Entries of 3 characters or fewer are matched on \b boundaries — the same rule
- * BrandSet's `word` list uses, applied automatically so a pack author can't
- * forget it. Longer entries keep substring matching, which is what lets
- * "hmrc"/"medicare" match inside punctuation and compounds as before.
+ * That protection used to stop at 4 characters, which left the same failure
+ * mode wide open one letter further up (#233): "claim" fired inside
+ * "unclaimed" and "reclaiming", "prize" inside "prizewinning", "voucher"
+ * inside "voucherless". "Unclaimed baggage goes to the storage room" reached
+ * suspicious (24) on nothing but ordinary English. Length was never the real
+ * distinction — token-ness is. A single token has boundaries to respect; a
+ * multi-word phrase is already specific enough that its own spaces do the work,
+ * and anchoring it would break the punctuation-tolerant matching it relies on.
  *
- * The threshold is length-based rather than a curated list because the failure
- * mode is mechanical: any short token collides eventually, and a new pack should
- * inherit the protection without anyone remembering to opt in.
+ * Boundary matching is *not* the same as exact matching, which is why this is
+ * safe for the domain and hyphen entries the packs are full of: \b sits at any
+ * non-word character, so "medicare" still matches "medicare.gov.au", "gov.au"
+ * still matches "ato.gov.au", and "target" still matches "target-shop".
+ *
+ * What it does drop is letter-adjacent compounds — "garda" no longer fires
+ * inside "gardai", nor "crypto" inside "easycrypto". Every such compound in the
+ * packs today is already listed as its own entry, so this costs no coverage.
+ * The one deliberate exception was AU's "mygov" ⊂ "mygovid" (see the note in
+ * au.ts REQUEST_WORDS); myGovID lures are still carried by identityRereg and
+ * authorityMentions, which name the rebrand explicitly.
+ *
+ * The rule is structural rather than a curated list because the failure mode is
+ * mechanical: any token collides eventually, and a new pack should inherit the
+ * protection without anyone remembering to opt in.
  */
-const WORD_MATCH_MAX_LEN = 4;
+/**
+ * Inflectional endings tolerated after a single-token entry. Deliberately a
+ * closed set of grammatical suffixes rather than "any letters": the point is to
+ * follow a word into its own inflections without letting it wander into a
+ * different word ("voucher" must not reach "voucherless").
+ */
+const INFLECTION = "(?:s|es|ed|d|ing|ly)?";
+
 function mentions(text: string, entry: string): boolean {
   const needle = entry.toLowerCase();
-  if (needle.length > WORD_MATCH_MAX_LEN) return text.includes(needle);
-  return new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+  // Multi-word phrases keep substring matching — their specificity is their
+  // own protection, and \b would break matching across punctuation.
+  if (/\s/.test(needle)) return text.includes(needle);
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // \b is a word-character boundary, so an entry that starts or ends with a
+  // non-word character (".shop", "gov.au") has no boundary to anchor on there —
+  // asserting one would never match. Anchor each side only where it applies.
+  const left = /^\w/.test(needle) ? "\\b" : "";
+  // The start is anchored hard but the end tolerates an inflection, because the
+  // two directions fail differently. A collision is almost always a PREFIX
+  // one — "claim" inside "unclaimed" and "reclaiming", "prize" inside
+  // "prizewinning", "free" inside "freemoney.tk" — and anchoring the start
+  // kills all of those. Refusing a trailing "-ly"/"-ing"/"-ed" instead throws
+  // away real hits: "urgent" is listed, and "act urgently" is the same signal
+  // in the same message. An exact-match rule measured that as a live
+  // regression, dropping the "claim now at freemoney.tk urgently" evasion case
+  // in bareHostname.test.ts from suspicious to safe.
+  const right = /\w$/.test(needle) ? `${INFLECTION}\\b` : "";
+  return new RegExp(`${left}${escaped}${right}`, "i").test(text);
 }
 
 function mentionsAny(text: string, entries: string[]): boolean {
@@ -1178,7 +1219,13 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   const lower = text.toLowerCase();
 
   const allSignals = [...URGENCY_WORDS, ...REWARD_WORDS, ...REQUEST_WORDS];
-  const hits = allSignals.filter((w) => lower.includes(w));
+  // Matched through mentions() for parity with checkSms (#233). A raw
+  // includes() here meant the same pasted text scored differently depending on
+  // which box it was pasted into — "pin" fired inside "spins", "ato" inside
+  // "atomic" — and, unlike checkSms, every list was flattened into one count,
+  // so the collisions stacked: "The atomic superstore has unclaimed freebies;
+  // won't last" reached suspicious (40) on four phantom hits.
+  const hits = allSignals.filter((w) => mentions(lower, w));
 
   if (hits.length > 0) {
     sig.add("message", `Suspicious keywords found: "${hits.slice(0, 4).join('", "')}"`, Math.min(hits.length * 8, 60));

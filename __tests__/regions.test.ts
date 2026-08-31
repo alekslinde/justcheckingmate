@@ -81,17 +81,26 @@ describe("pack composition", () => {
 describe("pack invariants (every region)", () => {
   const packs = supportedRegions().map((code) => [code, resolveRegionPack(code)] as const);
 
-  // requestWords is substring-matched, so a phrase containing another scores
-  // twice for one match. The overlap is invisible in the flag text (both
-  // phrases are listed, which reads as two findings) but doubles the score.
+  // A phrase that another entry can match inside scores twice for one match.
+  // The overlap is invisible in the flag text (both phrases are listed, which
+  // reads as two findings) but doubles the score.
   //
-  // No exemptions: the two pre-existing overlaps this originally grandfathered
-  // ("updated bank details" in base, "mygovid" in AU) are now fixed. The AU one
-  // was verdict-changing on its own — "Confirm your myGovID" reached
-  // likely_scam while the identical "Confirm your myGov" was only suspicious.
-  it.each(packs)("%s: no requestWord contains another requestWord", (_code, pack) => {
+  // Overlap is tested the way mentions() actually matches (#233): a single
+  // token only shadows on word boundaries, so "mygov" no longer reaches inside
+  // "mygovid" and both can be listed. A multi-word phrase still matches as a
+  // substring, so "bank details" inside "updated bank details" would still
+  // double-score and is still forbidden.
+  const canMatchInside = (needle: string, hay: string) => {
+    if (/\s/.test(needle)) return hay.includes(needle);
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const left = /^\w/.test(needle) ? "\\b" : "";
+    const right = /\w$/.test(needle) ? "(?:s|es|ed|d|ing|ly)?\\b" : "";
+    return new RegExp(`${left}${escaped}${right}`, "i").test(hay);
+  };
+
+  it.each(packs)("%s: no requestWord can match inside another requestWord", (_code, pack) => {
     const offenders = pack.requestWords.filter((w) =>
-      pack.requestWords.some((other) => other !== w && w.includes(other)),
+      pack.requestWords.some((other) => other !== w && canMatchInside(other, w)),
     );
     expect(offenders).toEqual([]);
   });
