@@ -48,7 +48,7 @@ const URGENCY_UTILITY = [
   "broadband will be disconnected", "internet will be disconnected",
   "service will be disconnected", "electricity will be disconnected",
   "your electricity account", "disconnection notice",
-  ];
+];
 
 // Pension phishing — the Irish analogue of AU superannuation and UK pension
 // lures. PRSA and pension-transfer cold-calling is the recurring script, and
@@ -75,7 +75,8 @@ const URGENCY_RECALL = [
 const URGENCY_TAX = [
   "tax refund", "tax rebate", "you are eligible for a refund",
   "revenue refund", "refund is waiting", "claim your refund",
-  "tax credit refund", "usc refund", "cost of living payment", "fuel allowance", "electricity credit",
+  "tax credit refund", "usc refund", "cost of living payment",
+  "fuel allowance", "electricity credit",
   "energy credit", "social welfare payment", "child benefit payment",
   "working family payment",
 ];

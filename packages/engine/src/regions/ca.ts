@@ -79,7 +79,8 @@ const URGENCY_TAX = [
   "cra refund", "refund is waiting", "claim your refund",
   "gst credit", "gst/hst credit", "hst rebate",
   "canada child benefit", "ccb payment",
-  "climate action incentive", "carbon rebate", "cost of living payment", "grocery rebate",
+  "climate action incentive", "carbon rebate",
+  "cost of living payment", "grocery rebate",
   "ei payment", "employment insurance payment",
 ];
 

@@ -22,10 +22,12 @@ const URGENCY_TOLL = [
   "unpaid toll", "outstanding toll", "toll payment", "toll charge",
   "toll invoice", "final toll notice",
   "e-zpass", "ezpass", "sunpass", "fastrak", "txtag", "peachpass",
-  "toll violation", // The DMV registration-suspension variant — the US analogue of the AU "rego"
+  "toll violation",
+  // The DMV registration-suspension variant — the US analogue of the AU "rego"
   // escalation, and the same threat shape: your vehicle's legal status.
   "vehicle registration will be suspended", "registration suspension",
-  "dmv record", ];
+  "dmv record",
+];
 
 // USPS / UPS / FedEx redelivery lures. "Shipping address is incomplete" is the
 // dominant US variant, harvesting card details behind a small redelivery fee.
@@ -71,7 +73,8 @@ const URGENCY_TAX = [
   "tax refund", "tax rebate", "you are eligible for a refund",
   "irs refund", "refund is waiting", "claim your refund",
   "economic impact payment", "stimulus payment", "stimulus check",
-  "tax credit you are owed", "snap benefits", "ebt card", "medicaid renewal", "medicare card",
+  "tax credit you are owed", "snap benefits", "ebt card",
+  "medicaid renewal", "medicare card",
 ];
 
 // IRS collection / enforcement coercion. The IRS initiates contact by mail, not
@@ -85,6 +88,13 @@ const URGENCY_TAX_THREAT = [
   "tax debt", "outstanding tax", "overdue tax", "unpaid tax",
   "tax liability", "irs debt", "back taxes",
   "tax lien", "levy on your", "wage garnishment", "garnish your wages",
+  // The IRS "final notice of intent to levy" letter (LT11/Letter 1058) is a
+  // real instrument, which is exactly why the phrasing is impersonated. Listed
+  // as "intent to levy" rather than the full sentence: "final notice" sits in
+  // URGENCY_GENERIC and would shadow the longer form, scoring one phrase twice
+  // (#234). This carries the levy threat on its own, so the pair no longer
+  // depends on a duplicate hit — the IRS notifies by post, never by SMS.
+  "intent to levy",
   "irs audit", "under audit",
   "your ssn has been suspended", "ssn suspended", "ssn compromised",
   "legal action will be taken", "warrant issued",

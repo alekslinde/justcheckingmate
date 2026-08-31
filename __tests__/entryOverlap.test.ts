@@ -23,18 +23,52 @@ const urgency = (r: { flags: string[] }) =>
   r.flags.find((f) => f.startsWith("Urgency language detected"));
 
 describe("#234 — a phrase is quoted once, not twice", () => {
-  const cases: [string, string, string][] = [
-    ["US", "Final notice of unpaid toll. Pay now to avoid penalty.", "final notice of unpaid toll"],
-    ["NZ", "Final toll notice: payment required.", "final toll notice"],
-    ["GB", "Your council tax refund of £240 is ready to claim.", "council tax refund"],
-    ["CA", "Your carbon tax rebate is pending.", "carbon tax rebate"],
-    ["IE", "Emergency tax refund available now.", "emergency tax refund"],
-    ["GB", "Meter reading required urgently.", "meter reading required urgently"],
+  // region, text, the deleted phrase that must not be quoted, the surviving
+  // phrase that must still be. Both halves are asserted: checking only the
+  // absence would pass vacuously if urgency detection stopped firing at all.
+  const cases: [string, string, string, string][] = [
+    ["US", "Final notice of unpaid toll. Pay now to avoid penalty.", "final notice of unpaid toll", "unpaid toll"],
+    ["NZ", "Final toll notice: payment required.", "final toll notice", "toll notice"],
+    ["GB", "Your council tax refund of £240 is ready to claim.", "council tax refund", "tax refund"],
+    ["CA", "Your carbon tax rebate is pending.", "carbon tax rebate", "tax rebate"],
+    ["IE", "Emergency tax refund available now.", "emergency tax refund", "tax refund"],
+    ["GB", "Meter reading required urgently.", "meter reading required urgently", "urgent"],
   ];
 
-  it.each(cases)("%s: does not list the redundant longer phrase", (region, text, removed) => {
+  it.each(cases)("%s: quotes the phrase once", (region, text, removed, kept) => {
     const r = checkSms(text, undefined, region);
-    expect(urgency(r) ?? "").not.toContain(removed);
+    const flag = urgency(r);
+    expect(flag, `no urgency flag at all for: ${text}`).toBeTruthy();
+    expect(flag!).toContain(kept);
+    expect(flag!).not.toContain(removed);
+  });
+});
+
+describe("#234 — the IRS levy threat survives its deletion", () => {
+  // "final notice of intent to levy" was one of the 22 deletions, and the only
+  // one whose shadow ("final notice") is documented as a deliberately weak +10
+  // that needs corroboration — the corroborating half was what got deleted, so
+  // "Final notice of intent to levy. Call ..." fell to safe (10).
+  //
+  // Recovered as "intent to levy" in URGENCY_TAX_THREAT rather than by reverting:
+  // the full phrase would be shadowed by "final notice" all over again. The
+  // shorter form carries the levy threat on its own, so the signal no longer
+  // depends on a duplicate hit.
+  it("scores a bare levy notice without relying on a duplicate", () => {
+    const r = checkSms("Final notice of intent to levy. Call 1800 555 0000.", undefined, "US");
+    expect(r.verdict).not.toBe("safe");
+    expect(urgency(r)!).toContain("intent to levy");
+  });
+
+  it("keeps the wage-levy variant at likely_scam", () => {
+    const r = checkSms("Final notice of intent to levy your wages. IRS.", undefined, "US");
+    expect(r.verdict).toBe("likely_scam");
+  });
+
+  it("fires without 'final notice' present at all", () => {
+    // The point of the shorter form: it no longer needs the generic phrase.
+    const r = checkSms("Notice of intent to levy your bank account. Call now.", undefined, "US");
+    expect(urgency(r)!).toContain("intent to levy");
   });
 });
 

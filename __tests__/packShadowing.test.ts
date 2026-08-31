@@ -53,13 +53,11 @@ const SCORED_LISTS = [
  * entry changes no verdict. They are kept for readability — "an garda
  * siochana" documents the campaign better than "garda" alone.
  *
- * Two are worth a closer look if anyone revisits this list, because the
- * shadowing entry is broad enough to fire on ordinary English:
- *   · "unclaimed" <- "claim"  — "claim your unclaimed book" scores as reward
- *     language on "claim" alone
- *   · "risk-free investment" <- "free"
- * Both predate this guard and are left as-is; changing them is a detection
- * decision, not a test fix. See #196.
+ * Both of the pairs this note once flagged for a closer look are gone:
+ * "unclaimed" <- "claim" stopped being a pair when #233 made single tokens
+ * match on word boundaries, and "risk-free investment" <- "free" was deleted
+ * in #234 along with the other 21 entries that only duplicated a shorter one.
+ * See #196 for the guard's origin.
  */
 const KNOWN_SHADOWING = new Set([
   // base — reward

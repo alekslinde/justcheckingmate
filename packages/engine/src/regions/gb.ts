@@ -30,7 +30,8 @@ const URGENCY_TOLL = [
   "penalty charge notice", "pcn issued",
   // DVLA vehicle-tax variant — the UK's closest analogue to AU "rego
   // restrictions": the threat is to the vehicle's road-legal status.
-  "vehicle tax is due", "your vehicle is untaxed", "untaxed vehicle",
+  "vehicle tax is due", "your vehicle is untaxed",
+  "untaxed vehicle",
 ];
 
 // Royal Mail / Evri / DPD parcel-redelivery lures. "Redelivery fee" and
@@ -49,7 +50,8 @@ const URGENCY_PARCEL = [
 const URGENCY_UTILITY = [
   "broadband will be disconnected", "internet will be disconnected",
   "broadband will be cut off", "service will be disconnected",
-  "your line will be disconnected", ];
+  "your line will be disconnected",
+];
 
 // Pension phishing — the UK analogue of superannuation scams. Pension freedoms
 // (access from 55/57) created a large cold-calling fraud market; pension
