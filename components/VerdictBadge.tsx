@@ -351,37 +351,69 @@ export function Tactics({ signals }: { signals: Signal[] }) {
 
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3 mb-2">
-        <h3 className={EYEBROW}>{t("verdict.tactics.heading")}</h3>
-        <span className={`${EYEBROW} text-[var(--caution)]`}>
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <h3 className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-dim)]">
+          {t("verdict.tactics.heading")}
+        </h3>
+        {/* Looser tracking than the heading it sits beside: this is a count to
+            be read, not a label to be scanned past. */}
+        <span className="font-[family-name:var(--font-mono-ui)] text-[11px] tracking-[0.03em] text-[var(--caution)]">
           {t("verdict.tactics.count", { n: found.size, total: TACTIC_IDS.length })}
         </span>
       </div>
       <p className="mb-3 max-w-[46ch] text-[13.5px] leading-relaxed text-[var(--text-dim)]">
         {t("verdict.tactics.lede")}
       </p>
-      <ul className="grid gap-px bg-[var(--rule)] rounded-lg overflow-hidden border border-[var(--rule)]">
+      {/* A matched row is tinted amber, not merely lifted to a paler grey: the
+          tint is the same "we found this" signal the evidence weights carry, so
+          a matched tactic reads as flagged rather than as selected. Unmatched
+          rows drop to --ink, darker than the panel around them, so the matched
+          ones come forward instead of the list reading as uniformly active. */}
+      <ul className="grid gap-px overflow-hidden rounded-[11px] border border-[var(--rule)] bg-[var(--rule)]">
         {TACTIC_IDS.map((id) => {
           const on = found.has(id);
           return (
             <li
               key={id}
-              className={`flex items-center gap-2.5 px-3.5 py-2 text-[13.5px] ${
-                on ? "bg-[var(--ink-3)] text-[var(--foreground)]" : "bg-[var(--ink-2)] text-[var(--faint)]"
+              className={`grid grid-cols-[auto_1fr_auto] items-center gap-[11px] px-[13px] py-2.5 ${
+                on ? "bg-[var(--caution)]/[0.09]" : "bg-[var(--ink)]"
               }`}
             >
+              {/* The tick is drawn, not typed: the ✓ glyph renders at a
+                  different weight and baseline on every platform, and it sat
+                  low in its box on Windows. */}
               <span
                 aria-hidden="true"
-                className={`grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border text-[10px] ${
-                  on
-                    ? "border-[var(--caution)] bg-[var(--caution)]/15 text-[var(--caution)]"
-                    : "border-[var(--rule)]"
+                className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border ${
+                  on ? "border-[var(--caution)] bg-[var(--caution)]/[0.16]" : "border-[var(--ink-3)]"
                 }`}
               >
-                {on ? "✓" : ""}
+                <svg viewBox="0 0 12 12" fill="none" className={`h-[11px] w-[11px] ${on ? "" : "opacity-0"}`}>
+                  <path
+                    d="m1.8 6.2 2.8 2.8L10.2 3.4"
+                    stroke="var(--caution)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </span>
-              <span className="min-w-0 flex-1">{t(`learn.tactics.${id}.title` as MessageKey)}</span>
-              {on && <span className={`${EYEBROW} text-[var(--caution)]`}>{t("verdict.tactics.matched")}</span>}
+              <span
+                className={`min-w-0 text-[14px] ${
+                  on ? "font-semibold text-[var(--foreground)]" : "font-medium text-[var(--text-dim)]"
+                }`}
+              >
+                {t(`learn.tactics.${id}.title` as MessageKey)}
+              </span>
+              {/* The label holds its column whether or not it shows, so the
+                  names don't shift left on unmatched rows. */}
+              <span
+                className={`whitespace-nowrap font-[family-name:var(--font-mono-ui)] text-[10px] uppercase tracking-[0.08em] ${
+                  on ? "text-[var(--caution)]" : "text-transparent"
+                }`}
+              >
+                {t("verdict.tactics.matched")}
+              </span>
             </li>
           );
         })}
