@@ -15,7 +15,12 @@ import type { RegionDefinition } from "./types";
 
 export const REST_OF_WORLD: RegionDefinition = {
   code: "ZZ", // ISO 3166-1 user-assigned range — not a real country
-  name: "Somewhere else / not listed",
+  // Reads as a place, because it is interpolated into sentences that name one
+  // ("scam reporting in {region}"). "Somewhere else / not listed" described the
+  // menu option rather than the region, and landed as "reporting in Somewhere
+  // else / not listed". Its job as the none-of-these option is carried by the
+  // sort in REGION_OPTIONS, which pins it last, not by the label.
+  name: "Rest of the world",
   coverage: "none",
 
   // No national campaign signals. The base groups (generic urgency,
