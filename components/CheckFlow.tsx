@@ -891,151 +891,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     // different content, so moving between them doesn't reflow the page.
     const showTactics = results.length > 0;
 
-    return (
-      // No back link in this header any more: the checked-strip above the
-      // results carries it, alongside the record of what was checked, so the
-      // two live together instead of the affordance floating on its own.
-      <div className="check-result-in">
-        <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
-
-        {/* Section label above both columns, so "Evidence" names the whole
-            payoff rather than one panel inside it. Always present: it is part
-            of the result's frame, and a heading that comes and goes with the
-            verdict makes the safe and scam states two different pages. */}
-        <p className="mb-3 flex items-center gap-2.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-dim)]">
-          {t("verdict.evidence.heading")}
-          <span aria-hidden="true" className="h-px flex-1 bg-[var(--rule)]" />
-        </p>
-
-        {/* The verdict leads at width; the tactics legend sits alongside as
-            support and sticks while the evidence column scrolls. One column
-            below 900px, where a 300px rail would squeeze both.
-            The gap tracks the viewport rather than sitting at a fixed 20px:
-            at desktop width two fixed-20px columns read as one crowded block
-            instead of a sheet with a rail beside it. */}
-        <div
-          className={
-            showTactics
-              ? "grid gap-[clamp(20px,2.6vw,32px)] min-[900px]:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] min-[900px]:items-start"
-              : "grid gap-[clamp(20px,2.6vw,32px)]"
-          }
-        >
-          <div className="min-w-0 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
-        <div>
-          {results.length === 0 ? (
-            // Email source can parse to a sender analysis even when there are no
-            // URL/phone/email identifiers to score — in that case the analysis
-            // card below carries the payoff, so don't claim there's nothing.
-            !hasSender && !trackingReport?.hasTracking && <p className="px-5 py-5 text-sm text-gray-400">{t("check.nothing")}</p>
-          ) : (() => {
-            // One overall verdict drives the page — composeVerdict applies the
-            // worst-identifier-wins + tracking-pixel-nudge rules, shared with
-            // the forward-to-us email reply so the two can't drift.
-            const composed = composeVerdict(results, pixelReport)!;
-            const worst = results.reduce((acc, r) =>
-              VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
-            );
-            // Evidence pools across identifiers: the score is composed from all
-            // of them, so the rows under it have to be too. Passing only the
-            // worst identifier's signals dropped the URL findings from a
-            // link-carrying SMS — the most concrete evidence on the page.
-            const signals = pooledSignals(results);
-            const overall = { ...worst.result, ...composed, signals };
-
-            return (
-              <>
-                {/* Coverage honesty — sits above the verdict so it frames how the
-                    result should be read, rather than being a footnote to it. */}
-                <div className="px-5 pt-5">
-                  <CoverageNotice
-                    coverage={overallCoverage(results)}
-                  region={region}
-                    onRegionChange={(code) => runCheck(code)}
-                  />
-                </div>
-
-                {/* The verdict leads the sheet directly. It had an "Overall
-                    verdict" eyebrow above it, which labelled the one element on
-                    the page that needs no label — the headline says "Likely a
-                    scam" in the verdict's own colour. */}
-                <VerdictBadge result={overall} />
-
-                {/* Neutral breakdown — every identifier as a quiet row with a
-                    small status dot. No competing card colours.
-
-                    Only shown when it says something the verdict above hasn't.
-                    One identifier and no pixel means every row repeats the
-                    headline — "Message · Looks good" under "Looks good" — and a
-                    section that restates the conclusion teaches the reader that
-                    parts of this sheet aren't worth reading. It earns its place
-                    when there are several identifiers to tell apart (a clean
-                    message carrying a dodgy link is only visible here) or when
-                    the pixel row and its ESP links have something to add. */}
-                {(results.length > 1 || pixelReport) && (
-                <div className="space-y-2 border-t border-[var(--rule)] px-5 py-4">
-                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    {t("verdict.breakdown.heading")}
-                  </div>
-                  <ul className="space-y-1.5">
-                    {results.map((r, i) => {
-                      const meta = KIND_META[r.kind];
-                      return (
-                        <li key={`${r.kind}-${i}`} className="flex items-center gap-2.5 text-sm">
-                          <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT[r.result.verdict]}`} aria-hidden="true" />
-                          <span aria-hidden="true">{meta.icon}</span>
-                          {r.value && r.kind !== "message" ? (
-                            <span className="font-mono text-gray-400 break-all min-w-0 flex-1">{defangValue(r.kind, r.value)}</span>
-                          ) : (
-                            <span className="text-gray-400 flex-1">{t(meta.labelKey)}</span>
-                          )}
-                          <span className="shrink-0 text-gray-300 font-medium">{t(`verdict.${r.result.verdict}.status` as MessageKey)}</span>
-                        </li>
-                      );
-                    })}
-                    {pixelReport && (
-                      <li className="flex items-center gap-2.5 text-sm">
-                        <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
-                        <span className="text-gray-400 flex-1">{t("verdict.breakdown.pixel")}</span>
-                        <span className="shrink-0 text-gray-300 font-medium">{pixelReport.pixels.length}</span>
-                      </li>
-                    )}
-                  </ul>
-                  {pixelReport && (
-                    <div className="text-xs text-gray-500 space-y-1 pl-[18px]">
-                      {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
-                        <p key={i}>• {note}</p>
-                      ))}
-                    </div>
-                  )}
-                  {/* Direct line to each identified platform's abuse channel —
-                      reporting the sender here can shut the scammer's account down. */}
-                  {pixelReport && pixelReport.espReports.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pl-[18px] pt-0.5">
-                      {pixelReport.espReports.map((r) => (
-                        <a
-                          key={r.esp}
-                          href={r.href}
-                          {...(r.kind === "url" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-[var(--caution)] hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
-                        >
-                          <span aria-hidden="true">🚩</span>
-                          {t("verdict.breakdown.reportEsp", { esp: r.esp })}
-                          {r.kind === "url" && (
-                            <>
-                              <span className="sr-only"> ({t("a11y.newTab")})</span>
-                              <span aria-hidden="true">↗</span>
-                            </>
-                          )}
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                )}
-              </>
-            );
-          })()}
-
+    // The sections describing what was inspected. Defined here so they can be
+    // handed to VerdictBadge as its `supporting` slot: they have to render
+    // between the risk score and the action steps, and they are siblings of the
+    // scored-identifier breakdown rather than children of it (a header-only
+    // email has tracking and sender analysis but no scored identifier).
+    const supportingSections = (
+      <>
           {/* Broader tracking surface — pixels plus click redirects, CSS
               beacons, read-receipt headers, meta refresh, etc. Sibling of the
               breakdown so it renders even for a header-only email with no scored
@@ -1116,6 +978,168 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               </div>
             );
           })()}
+      </>
+    );
+
+
+    return (
+      // No back link in this header any more: the checked-strip above the
+      // results carries it, alongside the record of what was checked, so the
+      // two live together instead of the affordance floating on its own.
+      <div className="check-result-in">
+        <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
+
+        {/* Section label above both columns, so "Evidence" names the whole
+            payoff rather than one panel inside it. Always present: it is part
+            of the result's frame, and a heading that comes and goes with the
+            verdict makes the safe and scam states two different pages. */}
+        <p className="mb-3 flex items-center gap-2.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-dim)]">
+          {t("verdict.evidence.heading")}
+          <span aria-hidden="true" className="h-px flex-1 bg-[var(--rule)]" />
+        </p>
+
+        {/* The verdict leads at width; the tactics legend sits alongside as
+            support and sticks while the evidence column scrolls. One column
+            below 900px, where a 300px rail would squeeze both.
+            The gap tracks the viewport rather than sitting at a fixed 20px:
+            at desktop width two fixed-20px columns read as one crowded block
+            instead of a sheet with a rail beside it. */}
+        <div
+          className={
+            showTactics
+              ? "grid gap-[clamp(20px,2.6vw,32px)] min-[900px]:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] min-[900px]:items-start"
+              : "grid gap-[clamp(20px,2.6vw,32px)]"
+          }
+        >
+          <div className="min-w-0 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
+        <div>
+          {results.length === 0 ? (
+            // Email source can parse to a sender analysis even when there are no
+            // URL/phone/email identifiers to score — in that case the analysis
+            // carries the payoff, so don't claim there's nothing. With no scored
+            // identifier there is no verdict sheet to slot them into, so the
+            // supporting sections render on their own here.
+            <>
+              {!hasSender && !trackingReport?.hasTracking && (
+                <p className="px-5 py-5 text-sm text-gray-400">{t("check.nothing")}</p>
+              )}
+              {supportingSections}
+            </>
+          ) : (() => {
+            // One overall verdict drives the page — composeVerdict applies the
+            // worst-identifier-wins + tracking-pixel-nudge rules, shared with
+            // the forward-to-us email reply so the two can't drift.
+            const composed = composeVerdict(results, pixelReport)!;
+            const worst = results.reduce((acc, r) =>
+              VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
+            );
+            // Evidence pools across identifiers: the score is composed from all
+            // of them, so the rows under it have to be too. Passing only the
+            // worst identifier's signals dropped the URL findings from a
+            // link-carrying SMS — the most concrete evidence on the page.
+            const signals = pooledSignals(results);
+            const overall = { ...worst.result, ...composed, signals };
+
+            return (
+              <>
+                {/* Coverage honesty — sits above the verdict so it frames how the
+                    result should be read, rather than being a footnote to it. */}
+                <div className="px-5 pt-5">
+                  <CoverageNotice
+                    coverage={overallCoverage(results)}
+                  region={region}
+                    onRegionChange={(code) => runCheck(code)}
+                  />
+                </div>
+
+                {/* The verdict leads the sheet directly. It had an "Overall
+                    verdict" eyebrow above it, which labelled the one element on
+                    the page that needs no label — the headline says "Likely a
+                    scam" in the verdict's own colour. */}
+                <VerdictBadge
+                  result={overall}
+                  supporting={
+                    <>
+                {/* Neutral breakdown — every identifier as a quiet row with a
+                    small status dot. No competing card colours.
+
+                    Only shown when it says something the verdict above hasn't.
+                    One identifier and no pixel means every row repeats the
+                    headline — "Message · Looks good" under "Looks good" — and a
+                    section that restates the conclusion teaches the reader that
+                    parts of this sheet aren't worth reading. It earns its place
+                    when there are several identifiers to tell apart (a clean
+                    message carrying a dodgy link is only visible here) or when
+                    the pixel row and its ESP links have something to add. */}
+                {(results.length > 1 || pixelReport) && (
+                <div className="space-y-2 border-t border-[var(--rule)] px-5 py-4">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    {t("verdict.breakdown.heading")}
+                  </div>
+                  <ul className="space-y-1.5">
+                    {results.map((r, i) => {
+                      const meta = KIND_META[r.kind];
+                      return (
+                        <li key={`${r.kind}-${i}`} className="flex items-center gap-2.5 text-sm">
+                          <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT[r.result.verdict]}`} aria-hidden="true" />
+                          <span aria-hidden="true">{meta.icon}</span>
+                          {r.value && r.kind !== "message" ? (
+                            <span className="font-mono text-gray-400 break-all min-w-0 flex-1">{defangValue(r.kind, r.value)}</span>
+                          ) : (
+                            <span className="text-gray-400 flex-1">{t(meta.labelKey)}</span>
+                          )}
+                          <span className="shrink-0 text-gray-300 font-medium">{t(`verdict.${r.result.verdict}.status` as MessageKey)}</span>
+                        </li>
+                      );
+                    })}
+                    {pixelReport && (
+                      <li className="flex items-center gap-2.5 text-sm">
+                        <span className={`shrink-0 w-2 h-2 rounded-full ${STATUS_DOT.suspicious}`} aria-hidden="true" />
+                        <span className="text-gray-400 flex-1">{t("verdict.breakdown.pixel")}</span>
+                        <span className="shrink-0 text-gray-300 font-medium">{pixelReport.pixels.length}</span>
+                      </li>
+                    )}
+                  </ul>
+                  {pixelReport && (
+                    <div className="text-xs text-gray-500 space-y-1 pl-[18px]">
+                      {pixelReport.pixels.flatMap((p) => p.notes).map((note, i) => (
+                        <p key={i}>• {note}</p>
+                      ))}
+                    </div>
+                  )}
+                  {/* Direct line to each identified platform's abuse channel —
+                      reporting the sender here can shut the scammer's account down. */}
+                  {pixelReport && pixelReport.espReports.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pl-[18px] pt-0.5">
+                      {pixelReport.espReports.map((r) => (
+                        <a
+                          key={r.esp}
+                          href={r.href}
+                          {...(r.kind === "url" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-xs font-medium text-[var(--caution)] hover:bg-amber-900/40 hover:text-amber-200 transition-colors"
+                        >
+                          <span aria-hidden="true">🚩</span>
+                          {t("verdict.breakdown.reportEsp", { esp: r.esp })}
+                          {r.kind === "url" && (
+                            <>
+                              <span className="sr-only"> ({t("a11y.newTab")})</span>
+                              <span aria-hidden="true">↗</span>
+                            </>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                )}
+                    {supportingSections}
+                    </>
+                  }
+                />
+              </>
+            );
+          })()}
+
 
           {/* One action row rather than a stack of full-width buttons. Report is
               the primary act and leads; share, re-check and "wrong verdict" are

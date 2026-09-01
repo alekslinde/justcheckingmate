@@ -395,7 +395,19 @@ export function Tactics({ signals }: { signals: Signal[] }) {
 
 // ── Main badge ────────────────────────────────────────────────────────────────
 
-export default function VerdictBadge({ result }: { result: CheckResult }) {
+// `supporting` holds the sections that describe what was inspected — the
+// identifier breakdown, tracking findings, sender analysis. They belong between
+// the score and the steps: the steps are what the reader should do about all of
+// it, so anything that qualifies the finding has to arrive before them. Passed
+// in rather than rendered by the caller after the badge, which is what put "what
+// to do right now" in the middle of the sheet instead of at its end.
+export default function VerdictBadge({
+  result,
+  supporting,
+}: {
+  result: CheckResult;
+  supporting?: React.ReactNode;
+}) {
   const { t } = useLang();
   const v     = VERDICTS[result.verdict];
   const label = t(`verdict.${result.verdict}.label` as MessageKey);
@@ -446,11 +458,15 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
         </p>
       )}
 
+      {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
+
+      {supporting}
+
+      {/* Last band before the footer: the steps are the sheet's closing
+          instruction, so everything qualifying the verdict comes above them. */}
       {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
         <ActionSteps verdict={result.verdict} />
       )}
-
-      {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
     </div>
   );
 }
