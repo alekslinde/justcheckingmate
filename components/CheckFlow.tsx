@@ -358,25 +358,9 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [step, setStep] = useState<Step>("input");
-  // Put back the message a check was run against, after a Back.
-  //
-  // Next's App Router reloads the document when the user returns to a
-  // same-document pushState entry, so this is a fresh mount by the time we get
-  // here and every piece of React state has gone — see lib/checkDraft for the
-  // full account of why nothing in the tree can survive it.
-  //
-  // Read in a lazy initialiser rather than an effect, so the box is populated
-  // in the render that first shows it: restoring afterwards would paint an
-  // empty textarea and then fill it, which reads as the content arriving late.
-  // readCheckDraft returns "" on the server, so the SSR markup and the first
-  // client render agree and the draft lands on the pass after hydration.
-  //
-  // The read does not clear — React re-runs this initialiser during hydration
-  // and again under Strict Mode, and a read that consumed left the second run
-  // with nothing. The clearing happens in the effect below, once. A seeded box
-  // wins outright: content from the share sheet is what the reader has just
-  // chosen to check, and a stale draft must not displace it.
-  const [content, setContent] = useState(() => initialContent || readCheckDraft());
+  // Seeded from the share sheet only. The Back-restore is applied after
+  // hydration instead — see the effect below.
+  const [content, setContent] = useState(initialContent);
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
   // Region the server used for the last check. Null until a check has run.
   const [region, setRegion] = useState<string | null>(null);
@@ -420,12 +404,40 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const emlRef = useRef<HTMLInputElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  // The draft has done its job by the time this runs — the box above was
-  // populated from it during the first render — so it is dropped here. In an
-  // effect because a render must not destroy the state it just read, and
-  // because this way it survives exactly as long as it takes to be restored.
+  // Put back the message a check was run against, after a Back.
+  //
+  // Next's App Router reloads the document when the user returns to a
+  // same-document pushState entry, so this is a fresh mount by the time we get
+  // here and every piece of React state has gone — see lib/checkDraft for the
+  // full account of why nothing in the tree can survive it.
+  //
+  // After hydration, not during render. Reading storage in a lazy useState
+  // initialiser put the draft into the very first client render while the
+  // server had rendered an empty box, and React threw a hydration mismatch on
+  // every restore. It *looked* fine only because React then regenerates the
+  // tree — the box ended up correct with an error behind it.
+  //
+  // So the first client render matches the server's empty textarea, and the
+  // draft lands immediately afterwards. Reading and clearing sit together here
+  // because an effect runs once, after commit, and is the one place it is safe
+  // to consume: a render must be pure, and React re-runs initialisers during
+  // hydration and under Strict Mode.
+  //
+  // A seeded box wins outright — content from the share sheet is what the
+  // reader has just chosen to check — but the draft is consumed either way so
+  // it cannot resurface on a later Back.
+  // useSyncExternalStore is the usual answer for browser state, and is wrong
+  // here: it returns the store's value on every render, so the restored draft
+  // would overwrite each keystroke and the box could never be edited. This is a
+  // one-shot restore that then becomes ordinary editable state, which is an
+  // effect's job — the setState below is the synchronisation, not a cascade.
   useEffect(() => {
+    const draft = readCheckDraft();
     clearCheckDraft();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot restore of browser state after hydration; see the note above.
+    if (draft && !initialContent) setContent(draft);
+    // Mount only: a later run would fight the reader for the textarea.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // History contract: every step transition is mirrored in history state, and

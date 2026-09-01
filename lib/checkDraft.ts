@@ -55,12 +55,10 @@ export function saveCheckDraft(content: string): void {
 /**
  * Read the stored message without consuming it.
  *
- * Split from the clearing deliberately. This is called from a render (a lazy
- * useState initialiser, so the box is populated in the very first paint rather
- * than filled in afterwards), and a render must be pure and repeatable: React
- * discards and re-runs it during hydration and again under Strict Mode. A read
- * that also deleted meant the second run found nothing and the box came back
- * empty — the bug this module exists to fix, reintroduced one layer down.
+ * Split from the clearing deliberately: a read that also deleted would make
+ * this unrepeatable, and it is called from places that must be able to run more
+ * than once — React re-runs render work during hydration and under Strict Mode.
+ * Clearing is a separate, explicit step.
  */
 export function readCheckDraft(): string {
   return withStorage((s) => s.getItem(KEY) ?? "", "");

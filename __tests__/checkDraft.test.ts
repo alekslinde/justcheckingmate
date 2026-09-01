@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
 import { saveCheckDraft, readCheckDraft, clearCheckDraft } from "@/lib/checkDraft";
 
 // The draft exists to carry a checked message across one browser Back, which in
@@ -74,6 +76,39 @@ describe("check draft", () => {
     saveCheckDraft("scam text");
     saveCheckDraft("");
     expect(store.map.has(KEY)).toBe(false);
+  });
+});
+
+describe("check draft — when it is applied", () => {
+  // The restore must not reach the first client render. Reading storage in a
+  // lazy useState initialiser put the draft into that render while the server
+  // had rendered an empty box, and React threw a hydration mismatch on every
+  // restore. It looked fine — React recovers by regenerating the tree — so the
+  // box was correct with an error behind it, and a console-only check that ran
+  // without a draft present never saw it.
+  const SRC = readFileSync(path.join(process.cwd(), "components/CheckFlow.tsx"), "utf8");
+
+  it("does not read the draft during render", () => {
+    const init = SRC.match(/const \[content, setContent\] = useState\(([^;]*)\);/);
+    expect(init, "content state should still be declared").not.toBeNull();
+    expect(init![1]).not.toMatch(/readCheckDraft/);
+  });
+
+  it("restores after commit, where the server render cannot disagree", () => {
+    const idx = SRC.indexOf("readCheckDraft()");
+    expect(idx).toBeGreaterThan(-1);
+    // The read sits inside a useEffect, which runs only on the client and only
+    // after the markup it is hydrating has been committed.
+    const before = SRC.slice(0, idx);
+    expect(before.lastIndexOf("useEffect(")).toBeGreaterThan(before.lastIndexOf("useState("));
+  });
+
+  it("clears the draft in the same pass that restores it", () => {
+    const read = SRC.indexOf("readCheckDraft()");
+    const clear = SRC.indexOf("clearCheckDraft()");
+    expect(clear).toBeGreaterThan(read);
+    // Same effect body: nothing may sit between them but the restore itself.
+    expect(SRC.slice(read, clear)).not.toMatch(/useEffect\(|function /);
   });
 });
 
