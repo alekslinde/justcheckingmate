@@ -1145,11 +1145,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
           </div>
 
           {showTactics && (
-            // pt matches the sheet's own top padding so the rail's heading and
-            // the verdict share a baseline. Without it the rail started 20px
-            // higher than the column beside it and the two tops read as a
-            // misalignment rather than a deliberate offset.
-            <aside className="min-w-0 lg:sticky lg:top-[18px] lg:pt-5">
+            // Top-aligned with the sheet, with no padding of its own: the
+            // Evidence label above spans both columns, so the rail and the
+            // sheet start on the same line and the grid does the aligning.
+            // A pt here was an attempt to put the rail's heading on the
+            // verdict's baseline, which it cannot do — the verdict is a
+            // display face with its own leading, so the two never met.
+            <aside className="min-w-0 lg:sticky lg:top-[18px]">
               <Tactics signals={allSignals} />
             </aside>
           )}
