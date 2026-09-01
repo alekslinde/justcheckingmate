@@ -24,6 +24,14 @@ const VERDICTS: Record<
 const EYEBROW =
   "font-[family-name:var(--font-mono-ui)] text-[10.5px] font-medium uppercase tracking-[0.11em] text-[var(--faint)]";
 
+// The source tag on an evidence row. Related to EYEBROW but not the same job:
+// that one labels a field in a panel, this one tags a line of a receipt, where
+// several stack vertically down a column. Tighter tracking and regular weight
+// keep the tag subordinate to the finding beside it — at the field label's
+// 0.11em the tags read as a column of headings competing with the text.
+const ROW_SOURCE =
+  "block font-[family-name:var(--font-mono-ui)] text-[10.5px] uppercase tracking-[0.07em] text-[var(--faint)]";
+
 const SOURCE_KEY: Record<Signal["source"], MessageKey> = {
   link:       "verdict.evidence.source.link",
   message:    "verdict.evidence.source.message",
@@ -47,14 +55,14 @@ function Evidence({ signals }: { signals: Signal[] }) {
   // evidence and another around the box. Dashed rules separate items within one
   // list, where a solid rule would read as a break between sections.
   return (
-    <ul className="py-1">
+    <ul className="py-[5px]">
       {signals.map((s, i) => (
         <li
           key={i}
           className="grid grid-cols-[1fr_auto] items-baseline gap-3.5 border-b border-dashed border-white/[0.09] px-5 py-2.5 last:border-b-0"
         >
           <div className="min-w-0">
-            <div className={`${EYEBROW} mb-[3px]`}>{t(SOURCE_KEY[s.source])}</div>
+            <div className={`${ROW_SOURCE} mb-[3px]`}>{t(SOURCE_KEY[s.source])}</div>
             <p className="text-[14px] leading-relaxed text-[var(--foreground)]">{defangText(s.text)}</p>
           </div>
           {/* Tabular figures so the column of weights lines up as a column. */}
