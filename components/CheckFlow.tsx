@@ -961,7 +961,17 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
                 <VerdictBadge result={overall} />
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
-                    small status dot. No competing card colours. */}
+                    small status dot. No competing card colours.
+
+                    Only shown when it says something the verdict above hasn't.
+                    One identifier and no pixel means every row repeats the
+                    headline — "Message · Looks good" under "Looks good" — and a
+                    section that restates the conclusion teaches the reader that
+                    parts of this sheet aren't worth reading. It earns its place
+                    when there are several identifiers to tell apart (a clean
+                    message carrying a dodgy link is only visible here) or when
+                    the pixel row and its ESP links have something to add. */}
+                {(results.length > 1 || pixelReport) && (
                 <div className="space-y-2 border-t border-[var(--rule)] px-5 py-4">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                     {t("verdict.breakdown.heading")}
@@ -1021,6 +1031,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
                     </div>
                   )}
                 </div>
+                )}
               </>
             );
           })()}
