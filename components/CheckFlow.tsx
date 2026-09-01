@@ -912,7 +912,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             below lg, where a 300px rail would squeeze both. */}
         <div className={showTactics ? "grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] lg:items-start" : "grid gap-5"}>
           <div className="min-w-0 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
-        <div className="p-6 space-y-4">
+        <div className="p-5 space-y-5">
           {results.length === 0 ? (
             // Email source can parse to a sender analysis even when there are no
             // URL/phone/email identifiers to score — in that case the analysis
@@ -951,7 +951,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
                     small status dot. No competing card colours. */}
-                <div className="space-y-2 border-t border-[var(--rule)] pt-4">
+                <div className="space-y-2 border-t border-[var(--rule)] pt-5">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                     {t("verdict.breakdown.heading")}
                   </div>
@@ -1021,7 +1021,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               this was email source that came up clean. Findings carry their own
               copy; the values they surface are already non-clickable text. */}
           {trackingReport && (trackingReport.hasTracking || hasSender) && (
-            <div className="space-y-2 border-t border-[var(--rule)] pt-4">
+            <div className="space-y-2 border-t border-[var(--rule)] pt-5">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 {t("tracking.heading")}
               </div>
@@ -1055,7 +1055,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             const { headers, identityFlags: flags } = emailAnalysis;
             const authSummary = summariseAuth(headers);
             return (
-              <div className="space-y-2 border-t border-[var(--rule)] pt-4">
+              <div className="space-y-2 border-t border-[var(--rule)] pt-5">
                 <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                   {t("email.analysis.heading")}
                 </div>
@@ -1102,7 +1102,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               "Wrong verdict?" belongs here specifically: the moment someone
               disagrees with us is the moment we most need to hear about it, and
               burying that behind the floating bug button loses the correction. */}
-          <div className="flex flex-wrap gap-2 border-t border-[var(--rule)] pt-4">
+          <div className="flex flex-wrap gap-2 border-t border-[var(--rule)] pt-5">
             {(() => {
               // "Clean" means nothing flagged it — every identifier safe, no
               // tracking pixel, and no sender-spoofing flags. A pixel or a flag
@@ -1143,7 +1143,11 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
           </div>
 
           {showTactics && (
-            <aside className="min-w-0 lg:sticky lg:top-[18px]">
+            // pt matches the sheet's own top padding so the rail's heading and
+            // the verdict share a baseline. Without it the rail started 20px
+            // higher than the column beside it and the two tops read as a
+            // misalignment rather than a deliberate offset.
+            <aside className="min-w-0 lg:sticky lg:top-[18px] lg:pt-5">
               <Tactics signals={allSignals} />
             </aside>
           )}

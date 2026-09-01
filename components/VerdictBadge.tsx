@@ -325,7 +325,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
 
       {/* Header. A dot rather than an emoji: emoji render differently on every
           platform and carry a tone the verdict has to set itself. */}
-      <div className="pb-4">
+      <div className="pb-5">
         <div className="flex items-start gap-2.5">
           <span className={`mt-[9px] h-2 w-2 shrink-0 rounded-full ${v.dot}`} aria-hidden="true" />
           <div className="min-w-0">
@@ -337,13 +337,13 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
         </div>
       </div>
 
-      <div className="border-t border-[var(--rule)] pt-4 space-y-5">
+      <div className="border-t border-[var(--rule)] pt-5 space-y-5">
         {signals.length > 0 ? <Evidence signals={signals} /> : null}
 
         <RiskScore score={result.score} bar={v.bar} />
 
         {showDetails && (
-          <p className="border-t border-[var(--rule)] pt-4 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+          <p className="text-[13.5px] leading-relaxed text-[var(--text-dim)]">
             {details}
           </p>
         )}
