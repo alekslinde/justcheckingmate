@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AnalyzedIdentifier, ScamType } from "@justcheckingmate/engine/scamDetector";
 import { detectType } from "@justcheckingmate/engine/detectType";
 import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSanitizer";
@@ -155,6 +155,81 @@ const STATUS_DOT: Record<Verdict, string> = {
 };
 
 /**
+ * Animate a container between two content heights it cannot know in advance.
+ *
+ * The panel and the textarea swap inside the card, and their heights differ by
+ * about 25px — which the card took in a single frame, reading as a flinch at
+ * exactly the moment the reader is waiting to be told they are safe. CSS cannot
+ * transition to `auto`, so the height is measured either side of the change and
+ * the transition is run between the two pixel values.
+ *
+ * `auto` is restored as soon as the transition finishes. Leaving a fixed height
+ * behind would clip the panel if its content reflowed, and would fight the
+ * textarea's own resize handle — the box is user-resizable, and pinning it to a
+ * measurement taken before a drag would undo the drag.
+ *
+ * Returns the ref to attach; it no-ops entirely when reduced motion is asked
+ * for, so the swap is instant rather than merely faster.
+ */
+function useSwapHeight(key: unknown) {
+  const ref = useRef<HTMLDivElement>(null);
+  // The height the element had before this render's DOM changes were applied.
+  //
+  // Captured in the *cleanup* of the layout effect, which React runs after the
+  // previous render's DOM is still in place and before the new content is
+  // painted. That timing is the whole trick: measuring inside the effect body
+  // reads the height the element has already changed to, and an earlier version
+  // did exactly that — it kept the height from the previous swap, so the card
+  // jumped to the wrong place and then eased back down to the right one.
+  const from = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const start = from.current;
+    const end = el.getBoundingClientRect().height;
+    if (start === null || Math.round(start) === Math.round(end)) return;
+
+    el.style.setProperty("--swap-h", `${start}px`);
+    // Two frames: one for the start height to be committed, one for the change
+    // to be seen as a transition rather than folded into the same style pass.
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => el.style.setProperty("--swap-h", `${end}px`));
+    });
+
+    // Hand the height back to the content once it has arrived. Also fires if
+    // the transition is interrupted, so a fast second swap cannot strand a
+    // fixed height on the element.
+    const done = (e: TransitionEvent) => {
+      if (e.propertyName !== "height") return;
+      el.style.removeProperty("--swap-h");
+    };
+    el.addEventListener("transitionend", done);
+    el.addEventListener("transitioncancel", done);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("transitionend", done);
+      el.removeEventListener("transitioncancel", done);
+      el.style.removeProperty("--swap-h");
+    };
+  }, [key]);
+
+  // Runs on every render, after the DOM is committed but before the browser
+  // paints — so `from` always holds the height the element is leaving. Split
+  // from the effect above so it is not tied to `key`: the height can change for
+  // reasons other than the swap (the reader dragging the resize handle), and a
+  // stale measurement would animate from a size the box no longer had.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el) from.current = el.getBoundingClientRect().height;
+  });
+
+  return ref;
+}
+
+/**
  * Yield to the browser between two synchronous stages.
  *
  * React batches state updates inside a single task, so setting three stages in
@@ -201,7 +276,7 @@ function CheckPipeline({
     <div
       role="status"
       aria-live="polite"
-      className="check-pipe-in border-t border-[var(--paper-dim)] bg-[var(--paper)]"
+      className="check-fade-in border-t border-[var(--paper-dim)] bg-[var(--paper)]"
     >
       <div className="px-4 pt-3 pb-1 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium tracking-[0.09em] uppercase text-[#5D6675]">
         {t(done ? "check.stage.done" : "check.stage.working")}
@@ -213,7 +288,7 @@ function CheckPipeline({
           return (
             <li
               key={sKey}
-              className={`grid grid-cols-[20px_1fr_auto] gap-[11px] items-center px-4 py-[7px] text-sm transition-colors ${
+              className={`check-step grid grid-cols-[20px_1fr_auto] gap-[11px] items-center px-4 py-[7px] text-sm ${
                 state === "active"
                   ? "text-[var(--ink)] font-medium"
                   : state === "done"
@@ -223,7 +298,7 @@ function CheckPipeline({
             >
               <span
                 aria-hidden="true"
-                className={`w-3.5 h-3.5 box-border rounded-full border-[1.5px] grid place-items-center ${
+                className={`check-dot w-3.5 h-3.5 box-border rounded-full border-[1.5px] grid place-items-center ${
                   state === "active"
                     ? "border-[#00805B] border-t-transparent motion-safe:animate-spin"
                     : state === "done"
@@ -243,7 +318,7 @@ function CheckPipeline({
               {/* A word, not an icon: the dot already carries the state
                   visually, and this is what a screen reader reads out. */}
               <span
-                className={`font-[family-name:var(--font-mono-ui)] text-[10.5px] tracking-[0.06em] uppercase whitespace-nowrap ${
+                className={`check-meta font-[family-name:var(--font-mono-ui)] text-[10.5px] tracking-[0.06em] uppercase whitespace-nowrap ${
                   state === "active" ? "text-[#00805B]" : state === "done" ? "text-[#8A93A1]" : "text-transparent"
                 }`}
               >
@@ -398,6 +473,11 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const pixelReport =
     emailAnalysis?.tracking.pixelReport.hasTrackingPixels ? emailAnalysis.tracking.pixelReport : null;
   const trackingReport = emailAnalysis?.tracking ?? null;
+
+  // Animates the card between the textarea's height and the panel's. Keyed on
+  // whether the panel is up, so it runs on the swap and on nothing else — not
+  // on every stage row, and not while the reader is typing.
+  const swapRef = useSwapHeight(!!pipeline);
 
   const imageRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -802,7 +882,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // No back link in this header any more: the checked-strip above the
       // results carries it, alongside the record of what was checked, so the
       // two live together instead of the affordance floating on its own.
-      <div className="bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
+      <div className="check-result-in bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
@@ -1035,8 +1115,14 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
           textarea leads and the capture options sit in the footer beside the
           submit — the old arrangement put three bordered cards above the box and
           an "or paste below" divider under them, which made paste the fallback. */}
+      {/* The card animates its own height across the swap. The panel replaces
+          the textarea *and* adds a footer below the button row, so the change is
+          spread across the whole card rather than confined to one row — this is
+          the element whose size actually moves, and animating anything smaller
+          left the 25px jump exactly where it was. */}
       <div
-        className={`bg-[var(--paper)] text-[var(--ink)] rounded-2xl overflow-hidden relative shadow-[0_18px_44px_-20px_rgba(0,0,0,0.6)] transition-shadow ${
+        ref={swapRef}
+        className={`check-swap bg-[var(--paper)] text-[var(--ink)] rounded-2xl overflow-hidden relative shadow-[0_18px_44px_-20px_rgba(0,0,0,0.6)] transition-shadow ${
           dragOver ? "ring-2 ring-[var(--clear)]" : ""
         }`}
         onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
@@ -1062,24 +1148,33 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             the body, and the box must come back with its content and scroll
             position intact. */}
         <label htmlFor="check-content" className="sr-only">{t("check.contentLabel")}</label>
-        <textarea
-          hidden={!!pipeStages}
-          id="check-content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={t("check.placeholder")}
-          rows={4}
-          className="w-full min-h-[118px] px-4 py-4 bg-transparent text-[var(--ink)] placeholder-[#8A93A1] border-0 resize-y text-base leading-relaxed focus:outline-none block"
-        />
+        {/* The textarea and the panel take turns in this one row, and the row
+            animates between their two heights so the card grows and shrinks
+            rather than snapping — it moved 25px in a single frame before, which
+            reads as a flinch at the moment the reader is waiting to be
+            reassured. The textarea stays mounted (hidden) throughout:
+            unmounting a focused field drops focus to the body, and the box must
+            come back with its content and scroll position intact. */}
+        <div className="min-w-0">
+            <textarea
+              hidden={!!pipeStages}
+              id="check-content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={t("check.placeholder")}
+              rows={4}
+              className="w-full min-h-[118px] px-4 py-4 bg-transparent text-[var(--ink)] placeholder-[#8A93A1] border-0 resize-y text-base leading-relaxed focus:outline-none block"
+            />
 
-        {pipeStages && (
-          <CheckPipeline
-            stages={pipeStages}
-            stage={pipelineDone ? null : stage}
-            done={pipelineDone}
-            t={t}
-          />
-        )}
+            {pipeStages && (
+              <CheckPipeline
+                stages={pipeStages}
+                stage={pipelineDone ? null : stage}
+                done={pipelineDone}
+                t={t}
+              />
+            )}
+        </div>
 
         {/* Capture options and the submit share one bar: they are all ways to
             start the same check, and the chips are secondary to pasting. */}
