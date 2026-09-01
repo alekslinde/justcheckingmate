@@ -515,15 +515,16 @@
   "verdict.score.label": "Risk score",
   "verdict.score.caution": "caution",
   "verdict.score.scam": "scam",
-  "verdict.score.band.safe": "Anything under **20** is called clear. This one scored **{score}** — nothing in our rules matched it.",
-  "verdict.score.band.suspicious": "**20 to 44** is called suspicious — enough matched to be worth a second look, not enough to call it. This one scored **{score}**.",
-  "verdict.score.band.scam": "Anything at **45 or above** is called a scam. This one reached **{score}**.",
-  "verdict.score.band.clincher": " One finding alone (**+{points}**) clears it: “{signal}”.",
-  "verdict.score.band.capped": " The findings totalled **{raw}**, so the score stops at its **100** ceiling.",
+  "verdict.score.band.safe": "A low score is the absence of evidence, not evidence of safety. We can only score the tricks we already know.",
+  "verdict.score.band.suspicious": "Enough to distrust, not enough to call. A careful scam scores here — so does a real message having a bad day. Yours to settle.",
+  "verdict.score.band.scam": "Past where honest messages land. A real sender trips a rule now and then, but not this hard.",
+  "verdict.score.band.clincher": " One finding was enough on its own (**+{points}**): “{signal}”.",
+  "verdict.score.band.capped": " The findings came to **{raw}** before we stopped counting at 100.",
   "verdict.tactics.heading": "Tactics in play",
   "verdict.tactics.lede": "Almost every scam leans on the same handful of psychological tricks. Recognise the tactic and the spell breaks.",
   "verdict.tactics.count": "{n} of {total} matched",
   "verdict.tactics.matched": "Matched",
   "verdict.tactics.none": "None of the six common tactics matched this one.",
-  "verdict.tactics.learnMore": "Read how each tactic works →"
+  "verdict.tactics.learnMore": "Read how each tactic works →",
+  "verdict.score.band.scamMany": "Past where honest messages land. Anyone can trip one of these rules; tripping this many isn't bad luck."
 }

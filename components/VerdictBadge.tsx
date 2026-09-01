@@ -223,10 +223,19 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
   // here are scoreToResult's, and the ticks drawn on the track below are the
   // same two numbers. A score with no account of why it means what it means
   // asks to be taken on faith, which is the opposite of publishing weights.
+  // Real findings only — the clamp row is arithmetic about the total, not an
+  // observation, so it must not count towards "how many rules did this trip".
+  const findings = signals.filter((x) => x.source !== "score");
+
+  // The pile-up argument ("tripping this many isn't bad luck") only holds when
+  // the score came from several independent findings. A 45 built from two rows
+  // is still a scam, but claiming a pile-up there is an overclaim the evidence
+  // directly above it disproves.
   const bandKey =
-    score >= 45 ? "verdict.score.band.scam"
-    : score >= 20 ? "verdict.score.band.suspicious"
-    : "verdict.score.band.safe";
+    score >= 45
+      ? findings.length >= 4 ? "verdict.score.band.scamMany" : "verdict.score.band.scam"
+      : score >= 20 ? "verdict.score.band.suspicious"
+      : "verdict.score.band.safe";
 
   // The clamp row records the raw total when the ceiling bit. Explaining the
   // gap matters most at 100, where the headline number is the ceiling rather
@@ -238,8 +247,7 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
   // when that is literally true, and only in the scam band — "X alone clears
   // it" about a score that needed three signals to get there would be a
   // sentence the evidence above it contradicts.
-  const heaviest = signals
-    .filter((x) => x.source !== "score")
+  const heaviest = findings
     .reduce<Signal | null>((a, x) => (a === null || x.points > a.points ? x : a), null);
   const clincher = score >= 45 && heaviest && heaviest.points >= 45 ? heaviest : null;
 
@@ -247,7 +255,7 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
   // explains why the headline is 100 when the evidence adds to more, and the
   // clincher explains why it was a scam regardless of the cap.
   const band =
-    t(bandKey, { score }) +
+    t(bandKey) +
     (clincher
       ? t("verdict.score.band.clincher", { signal: citeSignal(clincher.text), points: clincher.points })
       : "") +
