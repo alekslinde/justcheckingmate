@@ -262,12 +262,25 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
     (raw !== null ? t("verdict.score.band.capped", { raw }) : "");
 
   return (
-    <div>
+    // The score is the sheet's conclusion, so it sits on its own tinted ground
+    // rather than running on as another block of the column. The tint is the
+    // same inset treatment used elsewhere for a panel set into a surface, and
+    // it does the separating that a rule would otherwise have to.
+    //
+    // Negative margins so the panel reaches the sheet's edges: it is inside a
+    // padded column, and a full-bleed band reads as a section of the sheet
+    // where an inset card would read as one more item in the list.
+    <div className="-mx-5 bg-black/[0.22] px-5 py-4">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className={EYEBROW}>{t("verdict.score.label")}</h3>
+        {/* Not the eyebrow treatment used elsewhere: this labels the sheet's
+            headline figure, so it carries the weight of a section heading
+            rather than the whisper of a field label. */}
+        <h3 className="font-[family-name:var(--font-mono-ui)] text-[12px] font-medium uppercase tracking-[0.08em] text-[var(--text-dim)]">
+          {t("verdict.score.label")}
+        </h3>
         <div className="font-[family-name:var(--font-mono-ui)] tabular-nums">
-          <span className="text-[26px] font-semibold text-[var(--foreground)]">{score}</span>
-          <span className="text-[12px] text-[var(--faint)]">/100</span>
+          <span className="text-[27px] font-semibold text-[var(--foreground)]">{score}</span>
+          <span className="ml-0.5 text-[14px] text-[var(--faint)]">/100</span>
         </div>
       </div>
       <div
@@ -276,15 +289,15 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={t("verdict.riskScore", { n: score })}
-        className="relative mt-1.5 h-1.5 w-full rounded-full bg-[var(--ink-3)]"
+        className="relative mt-2.5 h-[7px] w-full rounded-full bg-[var(--ink-3)]"
       >
-        <div className={`h-1.5 rounded-full transition-[width] duration-500 ${bar}`} style={{ width: `${score}%` }} />
+        <div className={`h-[7px] rounded-full transition-[width] duration-500 ${bar}`} style={{ width: `${score}%` }} />
         {/* 20 and 45 are the verdict boundaries in scoreToResult. */}
         {[20, 45].map((at) => (
-          <span key={at} className="absolute top-0 h-1.5 w-px bg-[var(--ink)]" style={{ left: `${at}%` }} aria-hidden="true" />
+          <span key={at} className="absolute top-0 h-[7px] w-px bg-[var(--ink)]" style={{ left: `${at}%` }} aria-hidden="true" />
         ))}
       </div>
-      <div className="relative mt-1 h-3" aria-hidden="true">
+      <div className="relative mt-1.5 h-4" aria-hidden="true">
         {([[20, "verdict.score.caution"], [45, "verdict.score.scam"]] as const).map(([at, key]) => (
           <span
             key={at}
@@ -295,7 +308,11 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
           </span>
         ))}
       </div>
-      <p className="mt-3 border-t border-[var(--rule)] pt-3 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+      {/* Inside the tinted band, under a rule: the sentence explains this
+          score, so it belongs to the panel rather than floating after it. The
+          rule is the panel's own divider, not a second edge — a full-bleed line
+          here cut the band in two instead of separating what it holds. */}
+      <p className="mt-3 border-t border-[var(--rule)]/60 pt-3 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
         {bold(band)}
       </p>
     </div>
