@@ -6,6 +6,7 @@ import {
   defangFlag,
   defangValue,
   formatVerdictEmail,
+  pooledSignals,
   VERDICT_RANK,
 } from "@/lib/verdictSummary";
 import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
@@ -347,5 +348,59 @@ describe("formatVerdictEmail — explaining why", () => {
     });
     expect(email.html).not.toMatch(/src\s*=\s*["']?https?:/i);
     expect(email.html).not.toMatch(/<link|@import|url\(/i);
+  });
+});
+
+describe("pooledSignals", () => {
+  const sig = (text: string, points: number, source = "message") =>
+    ({ text, points, source }) as never;
+
+  it("returns nothing when there are no identifiers", () => {
+    expect(pooledSignals([])).toEqual([]);
+  });
+
+  it("pools findings across every identifier, not just the worst one", () => {
+    // The case this exists for: a parcel-fee SMS carrying a dodgy link scores
+    // as two identifiers, and showing only the message's rows hid the URL
+    // findings — the most concrete evidence on the page.
+    const results = [
+      ident("message", "likely_scam", "", 95, [], {
+        signals: [sig("Urgency language detected", 20), sig("Contains link", 15)],
+      }),
+      ident("url", "likely_scam", "", 45, [], {
+        signals: [sig("Dodgy top-level domain (.top)", 30, "link"), sig("No HTTPS", 15, "link")],
+      }),
+    ];
+    expect(pooledSignals(results).map((s) => s.text)).toEqual([
+      "Urgency language detected",
+      "Contains link",
+      "Dodgy top-level domain (.top)",
+      "No HTTPS",
+    ]);
+  });
+
+  it("collapses a finding reported by two identifiers to one row", () => {
+    const results = [
+      ident("message", "suspicious", "", 20, [], { signals: [sig("No HTTPS", 15)] }),
+      ident("url", "suspicious", "", 20, [], { signals: [sig("No HTTPS", 15, "link")] }),
+    ];
+    expect(pooledSignals(results)).toHaveLength(1);
+  });
+
+  it("sorts the clamp row last, after every observation", () => {
+    // The clamp is arithmetic about the total, so it belongs at the bottom of
+    // the column it explains rather than interleaved with the findings.
+    const results = [
+      ident("message", "likely_scam", "", 100, [], {
+        signals: [sig("Signals total 130 — the score is capped at 100", -30, "score")],
+      }),
+      ident("url", "likely_scam", "", 45, [], { signals: [sig("No HTTPS", 15, "link")] }),
+    ];
+    expect(pooledSignals(results).map((s) => s.source)).toEqual(["link", "score"]);
+  });
+
+  it("tolerates an identifier with no signals at all", () => {
+    const results = [ident("phone", "safe", "0400000000", 0)];
+    expect(pooledSignals(results)).toEqual([]);
   });
 });

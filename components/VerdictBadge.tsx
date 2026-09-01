@@ -44,9 +44,9 @@ function Evidence({ signals }: { signals: Signal[] }) {
 
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3 mb-2">
-        <h3 className={EYEBROW}>{t("verdict.evidence.heading")}</h3>
-      </div>
+      <p className="mb-2 text-[13px] leading-relaxed text-[var(--text-dim)]">
+        {t("verdict.evidence.caption")}
+      </p>
       <ul className="grid gap-px bg-[var(--rule)] rounded-lg overflow-hidden border border-[var(--rule)]">
         {signals.map((s, i) => (
           <li key={i} className="bg-[var(--ink-2)] px-3.5 py-2.5 flex items-start gap-3">
@@ -246,7 +246,7 @@ function RiskScore({ score, bar }: { score: number; bar: string }) {
 // recognises them here. Unmatched tactics stay visible rather than being
 // filtered out: "we looked for six things and found four" says more than a list
 // of four, and it teaches the other two exist.
-function Tactics({ signals }: { signals: Signal[] }) {
+export function Tactics({ signals }: { signals: Signal[] }) {
   const { t } = useLang();
   const found = matchedTactics(signals);
 
@@ -258,6 +258,9 @@ function Tactics({ signals }: { signals: Signal[] }) {
           {t("verdict.tactics.count", { n: found.size, total: TACTIC_IDS.length })}
         </span>
       </div>
+      <p className="mb-3 max-w-[46ch] text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+        {t("verdict.tactics.lede")}
+      </p>
       <ul className="grid gap-px bg-[var(--rule)] rounded-lg overflow-hidden border border-[var(--rule)]">
         {TACTIC_IDS.map((id) => {
           const on = found.has(id);
@@ -284,6 +287,17 @@ function Tactics({ signals }: { signals: Signal[] }) {
           );
         })}
       </ul>
+      {found.size === 0 && (
+        <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-dim)]">
+          {t("verdict.tactics.none")}
+        </p>
+      )}
+      <a
+        href="/learn#tactics"
+        className="mt-2.5 inline-block text-[13px] text-[var(--clear)] hover:underline underline-offset-2"
+      >
+        {t("verdict.tactics.learnMore")}
+      </a>
     </div>
   );
 }
@@ -329,11 +343,6 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
             {details}
           </p>
         )}
-
-        {/* Not on a clean result. The panel exists to name what was found, and
-            "1 of 6 matched" under a heading that says Looks good reads as a
-            contradiction — the reader cannot tell which half to believe. */}
-        {signals.length > 0 && result.verdict !== "safe" && <Tactics signals={signals} />}
 
         {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
           <ActionSteps verdict={result.verdict} />

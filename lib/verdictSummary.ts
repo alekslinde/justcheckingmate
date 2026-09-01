@@ -10,6 +10,7 @@
 
 import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
 import type { RegionCoverage } from "@justcheckingmate/engine/regions";
+import type { Signal } from "@justcheckingmate/engine/engineTypes";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 import { TrackingFinding } from "@/lib/emailTracking";
 import { defang, defangEmail, defangPhone, defangText } from "@justcheckingmate/engine/urlSanitizer";
@@ -368,4 +369,35 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     : "Result: the email you forwarded";
 
   return { subject, text, html };
+}
+
+// Every finding across every identifier, as one list of evidence.
+//
+// The results page used to hand the verdict card only the *worst* identifier's
+// signals, which quietly dropped the rest. A parcel-fee SMS carrying a dodgy
+// link scores as two identifiers — the message and the URL — and showing only
+// the message's rows hid the ".top domain" and "no HTTPS" findings that are the
+// most concrete evidence on the page. The overall score is composed from all of
+// them, so the evidence under it has to be too, or the arithmetic doesn't add
+// up in front of a reader we explicitly invite to check it.
+//
+// Ordering: findings first in identifier order, then the clamp row last if any
+// identifier hit its ceiling — it is arithmetic about the total, so it belongs
+// at the bottom of the column it explains, not interleaved with observations.
+//
+// Duplicate texts are collapsed. The same URL appearing in both the message
+// scan and its own scan produces the same sentence twice, and one observation
+// listed twice reads as two independent findings.
+export function pooledSignals(results: AnalyzedIdentifier[]): Signal[] {
+  const seen = new Set<string>();
+  const findings: Signal[] = [];
+  const clamps: Signal[] = [];
+  for (const r of results) {
+    for (const s of r.result.signals ?? []) {
+      if (seen.has(s.text)) continue;
+      seen.add(s.text);
+      (s.source === "score" ? clamps : findings).push(s);
+    }
+  }
+  return [...findings, ...clamps];
 }

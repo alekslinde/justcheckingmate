@@ -7,14 +7,14 @@ import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSan
 import { parseEmailHeaders, summariseAuth } from "@justcheckingmate/engine/emailHeaders";
 import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
-import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage } from "@/lib/verdictSummary";
+import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage, pooledSignals } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
 import { saveCheckDraft, readCheckDraft, clearCheckDraft } from "@/lib/checkDraft";
 import { useBugReport } from "./BugReportProvider";
-import VerdictBadge from "./VerdictBadge";
+import VerdictBadge, { Tactics } from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
 import ReportForm from "./ReportForm";
 
@@ -431,7 +431,7 @@ interface CheckFlowProps {
 
 export default function CheckFlow({ initialContent = "", surface = "web", onStepChange, onChecked }: CheckFlowProps = {}) {
   const { t } = useLang();
-  const { reportFailure } = useBugReport();
+  const { reportFailure, openManual } = useBugReport();
   const [step, setStep] = useState<Step>("input");
   // Seeded from the share sheet only. The Back-restore is applied after
   // hydration instead — see the effect below.
@@ -878,12 +878,39 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
 
   // ── Result step ───────────────────────────────────────────────────────────────
   if (step === "result") {
+    // Evidence pools across every identifier, so both columns derive from one
+    // list — the sheet lists the findings, the rail names the tactics behind
+    // them. Computed here rather than inside the sheet because the rail is its
+    // sibling, not its child.
+    const allSignals = pooledSignals(results);
+    // The rail earns its column only when there is evidence to interpret. On a
+    // clean result "1 of 6 matched" beside a heading reading "Looks good" reads
+    // as a contradiction, and the reader cannot tell which half to believe.
+    const showTactics = allSignals.length > 0 && composeVerdict(results, pixelReport)?.verdict !== "safe";
+
     return (
       // No back link in this header any more: the checked-strip above the
       // results carries it, alongside the record of what was checked, so the
       // two live together instead of the affordance floating on its own.
-      <div className="check-result-in bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
+      <div className="check-result-in">
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
+
+        {/* Section label above both columns, so "Evidence" names the whole
+            payoff rather than one panel inside it. Only when there is evidence
+            to name: on a clean result it would head a section whose entire
+            content is that we found nothing. */}
+        {allSignals.length > 0 && (
+          <p className="mb-3 flex items-center gap-2.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-dim)]">
+            {t("verdict.evidence.heading")}
+            <span aria-hidden="true" className="h-px flex-1 bg-[var(--rule)]" />
+          </p>
+        )}
+
+        {/* The verdict leads at width; the tactics legend sits alongside as
+            support and sticks while the evidence column scrolls. One column
+            below lg, where a 300px rail would squeeze both. */}
+        <div className={showTactics ? "grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] lg:items-start" : "grid gap-5"}>
+          <div className="min-w-0 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <div className="p-6 space-y-4">
           {results.length === 0 ? (
             // Email source can parse to a sender analysis even when there are no
@@ -898,7 +925,12 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             const worst = results.reduce((acc, r) =>
               VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
             );
-            const overall = { ...worst.result, ...composed };
+            // Evidence pools across identifiers: the score is composed from all
+            // of them, so the rows under it have to be too. Passing only the
+            // worst identifier's signals dropped the URL findings from a
+            // link-carrying SMS — the most concrete evidence on the page.
+            const signals = pooledSignals(results);
+            const overall = { ...worst.result, ...composed, signals };
 
             return (
               <>
@@ -1064,33 +1096,57 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             );
           })()}
 
-          {(() => {
-            // "Clean" means nothing flagged it — every identifier safe, no
-            // tracking pixel, and no sender-spoofing flags. A pixel or a flag
-            // pushes the verdict up, so the CTA matches that (the stronger
-            // "report", not the softer "report anyway").
-            const clean = isClean(results, pixelReport, emailAnalysis?.identityFlags ?? []);
-            return (
-              <button
-                onClick={() => goForward("report")}
-                className={`w-full py-3 px-6 font-bold rounded-lg transition-colors text-sm uppercase tracking-wide flex items-center justify-center gap-2 ${
-                  clean
-                    ? "bg-[var(--ink-3)] hover:bg-gray-700 text-gray-300 border border-[var(--rule)]"
-                    : "bg-red-800 hover:bg-red-700 text-white"
-                }`}
-              >
-                {clean ? t("check.reportAnyway") : t("check.report")}
-              </button>
-            );
-          })()}
+          {/* One action row rather than a stack of full-width buttons. Report is
+              the primary act and leads; share, re-check and "wrong verdict" are
+              peers beside it. Keeping them on one rule-topped row makes the set
+              read as "what you can do next" instead of three separate demands.
+              "Wrong verdict?" belongs here specifically: the moment someone
+              disagrees with us is the moment we most need to hear about it, and
+              burying that behind the floating bug button loses the correction. */}
+          <div className="flex flex-wrap gap-2 border-t border-[var(--rule)] pt-4">
+            {(() => {
+              // "Clean" means nothing flagged it — every identifier safe, no
+              // tracking pixel, and no sender-spoofing flags. A pixel or a flag
+              // pushes the verdict up, so the CTA matches that (the stronger
+              // "report", not the softer "report anyway").
+              const clean = isClean(results, pixelReport, emailAnalysis?.identityFlags ?? []);
+              return (
+                <button
+                  onClick={() => goForward("report")}
+                  className={`rounded-lg px-3.5 py-2.5 text-[13.5px] font-medium transition-colors ${
+                    clean
+                      ? "border border-[var(--rule)] bg-[var(--ink-3)] text-[var(--text-dim)] hover:bg-gray-700"
+                      : "bg-red-800 text-white hover:bg-red-700"
+                  }`}
+                >
+                  {clean ? t("check.reportAnyway") : t("check.report")}
+                </button>
+              );
+            })()}
 
-          {results.length > 0 && (
+            {results.length > 0 && (
+              <button
+                onClick={shareResults}
+                className="rounded-lg border border-[var(--ink-3)] bg-[var(--ink-3)] px-3.5 py-2.5 text-[13.5px] font-medium text-[var(--foreground)] transition-colors hover:border-[#3B4759]"
+              >
+                {shareCopied ? t("check.shareCopied") : t("check.share")}
+              </button>
+            )}
+
             <button
-              onClick={shareResults}
-              className="w-full py-2.5 px-6 font-semibold rounded-lg transition-colors text-sm text-gray-300 bg-[var(--ink-3)] hover:bg-gray-700 border border-[var(--rule)] flex items-center justify-center gap-2"
+              onClick={openManual}
+              className="rounded-lg border border-[var(--scam)]/50 bg-transparent px-3.5 py-2.5 text-[13.5px] font-medium text-[var(--scam-text)] transition-colors hover:bg-[var(--scam)]/10"
             >
-              {shareCopied ? t("check.shareCopied") : t("check.share")}
+              {t("check.wrongVerdict")}
             </button>
+          </div>
+        </div>
+          </div>
+
+          {showTactics && (
+            <aside className="min-w-0 lg:sticky lg:top-[18px]">
+              <Tactics signals={allSignals} />
+            </aside>
           )}
         </div>
       </div>

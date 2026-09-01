@@ -61,7 +61,7 @@ export default function CheckStage({
           record, and it sits above the results because it is the question the
           verdict below is answering. */}
       {done && checked && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-[var(--rule)] bg-[var(--ink-2)] px-3.5 py-2.5 max-w-[860px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-[var(--rule)] bg-[var(--ink-2)] px-3.5 py-2.5">
           <span className="font-[family-name:var(--font-mono-ui)] text-[10.5px] font-medium uppercase tracking-[0.1em] text-[var(--faint)] shrink-0">
             {t("check.checked")}
           </span>
@@ -115,13 +115,13 @@ export default function CheckStage({
               : "grid gap-5 max-w-[760px]"
         }
       >
-        {/* Capped once the fold has collapsed. Full width was the point — the
-            verdict had been rendering in half a page — but 1180px of unbroken
-            prose runs to ~140 characters a line, and the breakdown rows push
-            their value so far from their label the two stop reading as a pair.
-            860px is wide enough for the risk bar and the action list to have
-            real presence, and narrow enough to still be read. */}
-        <div className={done ? "min-w-0 max-w-[860px]" : "min-w-0"}>
+        {/* Not capped once the fold has collapsed. The cap existed when the
+            verdict was one column of prose — 1180px of unbroken text runs to
+            ~140 characters a line. The results now split into an evidence sheet
+            and a tactics rail, which divide the width between them, so each
+            column lands at a readable measure on its own and the old 860px cap
+            only starved both. */}
+        <div className="min-w-0">
           <CheckFlow
             initialContent={initialContent}
             surface={surface}
