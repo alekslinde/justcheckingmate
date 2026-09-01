@@ -909,8 +909,17 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
 
         {/* The verdict leads at width; the tactics legend sits alongside as
             support and sticks while the evidence column scrolls. One column
-            below lg, where a 300px rail would squeeze both. */}
-        <div className={showTactics ? "grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] lg:items-start" : "grid gap-5"}>
+            below 900px, where a 300px rail would squeeze both.
+            The gap tracks the viewport rather than sitting at a fixed 20px:
+            at desktop width two fixed-20px columns read as one crowded block
+            instead of a sheet with a rail beside it. */}
+        <div
+          className={
+            showTactics
+              ? "grid gap-[clamp(20px,2.6vw,32px)] min-[900px]:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] min-[900px]:items-start"
+              : "grid gap-[clamp(20px,2.6vw,32px)]"
+          }
+        >
           <div className="min-w-0 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
         <div>
           {results.length === 0 ? (
@@ -1151,7 +1160,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             // A pt here was an attempt to put the rail's heading on the
             // verdict's baseline, which it cannot do — the verdict is a
             // display face with its own leading, so the two never met.
-            <aside className="min-w-0 lg:sticky lg:top-[18px]">
+            <aside className="min-w-0 min-[900px]:sticky min-[900px]:top-[18px]">
               <Tactics signals={allSignals} />
             </aside>
           )}
