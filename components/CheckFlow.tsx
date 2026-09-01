@@ -912,12 +912,12 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             below lg, where a 300px rail would squeeze both. */}
         <div className={showTactics ? "grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.9fr)] lg:items-start" : "grid gap-5"}>
           <div className="min-w-0 bg-[var(--ink-2)] border border-[var(--rule)] rounded-2xl overflow-hidden">
-        <div className="p-5 space-y-5">
+        <div>
           {results.length === 0 ? (
             // Email source can parse to a sender analysis even when there are no
             // URL/phone/email identifiers to score — in that case the analysis
             // card below carries the payoff, so don't claim there's nothing.
-            !hasSender && !trackingReport?.hasTracking && <p className="text-sm text-gray-400">{t("check.nothing")}</p>
+            !hasSender && !trackingReport?.hasTracking && <p className="px-5 py-5 text-sm text-gray-400">{t("check.nothing")}</p>
           ) : (() => {
             // One overall verdict drives the page — composeVerdict applies the
             // worst-identifier-wins + tracking-pixel-nudge rules, shared with
@@ -937,11 +937,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               <>
                 {/* Coverage honesty — sits above the verdict so it frames how the
                     result should be read, rather than being a footnote to it. */}
-                <CoverageNotice
-                  coverage={overallCoverage(results)}
+                <div className="px-5 pt-5">
+                  <CoverageNotice
+                    coverage={overallCoverage(results)}
                   region={region}
-                  onRegionChange={(code) => runCheck(code)}
-                />
+                    onRegionChange={(code) => runCheck(code)}
+                  />
+                </div>
 
                 {/* The verdict leads the sheet directly. It had an "Overall
                     verdict" eyebrow above it, which labelled the one element on
@@ -951,7 +953,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
                     small status dot. No competing card colours. */}
-                <div className="space-y-2 border-t border-[var(--rule)] pt-5">
+                <div className="space-y-2 border-t border-[var(--rule)] px-5 py-4">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                     {t("verdict.breakdown.heading")}
                   </div>
@@ -1021,7 +1023,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               this was email source that came up clean. Findings carry their own
               copy; the values they surface are already non-clickable text. */}
           {trackingReport && (trackingReport.hasTracking || hasSender) && (
-            <div className="space-y-2 border-t border-[var(--rule)] pt-5">
+            <div className="space-y-2 border-t border-[var(--rule)] px-5 py-4">
               <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                 {t("tracking.heading")}
               </div>
@@ -1055,7 +1057,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             const { headers, identityFlags: flags } = emailAnalysis;
             const authSummary = summariseAuth(headers);
             return (
-              <div className="space-y-2 border-t border-[var(--rule)] pt-5">
+              <div className="space-y-2 border-t border-[var(--rule)] px-5 py-4">
                 <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                   {t("email.analysis.heading")}
                 </div>
@@ -1102,7 +1104,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               "Wrong verdict?" belongs here specifically: the moment someone
               disagrees with us is the moment we most need to hear about it, and
               burying that behind the floating bug button loses the correction. */}
-          <div className="flex flex-wrap gap-2 border-t border-[var(--rule)] pt-5">
+          <div className="flex flex-wrap gap-2 border-t border-[var(--rule)] bg-black/[0.12] px-5 py-3.5">
             {(() => {
               // "Clean" means nothing flagged it — every identifier safe, no
               // tracking pixel, and no sender-spoofing flags. A pixel or a flag
@@ -1112,10 +1114,10 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               return (
                 <button
                   onClick={() => goForward("report")}
-                  className={`rounded-lg px-3.5 py-2.5 text-[13.5px] font-medium transition-colors ${
+                  className={`rounded-lg border px-3.5 py-2.5 text-[13.5px] font-medium transition-colors hover:border-[#3B4759] ${
                     clean
-                      ? "border border-[var(--rule)] bg-[var(--ink-3)] text-[var(--text-dim)] hover:bg-gray-700"
-                      : "bg-red-800 text-white hover:bg-red-700"
+                      ? "border-[var(--rule)] bg-transparent text-[var(--text-dim)]"
+                      : "border-[var(--ink-3)] bg-[var(--ink-3)] text-[var(--foreground)]"
                   }`}
                 >
                   {clean ? t("check.reportAnyway") : t("check.report")}
@@ -1126,7 +1128,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             {results.length > 0 && (
               <button
                 onClick={shareResults}
-                className="rounded-lg border border-[var(--ink-3)] bg-[var(--ink-3)] px-3.5 py-2.5 text-[13.5px] font-medium text-[var(--foreground)] transition-colors hover:border-[#3B4759]"
+                className="rounded-lg border border-[var(--rule)] bg-transparent px-3.5 py-2.5 text-[13.5px] font-medium text-[var(--foreground)] transition-colors hover:border-[#3B4759]"
               >
                 {shareCopied ? t("check.shareCopied") : t("check.share")}
               </button>

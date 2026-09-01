@@ -13,12 +13,12 @@ import { bold } from "@/lib/richText";
 // about the message — so it takes the neutral rule rather than a warning hue.
 const VERDICTS: Record<
   CheckResult["verdict"],
-  { dot: string; text: string; bar: string; edge: string }
+  { dot: string; text: string; bar: string; edge: string; glow: string }
 > = {
-  safe:        { dot: "bg-[var(--clear)]",   text: "text-[var(--clear)]",     bar: "bg-[var(--clear)]",   edge: "border-[var(--clear)]/35" },
-  suspicious:  { dot: "bg-[var(--caution)]", text: "text-[var(--caution)]",   bar: "bg-[var(--caution)]", edge: "border-[var(--caution)]/35" },
-  likely_scam: { dot: "bg-[var(--scam)]",    text: "text-[var(--scam-text)]", bar: "bg-[var(--scam)]",    edge: "border-[var(--scam)]/35" },
-  unknown:     { dot: "bg-[var(--faint)]",   text: "text-[var(--text-dim)]",  bar: "bg-[var(--faint)]",   edge: "border-[var(--rule)]" },
+  safe:        { dot: "bg-[var(--clear)]",   text: "text-[var(--clear)]",     bar: "bg-[var(--clear)]",   edge: "border-[var(--clear)]/35",   glow: "ring-[rgba(0,166,118,0.18)]" },
+  suspicious:  { dot: "bg-[var(--caution)]", text: "text-[var(--caution)]",   bar: "bg-[var(--caution)]", edge: "border-[var(--caution)]/35", glow: "ring-[rgba(232,163,61,0.18)]" },
+  likely_scam: { dot: "bg-[var(--scam)]",    text: "text-[var(--scam-text)]", bar: "bg-[var(--scam)]",    edge: "border-[var(--scam)]/35",    glow: "ring-[rgba(214,69,61,0.18)]" },
+  unknown:     { dot: "bg-[var(--faint)]",   text: "text-[var(--text-dim)]",  bar: "bg-[var(--faint)]",   edge: "border-[var(--rule)]",       glow: "ring-[rgba(124,135,154,0.18)]" },
 };
 
 const EYEBROW =
@@ -42,30 +42,32 @@ function Evidence({ signals }: { signals: Signal[] }) {
   const { t } = useLang();
   if (!signals.length) return null;
 
+  // Rows run edge to edge on dashed rules rather than sitting in a bordered
+  // card. The sheet is the card; a second frame inside it drew a box around the
+  // evidence and another around the box. Dashed rules separate items within one
+  // list, where a solid rule would read as a break between sections.
   return (
-    <div>
-      <p className="mb-2 text-[13px] leading-relaxed text-[var(--text-dim)]">
-        {t("verdict.evidence.caption")}
-      </p>
-      <ul className="grid gap-px bg-[var(--rule)] rounded-lg overflow-hidden border border-[var(--rule)]">
-        {signals.map((s, i) => (
-          <li key={i} className="bg-[var(--ink-2)] px-3.5 py-2.5 flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <div className={`${EYEBROW} mb-0.5`}>{t(SOURCE_KEY[s.source])}</div>
-              <p className="text-[13.5px] leading-relaxed text-[var(--foreground)]">{defangText(s.text)}</p>
-            </div>
-            {/* Tabular figures so the column of weights lines up as a column. */}
-            <span
-              className={`shrink-0 font-[family-name:var(--font-mono-ui)] text-[12.5px] tabular-nums ${
-                s.points > 0 ? "text-[var(--caution)]" : s.points < 0 ? "text-[var(--clear)]" : "text-[var(--faint)]"
-              }`}
-            >
-              {s.points > 0 ? `+${s.points}` : s.points < 0 ? `${s.points}` : "—"}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul className="py-1">
+      {signals.map((s, i) => (
+        <li
+          key={i}
+          className="grid grid-cols-[1fr_auto] items-baseline gap-3.5 border-b border-dashed border-white/[0.09] px-5 py-2.5 last:border-b-0"
+        >
+          <div className="min-w-0">
+            <div className={`${EYEBROW} mb-[3px]`}>{t(SOURCE_KEY[s.source])}</div>
+            <p className="text-[14px] leading-relaxed text-[var(--foreground)]">{defangText(s.text)}</p>
+          </div>
+          {/* Tabular figures so the column of weights lines up as a column. */}
+          <span
+            className={`shrink-0 whitespace-nowrap font-[family-name:var(--font-mono-ui)] text-[13px] font-semibold tabular-nums ${
+              s.points > 0 ? "text-[var(--caution)]" : s.points < 0 ? "text-[var(--clear)]" : "text-[var(--faint)]"
+            }`}
+          >
+            {s.points > 0 ? `+${s.points}` : s.points < 0 ? `${s.points}` : "—"}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -89,16 +91,25 @@ function ActionSteps({ verdict }: { verdict: "suspicious" | "likely_scam" }) {
         ];
 
   const accentCls = verdict === "likely_scam" ? "text-[var(--scam-text)]" : "text-[var(--caution)]";
-  const edgeCls   = verdict === "likely_scam" ? "border-[var(--scam)]/30" : "border-[var(--caution)]/30";
 
+  // A band of the sheet rather than a card set into it. The steps are what the
+  // verdict asks of you, so they carry a section heading on a top rule — an
+  // inset panel with a coloured edge made them look like an aside.
   return (
-    <div className={`rounded-lg border ${edgeCls} bg-[var(--ink)] p-4 space-y-2.5`}>
-      <p className={`${EYEBROW} ${accentCls}`}>{heading}</p>
-      <ol className="space-y-2 list-none">
+    <div className="border-t border-[var(--rule)] px-5 py-4">
+      <h3
+        className={`mb-3 font-[family-name:var(--font-mono-ui)] text-[11px] font-semibold uppercase tracking-[0.09em] ${accentCls}`}
+      >
+        {heading}
+      </h3>
+      <ol className="grid list-none gap-2.5">
         {steps.map((step, i) => (
-          <li key={i} className="flex items-start gap-2.5 text-[13.5px] leading-relaxed text-[var(--foreground)]">
+          <li
+            key={i}
+            className="grid grid-cols-[20px_1fr] items-baseline gap-2.5 text-[14.5px] leading-relaxed text-[var(--foreground)]"
+          >
             <span
-              className={`shrink-0 font-[family-name:var(--font-mono-ui)] tabular-nums ${accentCls}`}
+              className={`font-[family-name:var(--font-mono-ui)] text-[12px] font-semibold tabular-nums ${accentCls}`}
               aria-hidden="true"
             >
               {i + 1}
@@ -137,7 +148,7 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
   const risk = SPOOFING_RISK_STYLE[intel.spoofingRisk];
 
   return (
-    <div className="border-t border-[var(--rule)] pt-4 space-y-3">
+    <div className="space-y-3 border-t border-[var(--rule)] px-5 py-4">
       <div className={EYEBROW}>
         {t("phone.heading")}
       </div>
@@ -216,7 +227,7 @@ function citeSignal(text: string): string {
 
 // The thresholds are drawn on the track rather than described underneath it, so
 // "why is this a scam and not merely suspicious" is answerable by looking.
-function RiskScore({ score, bar, signals }: { score: number; bar: string; signals: Signal[] }) {
+function RiskScore({ score, bar, tone, signals }: { score: number; bar: string; tone: string; signals: Signal[] }) {
   const { t } = useLang();
 
   // Which band the score landed in, in the engine's own terms — the boundaries
@@ -266,21 +277,20 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
     // rather than running on as another block of the column. The tint is the
     // same inset treatment used elsewhere for a panel set into a surface, and
     // it does the separating that a rule would otherwise have to.
-    //
-    // Negative margins so the panel reaches the sheet's edges: it is inside a
-    // padded column, and a full-bleed band reads as a section of the sheet
-    // where an inset card would read as one more item in the list.
-    <div className="-mx-5 bg-black/[0.22] px-5 py-4">
-      <div className="flex items-baseline justify-between gap-3">
+    <div className="bg-black/[0.22] px-5 pb-5 pt-4">
+      <div className="flex items-baseline justify-between gap-3 font-[family-name:var(--font-mono-ui)]">
         {/* Not the eyebrow treatment used elsewhere: this labels the sheet's
             headline figure, so it carries the weight of a section heading
             rather than the whisper of a field label. */}
-        <h3 className="font-[family-name:var(--font-mono-ui)] text-[12px] font-medium uppercase tracking-[0.08em] text-[var(--text-dim)]">
+        <h3 className="text-[12px] font-medium uppercase tracking-[0.08em] text-[var(--text-dim)]">
           {t("verdict.score.label")}
         </h3>
-        <div className="font-[family-name:var(--font-mono-ui)] tabular-nums">
-          <span className="text-[27px] font-semibold text-[var(--foreground)]">{score}</span>
-          <span className="ml-0.5 text-[14px] text-[var(--faint)]">/100</span>
+        {/* The figure takes the verdict's colour. It is the same statement as
+            the headline above it, said as a number — leaving it neutral made
+            the sheet's loudest element the one that declined to commit. */}
+        <div className="tabular-nums">
+          <span className={`text-[27px] font-semibold ${tone}`}>{score}</span>
+          <span className="ml-0.5 text-[14px] text-[var(--text-dim)]">/100</span>
         </div>
       </div>
       <div
@@ -289,30 +299,32 @@ function RiskScore({ score, bar, signals }: { score: number; bar: string; signal
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={t("verdict.riskScore", { n: score })}
-        className="relative mt-2.5 h-[7px] w-full rounded-full bg-[var(--ink-3)]"
+        className="relative mt-3 h-[7px] w-full overflow-hidden rounded-[4px] bg-[var(--ink-3)]"
       >
-        <div className={`h-[7px] rounded-full transition-[width] duration-500 ${bar}`} style={{ width: `${score}%` }} />
-        {/* 20 and 45 are the verdict boundaries in scoreToResult. */}
-        {[20, 45].map((at) => (
-          <span key={at} className="absolute top-0 h-[7px] w-px bg-[var(--ink)]" style={{ left: `${at}%` }} aria-hidden="true" />
-        ))}
+        <div
+          className={`h-[7px] rounded-[4px] transition-[width] duration-700 ease-out ${bar}`}
+          style={{ width: `${score}%` }}
+        />
       </div>
-      <div className="relative mt-1.5 h-4" aria-hidden="true">
+      {/* The boundaries are drawn on the track, not described under it: a tick
+          rising into the bar ties each label to the point it marks, where two
+          floating numbers left the reader measuring by eye. 20 and 45 are
+          scoreToResult's own thresholds. */}
+      <div className="relative mt-[5px] h-5" aria-hidden="true">
         {([[20, "verdict.score.caution"], [45, "verdict.score.scam"]] as const).map(([at, key]) => (
           <span
             key={at}
-            className="absolute font-[family-name:var(--font-mono-ui)] text-[10px] text-[var(--faint)] -translate-x-1/2"
+            className="absolute top-0 -translate-x-1/2 whitespace-nowrap font-[family-name:var(--font-mono-ui)] text-[10px] text-[var(--faint)]"
             style={{ left: `${at}%` }}
           >
+            <span className="absolute -top-[9px] left-1/2 h-[6px] w-px bg-[var(--ink-3)]" />
             {at} · {t(key)}
           </span>
         ))}
       </div>
       {/* Inside the tinted band, under a rule: the sentence explains this
-          score, so it belongs to the panel rather than floating after it. The
-          rule is the panel's own divider, not a second edge — a full-bleed line
-          here cut the band in two instead of separating what it holds. */}
-      <p className="mt-3 border-t border-[var(--rule)]/60 pt-3 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+          score, so it belongs to the panel rather than floating after it. */}
+      <p className="mt-3 border-t border-[var(--rule)] pt-3 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
         {bold(band)}
       </p>
     </div>
@@ -400,39 +412,45 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
     // already carries one. Nesting a second bordered card inside it drew a box
     // around the verdict and another around the box, and the reader has to work
     // out which of the two frames means something.
-    <div className="overflow-hidden">
+    //
+    // Sections are full-bleed bands separated by rules rather than a padded
+    // column of cards: a receipt reads top to bottom as one document, and each
+    // band owns its own padding so the tinted ones reach the sheet's edges.
+    <div>
 
       {/* Header. A dot rather than an emoji: emoji render differently on every
-          platform and carry a tone the verdict has to set itself. */}
-      <div className="pb-5">
-        <div className="flex items-start gap-2.5">
-          <span className={`mt-[9px] h-2 w-2 shrink-0 rounded-full ${v.dot}`} aria-hidden="true" />
-          <div className="min-w-0">
-            <h2 className={`font-[family-name:var(--font-display)] text-[23px] leading-tight tracking-[-0.01em] ${v.text}`}>
-              {label}
-            </h2>
-            <p className="mt-1 text-[14px] leading-relaxed text-[var(--text-dim)]">{sub}</p>
-          </div>
+          platform and carry a tone the verdict has to set itself. The halo
+          around it is the same weight of emphasis the headline carries. */}
+      <div className="flex items-start gap-4 border-b border-[var(--rule)] px-5 py-5">
+        <span
+          className={`mt-[7px] h-[11px] w-[11px] shrink-0 rounded-full ring-4 ${v.dot} ${v.glow}`}
+          aria-hidden="true"
+        />
+        <div className="min-w-0">
+          <h2
+            className={`font-[family-name:var(--font-display)] text-[clamp(20px,3vw,25px)] font-semibold leading-tight tracking-[-0.015em] ${v.text}`}
+          >
+            {label}
+          </h2>
+          <p className="mt-[5px] text-[14.5px] leading-relaxed text-[var(--text-dim)]">{sub}</p>
         </div>
       </div>
 
-      <div className="border-t border-[var(--rule)] pt-5 space-y-5">
-        {signals.length > 0 ? <Evidence signals={signals} /> : null}
+      {signals.length > 0 ? <Evidence signals={signals} /> : null}
 
-        <RiskScore score={result.score} bar={v.bar} signals={signals} />
+      <RiskScore score={result.score} bar={v.bar} tone={v.text} signals={signals} />
 
-        {showDetails && (
-          <p className="text-[13.5px] leading-relaxed text-[var(--text-dim)]">
-            {details}
-          </p>
-        )}
+      {showDetails && (
+        <p className="border-t border-[var(--rule)] px-5 py-4 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+          {details}
+        </p>
+      )}
 
-        {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
-          <ActionSteps verdict={result.verdict} />
-        )}
+      {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
+        <ActionSteps verdict={result.verdict} />
+      )}
 
-        {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
-      </div>
+      {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
     </div>
   );
 }
