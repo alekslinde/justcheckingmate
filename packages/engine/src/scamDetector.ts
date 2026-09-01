@@ -65,6 +65,19 @@ class Signals {
     return weighted;
   }
 
+  /**
+   * Lift one already-merged row back to its full pre-discount weight.
+   *
+   * Exists for signals that a channel-wide multiplier should not apply to (see
+   * the family-impersonation floor in checkEmail). Deliberately narrow: it
+   * raises a single row it can identify by its opening text, never the total,
+   * so the evidence list still sums to the score the reader is shown.
+   */
+  restore(prefix: string, points: number): void {
+    const row = this.list.find((s) => s.text.startsWith(prefix));
+    if (row && row.points < points) row.points = points;
+  }
+
   /** Pre-clamp sum of every contribution so far. */
   total(): number {
     return this.list.reduce((n, s) => n + s.points, 0);
@@ -568,6 +581,26 @@ function isOwnDomainSender(
   return onAllowlist || onNationalSuffix;
 }
 
+/**
+ * The body of an RFC 5322-ish message, or the whole string if it has no header
+ * block. Used only for signals that care WHERE in the message something sits.
+ *
+ * Deliberately minimal — the real MIME walk lives in lib/emailDistiller, which
+ * the engine cannot import and which prepends the headers it keeps anyway. All
+ * this needs to do is find the blank line that ends the header block, and only
+ * when what precedes it actually looks like headers, so a plain body whose
+ * second paragraph happens to follow a blank line is left alone.
+ */
+export function bodyAfterHeaders(raw: string): string {
+  const split = raw.search(/\r?\n\r?\n/);
+  if (split === -1) return raw;
+  const head = raw.slice(0, split);
+  const looksLikeHeaders = head
+    .split(/\r?\n/)
+    .some((line) => /^[A-Za-z][A-Za-z0-9-]{1,40}:\s/.test(line));
+  return looksLikeHeaders ? raw.slice(split).replace(/^\s+/, "") : raw;
+}
+
 export interface MessageCheckOptions {
   /** Where the text came from. Defaults to "sms", preserving prior behaviour. */
   channel?: "sms" | "email";
@@ -580,6 +613,13 @@ export interface MessageCheckOptions {
    */
   senderDomain?: string;
 }
+
+/**
+ * Opening words of the family-impersonation flag, shared so checkEmail can
+ * recognise the signal in a merged sub-result without re-running the match.
+ */
+export const FAMILY_IMPERSONATION_FLAG =
+  'Reads as the "Hi Mum" family-impersonation script';
 
 export function checkSms(
   text: string,
@@ -690,8 +730,16 @@ export function checkSms(
   // so "I'll ask mum about the weekend" doesn't match. The money ask accepts a
   // bare amount ("send me 400") because the script usually omits the currency
   // symbol, and requiring one missed the live sample this rule was written for.
+  //
+  // "Opens" has to mean the start of the BODY, not of the text handed to us.
+  // On the email path the caller passes the whole message, headers and all, so
+  // the first line is "From:" and an anchor on the raw text can never match —
+  // the rule silently did nothing for every real email until this skipped the
+  // header block. Only the anchor needs the body; every other signal here is
+  // positional-agnostic and reads the full text as before.
+  const anchorText = (channel === "email" ? bodyAfterHeaders(text) : text).trim();
   const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
-    new RegExp(`^\\W{0,3}(?:hi|hey|hello|good\\s+\\w+)?[\\s,!.]*\\b${r}\\b`, "i").test(text.trim()),
+    new RegExp(`^\\W{0,3}(?:hi|hey|hello|good\\s+\\w+)?[\\s,!.]*\\b${r}\\b`, "i").test(anchorText),
   );
   const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
   const hasMoneyAsk =
@@ -711,8 +759,8 @@ export function checkSms(
     // call; a victim is not made whole.
     sig.add("message",
       hasNumberPretext
-        ? "Reads as the \"Hi Mum\" family-impersonation script — an unexpected message opening as your child or parent, explaining away an unfamiliar number, and asking for money. The broken-phone or new-number line is the load-bearing part: it exists to explain why the voice and number are both wrong, and to stop you ringing the number you already have. Call your family member on their usual number before sending anything. If they don't pick up, ask them something only they could answer."
-        : "Reads as a family-impersonation money request — an unexpected message opening as a family member and asking for a payment. Call the person on the number you already have for them before sending anything, even if the story is urgent. Urgency is the point of the story.",
+        ? `${FAMILY_IMPERSONATION_FLAG} — an unexpected message opening as your child or parent, explaining away an unfamiliar number, and asking for money. The broken-phone or new-number line is the load-bearing part: it exists to explain why the voice and number are both wrong, and to stop you ringing the number you already have. Call your family member on their usual number before sending anything. If they don't pick up, ask them something only they could answer.`
+        : `${FAMILY_IMPERSONATION_FLAG} — an unexpected message opening as a family member and asking for a payment. Call the person on the number you already have for them before sending anything, even if the story is urgent. Urgency is the point of the story.`,
       45,
     );
   }
@@ -1155,6 +1203,27 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   });
   // Email gets a bit more lenience than the same words in an SMS.
   sig.merge("message", smsCheck, Math.floor(smsCheck.score * 0.7));
+
+  // …but not for the family-impersonation script. The 0.7 discount is right for
+  // the signals it was written for — urgency and reward keywords really are
+  // weaker evidence in a long email than in a 160-character text. It is wrong
+  // here: this composite already requires three independent halves to line up,
+  // so it is not the kind of loose keyword hit the discount exists to soften,
+  // and the script runs by email as readily as by SMS.
+  //
+  // Left alone, the discount turned a 45 into a 31 and demoted the verdict from
+  // "likely scam" to "something's a bit sus" — advice that reads as permission
+  // to keep reading. The floor restores the SMS score for this one signal
+  // instead of weakening the discount for every other, so nothing else moves.
+  // Restored by re-adding the shortfall to the signal's OWN row rather than as
+  // a separate one: flags are rendered straight from signal text, so a padding
+  // row would show the reader a blank bullet.
+  const familyImpersonationHit = (smsCheck.signals ?? []).find((x) =>
+    x.text.startsWith(FAMILY_IMPERSONATION_FLAG),
+  );
+  if (familyImpersonationHit) {
+    sig.restore(FAMILY_IMPERSONATION_FLAG, familyImpersonationHit.points);
+  }
 
   // Header-aware sender analysis: parse From / Reply-To / Return-Path and flag
   // display-name masking and From≠Reply-To spoofing.
