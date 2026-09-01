@@ -12,6 +12,7 @@ import { useLang, MessageKey } from "@/lib/lang";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
+import { saveCheckDraft, readCheckDraft, clearCheckDraft } from "@/lib/checkDraft";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
@@ -357,7 +358,25 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const { t } = useLang();
   const { reportFailure } = useBugReport();
   const [step, setStep] = useState<Step>("input");
-  const [content, setContent] = useState(initialContent);
+  // Put back the message a check was run against, after a Back.
+  //
+  // Next's App Router reloads the document when the user returns to a
+  // same-document pushState entry, so this is a fresh mount by the time we get
+  // here and every piece of React state has gone — see lib/checkDraft for the
+  // full account of why nothing in the tree can survive it.
+  //
+  // Read in a lazy initialiser rather than an effect, so the box is populated
+  // in the render that first shows it: restoring afterwards would paint an
+  // empty textarea and then fill it, which reads as the content arriving late.
+  // readCheckDraft returns "" on the server, so the SSR markup and the first
+  // client render agree and the draft lands on the pass after hydration.
+  //
+  // The read does not clear — React re-runs this initialiser during hydration
+  // and again under Strict Mode, and a read that consumed left the second run
+  // with nothing. The clearing happens in the effect below, once. A seeded box
+  // wins outright: content from the share sheet is what the reader has just
+  // chosen to check, and a stale draft must not displace it.
+  const [content, setContent] = useState(() => initialContent || readCheckDraft());
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
   // Region the server used for the last check. Null until a check has run.
   const [region, setRegion] = useState<string | null>(null);
@@ -400,6 +419,14 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const cameraRef = useRef<HTMLInputElement>(null);
   const emlRef = useRef<HTMLInputElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  // The draft has done its job by the time this runs — the box above was
+  // populated from it during the first render — so it is dropped here. In an
+  // effect because a render must not destroy the state it just read, and
+  // because this way it survives exactly as long as it takes to be restored.
+  useEffect(() => {
+    clearCheckDraft();
+  }, []);
 
   // History contract: every step transition is mirrored in history state, and
   // history is the single source of truth for backwards movement. Forward
@@ -638,6 +665,10 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // Report what was checked, not what the box holds: a region re-check
       // re-runs against the same content, and the strip should keep naming it.
       onChecked?.(content);
+      // Written down before the transition, because going back to this entry
+      // reloads the document and takes the component's state with it. Stored
+      // only for as long as it takes to put it back — see lib/checkDraft.
+      saveCheckDraft(content);
       // No "Checked" hold on this path: the verdict *is* the completion, and
       // pausing on a tick before showing it would be padding the very wait the
       // panel exists to explain.
