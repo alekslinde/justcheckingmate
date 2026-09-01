@@ -44,8 +44,12 @@ export async function POST(req: NextRequest) {
     // unauthenticated, and analysis is the expensive part. The IP is used as a
     // transient key only and is never stored.
     if (!checkAndRecordRateLimit(`check:${clientIpFromHeaders(req.headers)}`, CHECK_RATE_LIMIT)) {
+      // `code` rather than only prose: the client distinguishes this from a
+      // generic failure to tell the reader to wait rather than to retry, and
+      // matching on a message string would break the moment it is reworded or
+      // translated.
       return NextResponse.json(
-        { error: "Too many checks — give it a minute and try again." },
+        { error: "Too many checks — give it a minute and try again.", code: "rate_limited" },
         { status: 429, headers: cors },
       );
     }
