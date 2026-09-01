@@ -34,6 +34,7 @@ export default function CheckStage({
   surface = "web",
   forward = true,
   children,
+  belowFold,
 }: {
   /** Seeds the check box — used by the share target. */
   initialContent?: string;
@@ -45,6 +46,16 @@ export default function CheckStage({
   forward?: boolean;
   /** Rendered above the box on the input step only (the share truncation notice). */
   children?: ReactNode;
+  /**
+   * Rendered below the stage on the input step only — the radar teaser.
+   *
+   * It lives in the page as CheckStage's sibling, so like the forwarding panel
+   * nothing inside the flow can hide it, and it was still offering "here's what
+   * is circulating" underneath a verdict about the very thing the reader had
+   * just checked. Passing it through here lets the stage retire it along with
+   * everything else that belongs to the question rather than the answer.
+   */
+  belowFold?: ReactNode;
 } = {}) {
   const { t } = useLang();
   const [step, setStep] = useState<CheckStep>("input");
@@ -134,6 +145,8 @@ export default function CheckStage({
             screen invites them to do the same work twice. */}
         {forward && !done && <ForwardPanel />}
       </div>
+
+      {!done && belowFold}
     </>
   );
 }

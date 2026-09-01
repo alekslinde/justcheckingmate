@@ -317,11 +317,15 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
   const showDetails = details && !details.startsWith("Looks pretty right");
 
   return (
-    <div className={`rounded-xl border ${v.edge} bg-[var(--ink-2)] overflow-hidden`}>
+    // No border of its own: this renders as the top of the results sheet, which
+    // already carries one. Nesting a second bordered card inside it drew a box
+    // around the verdict and another around the box, and the reader has to work
+    // out which of the two frames means something.
+    <div className="overflow-hidden">
 
       {/* Header. A dot rather than an emoji: emoji render differently on every
           platform and carry a tone the verdict has to set itself. */}
-      <div className="px-5 pt-5 pb-4">
+      <div className="pb-4">
         <div className="flex items-start gap-2.5">
           <span className={`mt-[9px] h-2 w-2 shrink-0 rounded-full ${v.dot}`} aria-hidden="true" />
           <div className="min-w-0">
@@ -333,7 +337,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
         </div>
       </div>
 
-      <div className="border-t border-[var(--rule)] px-5 py-4 space-y-5">
+      <div className="border-t border-[var(--rule)] pt-4 space-y-5">
         {signals.length > 0 ? <Evidence signals={signals} /> : null}
 
         <RiskScore score={result.score} bar={v.bar} />

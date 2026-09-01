@@ -21,12 +21,12 @@ export default async function Home() {
           than stacked. Once a check has run the stage collapses to one column
           and the verdict takes the page — see CheckStage for why that lives
           there rather than inside the flow. */}
-      <CheckStage />
-
       {/* Below the fold on purpose: someone arriving mid-panic with a dodgy SMS
           needs the paste field first, and background information pushing it down
-          the page would trade their urgent need for ours. */}
-      <RadarTeaser region={region} />
+          the page would trade their urgent need for ours. Handed to the stage
+          rather than placed after it so it retires when the verdict arrives —
+          "what's circulating" is context for the question, not the answer. */}
+      <CheckStage belowFold={<RadarTeaser region={region} />} />
     </main>
   );
 }

@@ -883,10 +883,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     // them. Computed here rather than inside the sheet because the rail is its
     // sibling, not its child.
     const allSignals = pooledSignals(results);
-    // The rail earns its column only when there is evidence to interpret. On a
-    // clean result "1 of 6 matched" beside a heading reading "Looks good" reads
-    // as a contradiction, and the reader cannot tell which half to believe.
-    const showTactics = allSignals.length > 0 && composeVerdict(results, pixelReport)?.verdict !== "safe";
+    // The rail is part of the result's shape, not a reward for finding
+    // something. A clean check showing "0 of 6 matched" against the same six
+    // names is the more useful answer — it says what we looked for and came up
+    // empty, where an absent panel just leaves the reader wondering whether we
+    // looked at all. It also means the two states are the same layout with
+    // different content, so moving between them doesn't reflow the page.
+    const showTactics = results.length > 0;
 
     return (
       // No back link in this header any more: the checked-strip above the
@@ -896,15 +899,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         <h2 ref={stepHeadingRef} tabIndex={-1} data-step-heading className="sr-only">{t("check.step.result")}</h2>
 
         {/* Section label above both columns, so "Evidence" names the whole
-            payoff rather than one panel inside it. Only when there is evidence
-            to name: on a clean result it would head a section whose entire
-            content is that we found nothing. */}
-        {allSignals.length > 0 && (
-          <p className="mb-3 flex items-center gap-2.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-dim)]">
-            {t("verdict.evidence.heading")}
-            <span aria-hidden="true" className="h-px flex-1 bg-[var(--rule)]" />
-          </p>
-        )}
+            payoff rather than one panel inside it. Always present: it is part
+            of the result's frame, and a heading that comes and goes with the
+            verdict makes the safe and scam states two different pages. */}
+        <p className="mb-3 flex items-center gap-2.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--text-dim)]">
+          {t("verdict.evidence.heading")}
+          <span aria-hidden="true" className="h-px flex-1 bg-[var(--rule)]" />
+        </p>
 
         {/* The verdict leads at width; the tactics legend sits alongside as
             support and sticks while the evidence column scrolls. One column
@@ -942,13 +943,11 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
                   onRegionChange={(code) => runCheck(code)}
                 />
 
-                {/* Single coloured verdict card — the only full-colour element. */}
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    {t("verdict.overall.heading")}
-                  </div>
-                  <VerdictBadge result={overall} />
-                </div>
+                {/* The verdict leads the sheet directly. It had an "Overall
+                    verdict" eyebrow above it, which labelled the one element on
+                    the page that needs no label — the headline says "Likely a
+                    scam" in the verdict's own colour. */}
+                <VerdictBadge result={overall} />
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
                     small status dot. No competing card colours. */}
