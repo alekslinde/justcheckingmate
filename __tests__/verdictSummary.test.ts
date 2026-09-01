@@ -7,6 +7,7 @@ import {
   defangValue,
   formatVerdictEmail,
   pooledSignals,
+  composeVerdictWithEvidence,
   VERDICT_RANK,
 } from "@/lib/verdictSummary";
 import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
@@ -402,5 +403,56 @@ describe("pooledSignals", () => {
   it("tolerates an identifier with no signals at all", () => {
     const results = [ident("phone", "safe", "0400000000", 0)];
     expect(pooledSignals(results)).toEqual([]);
+  });
+});
+
+// The panel's own copy invites the reader to check our arithmetic, so the rows
+// on screen have to add up to the headline above them. Composing the score from
+// the worst identifier while pooling rows from all of them broke exactly that.
+describe("composeVerdictWithEvidence — the rows add up to the score", () => {
+  const sig = (text: string, points: number, source = "message") =>
+    ({ text, points, source }) as never;
+
+  it("headline equals the sum of the evidence shown", () => {
+    const results = [
+      ident("message", "likely_scam", "msg", 75, [], {
+        signals: [sig("urgency", 20), sig("address", 20), sig("link", 15), sig("dodgy link", 20)],
+      }),
+      ident("url", "likely_scam", "http://x.top", 45, [], {
+        signals: [sig("dodgy tld", 30), sig("no https", 15)],
+      }),
+    ];
+    const c = composeVerdictWithEvidence(results, null)!;
+    const shown = c.signals.reduce((n, x) => n + x.points, 0);
+    expect(shown).toBe(c.score);
+    // Worst-identifier-wins still decides severity.
+    expect(c.verdict).toBe("likely_scam");
+    // And pooling can only ever raise the number, never soften it.
+    expect(c.score).toBeGreaterThanOrEqual(75);
+  });
+
+  it("emits exactly one clamp row when the pooled total exceeds the ceiling", () => {
+    const results = [
+      ident("message", "likely_scam", "m", 100, [], { signals: [sig("a", 90), sig("cap", -0)] }),
+      ident("url", "likely_scam", "u", 60, [], { signals: [sig("b", 60)] }),
+    ];
+    const c = composeVerdictWithEvidence(results, null)!;
+    const clamps = c.signals.filter((x) => x.source === "score");
+    expect(clamps).toHaveLength(1);
+    expect(c.score).toBe(100);
+    expect(c.signals.reduce((n, x) => n + x.points, 0)).toBe(100);
+  });
+
+  it("names the tracking pixel it scored, instead of an unexplained meter", () => {
+    const pixel = { hasTrackingPixels: true, pixels: [{}] } as unknown as TrackingPixelReport;
+    const results = [ident("message", "safe", "m", 5, [], { signals: [sig("minor", 5)] })];
+    const c = composeVerdictWithEvidence(results, pixel)!;
+    expect(c.verdict).toBe("suspicious");
+    expect(c.signals.reduce((n, x) => n + x.points, 0)).toBe(c.score);
+    expect(c.signals.some((x) => /tracking pixel/i.test(x.text))).toBe(true);
+  });
+
+  it("returns null when there is nothing scored, like composeVerdict", () => {
+    expect(composeVerdictWithEvidence([], null)).toBeNull();
   });
 });

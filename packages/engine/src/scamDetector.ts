@@ -749,7 +749,18 @@ export function checkSms(
     /\b(?:can|could)\s+you\s+(?:please\s+)?(?:send|transfer|lend|pay)\b/i.test(text) ||
     /\bneed\s+(?:you\s+to\s+)?(?:send|transfer|pay|lend)\b/i.test(text);
 
-  if (opensWithRelation && hasMoneyAsk && (hasNumberPretext || sig.length > 0)) {
+  // The pretext is required, not merely one of two ways in. An earlier version
+  // accepted "any other signal present" as the third half, which sounds like
+  // corroboration and isn't: a single urgency word satisfied it, and urgency is
+  // ordinary in real family texts. "Mum, don't forget to pay the school fees of
+  // 250 before Friday, it's urgent!" scored 55 and called a parent's own child
+  // a scammer — the one false positive this rule must never produce, since it
+  // teaches the reader to distrust the verdict and the family member at once.
+  //
+  // What makes the script detectable is not that it is urgent; it is that the
+  // sender has to explain why they are contacting you from a number you don't
+  // recognise. A real family member never needs that sentence.
+  if (opensWithRelation && hasMoneyAsk && hasNumberPretext) {
     // +45 lands on the "likely_scam" boundary on its own. That is deliberate
     // and unlike the +20 composites above: those pair two innocent halves into
     // a suspicion, whereas this is a complete scam script end to end, and the
@@ -758,9 +769,7 @@ export function checkSms(
     // warning. A genuine family member is inconvenienced by one verification
     // call; a victim is not made whole.
     sig.add("message",
-      hasNumberPretext
-        ? `${FAMILY_IMPERSONATION_FLAG} — an unexpected message opening as your child or parent, explaining away an unfamiliar number, and asking for money. The broken-phone or new-number line is the load-bearing part: it exists to explain why the voice and number are both wrong, and to stop you ringing the number you already have. Call your family member on their usual number before sending anything. If they don't pick up, ask them something only they could answer.`
-        : `${FAMILY_IMPERSONATION_FLAG} — an unexpected message opening as a family member and asking for a payment. Call the person on the number you already have for them before sending anything, even if the story is urgent. Urgency is the point of the story.`,
+      `${FAMILY_IMPERSONATION_FLAG} — an unexpected message opening as your child or parent, explaining away an unfamiliar number, and asking for money. The broken-phone or new-number line is the load-bearing part: it exists to explain why the voice and number are both wrong, and to stop you ringing the number you already have. Call your family member on their usual number before sending anything. If they don't pick up, ask them something only they could answer.`,
       45,
     );
   }

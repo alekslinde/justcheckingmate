@@ -388,6 +388,64 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
 // Duplicate texts are collapsed. The same URL appearing in both the message
 // scan and its own scan produces the same sentence twice, and one observation
 // listed twice reads as two independent findings.
+/**
+ * The overall verdict AND the evidence behind it, composed together.
+ *
+ * These have to be produced in one place. composeVerdict returns the WORST
+ * identifier's score while pooledSignals returns EVERY identifier's rows, and
+ * pairing them put a headline of 75 above six rows adding to 120 — in a panel
+ * whose own copy invites the reader to check our arithmetic. Worse, the score
+ * panel reasons over the rows it is handed (how many rules tripped, which one
+ * was heaviest, what the clamp row means), so cross-identifier rows let it
+ * assert things about a score a different identifier produced.
+ *
+ * So the headline here is the sum of the evidence shown, capped at 100 like
+ * every per-identifier score, with a clamp row when the cap bites. That keeps
+ * the invariant the engine already holds itself to: the rows on screen add up
+ * to the number above them.
+ *
+ * The verdict still comes from composeVerdict — worst-identifier-wins is the
+ * severity rule, and it is shared with the email reply. Only the arithmetic
+ * shown to the reader is recomputed. A pooled sum can only ever be >= the worst
+ * identifier's score, so this never softens a verdict.
+ */
+export function composeVerdictWithEvidence(
+  results: AnalyzedIdentifier[],
+  pixelReport: TrackingPixelReport | null,
+): (OverallVerdict & { signals: Signal[] }) | null {
+  const composed = composeVerdict(results, pixelReport);
+  if (!composed) return null;
+
+  const findings = pooledSignals(results).filter((x) => x.source !== "score");
+  let signals = findings;
+  let score = Math.min(findings.reduce((n, x) => n + x.points, 0), 100);
+
+  // The tracking pixel nudges the verdict without any identifier scoring it, so
+  // it has to enter the evidence as its own row — otherwise the panel shows a
+  // 40/100 meter above rows totalling 5 and never names the reason.
+  if (pixelReport && score < composed.score) {
+    signals = [
+      ...findings,
+      {
+        text: `Contains ${pixelReport.pixels.length === 1 ? "a tracking pixel" : `${pixelReport.pixels.length} tracking pixels`} — an invisible image that tells the sender you opened this, and when. Legitimate senders use them too, but it confirms your address is live and being watched.`,
+        points: composed.score - score,
+        source: "message",
+      },
+    ];
+    score = composed.score;
+  }
+
+  const raw = signals.reduce((n, x) => n + x.points, 0);
+  if (raw > score) {
+    signals = [
+      ...signals,
+      { text: `Signals total ${raw} — the score is capped at ${score}`, points: score - raw, source: "score" },
+    ];
+  }
+
+  return { verdict: composed.verdict, score, signals };
+}
+
 export function pooledSignals(results: AnalyzedIdentifier[]): Signal[] {
   const seen = new Set<string>();
   const findings: Signal[] = [];

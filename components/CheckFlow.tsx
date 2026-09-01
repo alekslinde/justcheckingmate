@@ -7,7 +7,7 @@ import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSan
 import { parseEmailHeaders, summariseAuth } from "@justcheckingmate/engine/emailHeaders";
 import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
-import { VERDICT_RANK, defangValue, defangFlag, composeVerdict, isClean, overallCoverage, pooledSignals } from "@/lib/verdictSummary";
+import { VERDICT_RANK, defangValue, defangFlag, composeVerdictWithEvidence, isClean, overallCoverage, pooledSignals } from "@/lib/verdictSummary";
 import { useLang, MessageKey } from "@/lib/lang";
 // Capability probe only — the OCR engine itself is imported dynamically so the
 // WASM core is never downloaded by someone who does not upload an image.
@@ -175,12 +175,18 @@ function useSwapHeight(key: unknown) {
   const ref = useRef<HTMLDivElement>(null);
   // The height the element had before this render's DOM changes were applied.
   //
-  // Captured in the *cleanup* of the layout effect, which React runs after the
-  // previous render's DOM is still in place and before the new content is
-  // painted. That timing is the whole trick: measuring inside the effect body
-  // reads the height the element has already changed to, and an earlier version
-  // did exactly that — it kept the height from the previous swap, so the card
-  // jumped to the wrong place and then eased back down to the right one.
+  // Captured by the unkeyed layout effect at the bottom of this hook, which
+  // runs after every commit and so always leaves `from` holding the height the
+  // element is about to leave. The keyed effect above then reads it before the
+  // browser paints the new content. Keeping the measurement unkeyed is the
+  // whole trick: tying it to `key` meant it only re-measured on a swap, so it
+  // kept the height from the previous swap and the card jumped to the wrong
+  // place before easing back down to the right one.
+  //
+  // The trade-off is that a swap starting mid-transition measures an
+  // interpolated height and animates from there. That is the better failure:
+  // the alternative — ignoring heights that arrive during a transition — is a
+  // stale measurement, which is the bug above.
   const from = useRef<number | null>(null);
 
   useLayoutEffect(() => {
@@ -881,8 +887,10 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     // Evidence pools across every identifier, so both columns derive from one
     // list — the sheet lists the findings, the rail names the tactics behind
     // them. Computed here rather than inside the sheet because the rail is its
-    // sibling, not its child.
-    const allSignals = pooledSignals(results);
+    // sibling, not its child. Same list the sheet scores from, so the rail can
+    // never name a tactic for evidence the sheet doesn't show.
+    const allSignals =
+      composeVerdictWithEvidence(results, pixelReport)?.signals ?? pooledSignals(results);
     // The rail is part of the result's shape, not a reward for finding
     // something. A clean check showing "0 of 6 matched" against the same six
     // names is the more useful answer — it says what we looked for and came up
@@ -1026,19 +1034,18 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               {supportingSections}
             </>
           ) : (() => {
-            // One overall verdict drives the page — composeVerdict applies the
-            // worst-identifier-wins + tracking-pixel-nudge rules, shared with
-            // the forward-to-us email reply so the two can't drift.
-            const composed = composeVerdict(results, pixelReport)!;
+            // One overall verdict drives the page — the worst-identifier-wins
+            // and tracking-pixel-nudge rules come from composeVerdict beneath
+            // it, shared with the forward-to-us email reply so the two can't
+            // drift.
+            // Score and evidence come from one call, so the rows on screen add
+            // up to the headline above them. Composing them separately put a 75
+            // over rows totalling 120 — see composeVerdictWithEvidence.
+            const composed = composeVerdictWithEvidence(results, pixelReport)!;
             const worst = results.reduce((acc, r) =>
               VERDICT_RANK[r.result.verdict] > VERDICT_RANK[acc.result.verdict] ? r : acc,
             );
-            // Evidence pools across identifiers: the score is composed from all
-            // of them, so the rows under it have to be too. Passing only the
-            // worst identifier's signals dropped the URL findings from a
-            // link-carrying SMS — the most concrete evidence on the page.
-            const signals = pooledSignals(results);
-            const overall = { ...worst.result, ...composed, signals };
+            const overall = { ...worst.result, ...composed };
 
             return (
               <>

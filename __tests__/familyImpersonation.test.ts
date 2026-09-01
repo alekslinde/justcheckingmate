@@ -81,4 +81,19 @@ describe("family impersonation (Hi Mum)", () => {
       expect(r.verdict).toBe("safe");
     });
   });
+
+  // The gate briefly accepted "any other signal present" instead of requiring
+  // the pretext, which let a single urgency word open a +45. These are the
+  // messages a real family member sends.
+  describe("requires the pretext, not merely another signal", () => {
+    const innocentButUrgent = [
+      "Mum, don't forget to pay the school fees of 250 before Friday, it's urgent!",
+      "Mum can you pay the 300 rego before Friday, urgent!",
+      "Dad, urgent — can you transfer $200 for the flights today?",
+    ];
+
+    it.each(innocentButUrgent)("does not call a real family member a scammer: %s", (text) => {
+      expect(checkSms(text).verdict).not.toBe("likely_scam");
+    });
+  });
 });
