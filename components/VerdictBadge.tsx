@@ -454,10 +454,13 @@ export default function VerdictBadge({
   const sub   = t(`verdict.${result.verdict}.sub`   as MessageKey);
 
   const signals = result.signals ?? [];
-  // The details sentence and verdict.*.sub restate one another for a clean
-  // result, so it is dropped where the sub already covers it.
-  const details = defangText(result.details);
-  const showDetails = details && !details.startsWith("Looks pretty right");
+  // result.details is not rendered. Every one of its four values restates
+  // something the sheet already says: the safe and suspicious lines repeat
+  // verdict.*.sub under the headline, and the two scam lines repeat the action
+  // steps ("do NOT engage, click links, or provide any information" against
+  // "Don't click any links...", "Block the sender..."). The engine still
+  // returns it — the field is part of CheckResult and other surfaces may want
+  // a one-line summary — but here it was the same instruction twice.
 
   return (
     // No border of its own: this renders as the top of the results sheet, which
@@ -491,12 +494,6 @@ export default function VerdictBadge({
       {signals.length > 0 ? <Evidence signals={signals} /> : null}
 
       <RiskScore score={result.score} bar={v.bar} tone={v.text} signals={signals} />
-
-      {showDetails && (
-        <p className="border-t border-[var(--rule)] px-5 py-4 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
-          {details}
-        </p>
-      )}
 
       {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
 
