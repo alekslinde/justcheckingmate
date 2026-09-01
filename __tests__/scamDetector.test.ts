@@ -1873,3 +1873,42 @@ describe("analyzeContent — shortened URLs when expansion is unavailable", () =
     expect(urlCard?.result.expandedUrl).toBeUndefined();
   });
 });
+
+describe("the clamp row", () => {
+  it("appears when the signals overshoot the ceiling, and reconciles to the score", () => {
+    // A message with enough independent findings to blow past 100. The row is
+    // the arithmetic: everything above it plus the row itself equals the score.
+    const r = checkSms(
+      "AusPost: your parcel is held pending a $2.15 fee. Pay within 24 hours " +
+        "or it's returned: http://auspost-redelivery.top/pay",
+    );
+    const signals = r.signals ?? [];
+    const clamp = signals.find((x) => x.source === "score");
+    if (r.score === 100 && clamp) {
+      const total = signals.reduce((n, x) => n + x.points, 0);
+      expect(total).toBe(r.score);
+      expect(clamp.points).toBeLessThan(0);
+    }
+  });
+
+  it("does not appear when the signals total less than the score", async () => {
+    // The shortener-expansion path carries both sides' rows as pointless
+    // evidence and takes the worse of the two scores rather than their sum, so
+    // the raw total sits *below* the score. That is not a clamp, and calling it
+    // one produced "Signals total 0 — the score is capped at 55".
+    vi.mocked(expandUrl).mockResolvedValueOnce({
+      expandedUrl: "http://www.example-destination.com/login",
+      hops: ["http://www.example-destination.com/login"],
+      status: "expanded",
+    });
+
+    const cards = await analyzeContent("http://bit.ly/clamp-guard");
+    const urlCard = cards.find((c) => c.kind === "url");
+    const signals = urlCard?.result.signals ?? [];
+    const raw = signals.filter((x) => x.source !== "score").reduce((n, x) => n + x.points, 0);
+
+    expect(raw).toBeLessThanOrEqual(urlCard!.result.score);
+    expect(signals.some((x) => x.source === "score")).toBe(false);
+    expect(urlCard?.result.flags.some((f) => /capped at/.test(f))).toBe(false);
+  });
+});

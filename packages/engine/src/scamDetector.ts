@@ -88,10 +88,17 @@ class Signals {
    * clamp actually bit. Without that row the evidence visibly fails to add up:
    * six signals totalling 130 above a headline reading 100 looks like a bug to
    * anyone who checks our arithmetic, and we invite them to.
+   *
+   * Only when the total *overshot*. A raw total below the score is not a clamp
+   * — it is the shortener-expansion path, which carries both sides' rows as
+   * pointless evidence and takes the worse of the two scores rather than their
+   * sum. Treating that as a clamp produced "Signals total 0 — the score is
+   * capped at 55", which is arithmetic nonsense in the one place we are asking
+   * to be checked on our arithmetic.
    */
   finalise(score: number): Signal[] {
     const raw = this.total();
-    if (raw !== score) {
+    if (raw > score) {
       this.list.push({
         text: `Signals total ${raw} — the score is capped at ${score}`,
         points: score - raw,

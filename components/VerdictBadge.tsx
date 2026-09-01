@@ -196,12 +196,63 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
   );
 }
 
+// Trim a signal down to something quotable inside another sentence.
+//
+// Signal text is written to stand alone in an evidence row, so it often carries
+// a colon and the matched terms in their own quotes — "Asks for sensitive info:
+// \"bitcoin\", \"gift card\"". Quoting that whole string nests quotes inside
+// quotes and reads as a mistake. The clause before the colon is the finding;
+// the list after it is already visible in the row above.
+function citeSignal(text: string): string {
+  const full = defangText(text);
+  const head = full.split(/[:—]/)[0].trim();
+  // Inner straight quotes become single quotes so they can't close the curly
+  // pair wrapping them — "impersonating \"mygov\"" would otherwise render as
+  // a quote inside a quote and read as a typo.
+  return (head.length >= 12 ? head : full).replace(/"/g, "'");
+}
+
 // ── Risk score ────────────────────────────────────────────────────────────────
 
 // The thresholds are drawn on the track rather than described underneath it, so
 // "why is this a scam and not merely suspicious" is answerable by looking.
-function RiskScore({ score, bar }: { score: number; bar: string }) {
+function RiskScore({ score, bar, signals }: { score: number; bar: string; signals: Signal[] }) {
   const { t } = useLang();
+
+  // Which band the score landed in, in the engine's own terms — the boundaries
+  // here are scoreToResult's, and the ticks drawn on the track below are the
+  // same two numbers. A score with no account of why it means what it means
+  // asks to be taken on faith, which is the opposite of publishing weights.
+  const bandKey =
+    score >= 45 ? "verdict.score.band.scam"
+    : score >= 20 ? "verdict.score.band.suspicious"
+    : "verdict.score.band.safe";
+
+  // The clamp row records the raw total when the ceiling bit. Explaining the
+  // gap matters most at 100, where the headline number is the ceiling rather
+  // than the sum and the evidence visibly adds up to more.
+  const clamp = signals.find((x) => x.source === "score");
+  const raw = clamp ? score - clamp.points : null;
+
+  // A single signal heavy enough to clear the scam line on its own. Named only
+  // when that is literally true, and only in the scam band — "X alone clears
+  // it" about a score that needed three signals to get there would be a
+  // sentence the evidence above it contradicts.
+  const heaviest = signals
+    .filter((x) => x.source !== "score")
+    .reduce<Signal | null>((a, x) => (a === null || x.points > a.points ? x : a), null);
+  const clincher = score >= 45 && heaviest && heaviest.points >= 45 ? heaviest : null;
+
+  // Both clauses can be true at once, and at the ceiling both matter: the cap
+  // explains why the headline is 100 when the evidence adds to more, and the
+  // clincher explains why it was a scam regardless of the cap.
+  const band =
+    t(bandKey, { score }) +
+    (clincher
+      ? t("verdict.score.band.clincher", { signal: citeSignal(clincher.text), points: clincher.points })
+      : "") +
+    (raw !== null ? t("verdict.score.band.capped", { raw }) : "");
+
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
@@ -236,6 +287,9 @@ function RiskScore({ score, bar }: { score: number; bar: string }) {
           </span>
         ))}
       </div>
+      <p className="mt-3 border-t border-[var(--rule)] pt-3 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
+        {bold(band)}
+      </p>
     </div>
   );
 }
@@ -340,7 +394,7 @@ export default function VerdictBadge({ result }: { result: CheckResult }) {
       <div className="border-t border-[var(--rule)] pt-5 space-y-5">
         {signals.length > 0 ? <Evidence signals={signals} /> : null}
 
-        <RiskScore score={result.score} bar={v.bar} />
+        <RiskScore score={result.score} bar={v.bar} signals={signals} />
 
         {showDetails && (
           <p className="text-[13.5px] leading-relaxed text-[var(--text-dim)]">
