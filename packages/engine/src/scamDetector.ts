@@ -4,7 +4,7 @@ import { detectType } from "./detectType";
 import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "./regions";
-import { KEYS_BY_POST_PHRASES } from "./regions/base";
+import { KEYS_BY_POST_PHRASES, FAMILY_RELATION_TERMS, NEW_NUMBER_PRETEXT_PHRASES } from "./regions/base";
 import type { CheckResult, Signal, SignalSource } from "./engineTypes";
 
 // ScamType and CheckResult live in engineTypes.ts to break the import cycle
@@ -673,6 +673,48 @@ export function checkSms(
   const hasDepositAsk = /deposit/i.test(text);
   if (KEYS_BY_POST_PHRASES.some((k) => lower.includes(k)) && (hasDepositAsk || hasBankAsk)) {
     sig.add("message", "Keys promised by post alongside a deposit request — in the fake-landlord script the 'landlord' is always abroad, so there's no viewing and no key handover. Never send a deposit for a property you or someone you trust hasn't physically viewed.", 15);
+  }
+
+  // Family impersonation, the "Hi Mum" script (D2 / #251). A stranger opens as
+  // your child, explains away the unknown number, and asks for money — the
+  // most-reported scam text in AU, and it scored nothing at all before this.
+  //
+  // Gated, in the shape of the composites above, because every half is
+  // innocent alone: "mum" is ordinary address, "my phone broke" is ordinary
+  // news, and a family member really does sometimes ask you to transfer money.
+  // What is not ordinary is all three at once — an unrecognised sender
+  // accounting for why you don't recognise them, then asking for a payment in
+  // the same breath.
+  //
+  // The relation term must open the message rather than appear anywhere in it,
+  // so "I'll ask mum about the weekend" doesn't match. The money ask accepts a
+  // bare amount ("send me 400") because the script usually omits the currency
+  // symbol, and requiring one missed the live sample this rule was written for.
+  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
+    new RegExp(`^\\W{0,3}(?:hi|hey|hello|good\\s+\\w+)?[\\s,!.]*\\b${r}\\b`, "i").test(text.trim()),
+  );
+  const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
+  const hasMoneyAsk =
+    /\b(?:send|transfer|pay|lend|e-?transfer|etransfer|deposit|spot)\b[^.!?]{0,40}?(?:\b(?:me|us|it)\b[^.!?]{0,20})?[$£€]?\s?\d{2,6}\b/i.test(text) ||
+    /[$£€]\s?\d{2,6}\b/.test(text) ||
+    /\b(?:send|transfer|lend|pay)\s+(?:me|us)\b[^.!?]{0,30}\b(?:money|cash|funds)\b/i.test(text) ||
+    /\b(?:can|could)\s+you\s+(?:please\s+)?(?:send|transfer|lend|pay)\b/i.test(text) ||
+    /\bneed\s+(?:you\s+to\s+)?(?:send|transfer|pay|lend)\b/i.test(text);
+
+  if (opensWithRelation && hasMoneyAsk && (hasNumberPretext || sig.length > 0)) {
+    // +45 lands on the "likely_scam" boundary on its own. That is deliberate
+    // and unlike the +20 composites above: those pair two innocent halves into
+    // a suspicion, whereas this is a complete scam script end to end, and the
+    // whole cost of the attack falls in the minutes before the victim thinks
+    // to ring the real number. Warning quietly here would be the same as not
+    // warning. A genuine family member is inconvenienced by one verification
+    // call; a victim is not made whole.
+    sig.add("message",
+      hasNumberPretext
+        ? "Reads as the \"Hi Mum\" family-impersonation script — an unexpected message opening as your child or parent, explaining away an unfamiliar number, and asking for money. The broken-phone or new-number line is the load-bearing part: it exists to explain why the voice and number are both wrong, and to stop you ringing the number you already have. Call your family member on their usual number before sending anything. If they don't pick up, ask them something only they could answer."
+        : "Reads as a family-impersonation money request — an unexpected message opening as a family member and asking for a payment. Call the person on the number you already have for them before sending anything, even if the story is urgent. Urgency is the point of the story.",
+      45,
+    );
   }
 
   // Payment details presented as *changed* — the core of redirect fraud (D5 /

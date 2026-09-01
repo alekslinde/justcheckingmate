@@ -373,3 +373,41 @@ export const BASE_SIGNALS: BaseSignals = {
   callbackBrands: CALLBACK_BRANDS,
   cryptoExchanges: CRYPTO_EXCHANGES,
 };
+
+// Family-impersonation opener — the "Hi Mum" / "Hi Dad" script (D2 / #251).
+//
+// URGENCY_VOICE_CLONE above already covers the *escalated* phrasings — bail
+// money, stranded overseas, don't call the police. Those are the second or
+// third message in the thread. The opener is what actually lands first, and it
+// scored nothing: "mum send me 400 my phone broke, send it as quick as you
+// can" produced zero signals, because every word in it is ordinary family
+// texting.
+//
+// That is exactly why it needs to be a gated composite rather than flat
+// urgencyWords entries. "mum" alone is one of the most common words in a
+// legitimate SMS inbox; so is "my phone broke". Each list below is innocent by
+// itself and is never scored alone — the composite in scamDetector requires a
+// relation term plus a contact-change or new-number pretext plus a money ask.
+// Scored there, not here: the pack stays data, never logic.
+
+/** Family relation terms used as the opening address. */
+export const FAMILY_RELATION_TERMS = [
+  "mum", "mom", "mama", "mother",
+  "dad", "papa", "father",
+  "son", "daughter",
+];
+
+/**
+ * The pretext that explains why the message comes from an unknown number —
+ * the load-bearing half of the script. A real family member texting from their
+ * own number has no reason to explain the number.
+ */
+export const NEW_NUMBER_PRETEXT_PHRASES = [
+  "new number", "new phone number", "this is my new",
+  "phone broke", "phone is broken", "broke my phone",
+  "dropped my phone", "lost my phone", "phone got stolen",
+  "phone died", "cracked my screen", "water damage",
+  "using my friend's phone", "on my friend's phone",
+  "text me on this number", "save this number", "delete my old number",
+  "this is my temporary number", "old phone is dead",
+];
