@@ -4,7 +4,7 @@ import { detectType } from "./detectType";
 import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
 import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "./regions";
-import { KEYS_BY_POST_PHRASES } from "./regions/base";
+import { KEYS_BY_POST_PHRASES, FAMILY_RELATION_TERMS, NEW_NUMBER_PRETEXT_PHRASES } from "./regions/base";
 import type { CheckResult, Signal, SignalSource } from "./engineTypes";
 
 // ScamType and CheckResult live in engineTypes.ts to break the import cycle
@@ -65,6 +65,19 @@ class Signals {
     return weighted;
   }
 
+  /**
+   * Lift one already-merged row back to its full pre-discount weight.
+   *
+   * Exists for signals that a channel-wide multiplier should not apply to (see
+   * the family-impersonation floor in checkEmail). Deliberately narrow: it
+   * raises a single row it can identify by its opening text, never the total,
+   * so the evidence list still sums to the score the reader is shown.
+   */
+  restore(prefix: string, points: number): void {
+    const row = this.list.find((s) => s.text.startsWith(prefix));
+    if (row && row.points < points) row.points = points;
+  }
+
   /** Pre-clamp sum of every contribution so far. */
   total(): number {
     return this.list.reduce((n, s) => n + s.points, 0);
@@ -88,10 +101,17 @@ class Signals {
    * clamp actually bit. Without that row the evidence visibly fails to add up:
    * six signals totalling 130 above a headline reading 100 looks like a bug to
    * anyone who checks our arithmetic, and we invite them to.
+   *
+   * Only when the total *overshot*. A raw total below the score is not a clamp
+   * — it is the shortener-expansion path, which carries both sides' rows as
+   * pointless evidence and takes the worse of the two scores rather than their
+   * sum. Treating that as a clamp produced "Signals total 0 — the score is
+   * capped at 55", which is arithmetic nonsense in the one place we are asking
+   * to be checked on our arithmetic.
    */
   finalise(score: number): Signal[] {
     const raw = this.total();
-    if (raw !== score) {
+    if (raw > score) {
       this.list.push({
         text: `Signals total ${raw} — the score is capped at ${score}`,
         points: score - raw,
@@ -561,6 +581,26 @@ function isOwnDomainSender(
   return onAllowlist || onNationalSuffix;
 }
 
+/**
+ * The body of an RFC 5322-ish message, or the whole string if it has no header
+ * block. Used only for signals that care WHERE in the message something sits.
+ *
+ * Deliberately minimal — the real MIME walk lives in lib/emailDistiller, which
+ * the engine cannot import and which prepends the headers it keeps anyway. All
+ * this needs to do is find the blank line that ends the header block, and only
+ * when what precedes it actually looks like headers, so a plain body whose
+ * second paragraph happens to follow a blank line is left alone.
+ */
+export function bodyAfterHeaders(raw: string): string {
+  const split = raw.search(/\r?\n\r?\n/);
+  if (split === -1) return raw;
+  const head = raw.slice(0, split);
+  const looksLikeHeaders = head
+    .split(/\r?\n/)
+    .some((line) => /^[A-Za-z][A-Za-z0-9-]{1,40}:\s/.test(line));
+  return looksLikeHeaders ? raw.slice(split).replace(/^\s+/, "") : raw;
+}
+
 export interface MessageCheckOptions {
   /** Where the text came from. Defaults to "sms", preserving prior behaviour. */
   channel?: "sms" | "email";
@@ -573,6 +613,13 @@ export interface MessageCheckOptions {
    */
   senderDomain?: string;
 }
+
+/**
+ * Opening words of the family-impersonation flag, shared so checkEmail can
+ * recognise the signal in a merged sub-result without re-running the match.
+ */
+export const FAMILY_IMPERSONATION_FLAG =
+  'Reads as the "Hi Mum" family-impersonation script';
 
 export function checkSms(
   text: string,
@@ -666,6 +713,65 @@ export function checkSms(
   const hasDepositAsk = /deposit/i.test(text);
   if (KEYS_BY_POST_PHRASES.some((k) => lower.includes(k)) && (hasDepositAsk || hasBankAsk)) {
     sig.add("message", "Keys promised by post alongside a deposit request — in the fake-landlord script the 'landlord' is always abroad, so there's no viewing and no key handover. Never send a deposit for a property you or someone you trust hasn't physically viewed.", 15);
+  }
+
+  // Family impersonation, the "Hi Mum" script (D2 / #251). A stranger opens as
+  // your child, explains away the unknown number, and asks for money — the
+  // most-reported scam text in AU, and it scored nothing at all before this.
+  //
+  // Gated, in the shape of the composites above, because every half is
+  // innocent alone: "mum" is ordinary address, "my phone broke" is ordinary
+  // news, and a family member really does sometimes ask you to transfer money.
+  // What is not ordinary is all three at once — an unrecognised sender
+  // accounting for why you don't recognise them, then asking for a payment in
+  // the same breath.
+  //
+  // The relation term must open the message rather than appear anywhere in it,
+  // so "I'll ask mum about the weekend" doesn't match. The money ask accepts a
+  // bare amount ("send me 400") because the script usually omits the currency
+  // symbol, and requiring one missed the live sample this rule was written for.
+  //
+  // "Opens" has to mean the start of the BODY, not of the text handed to us.
+  // On the email path the caller passes the whole message, headers and all, so
+  // the first line is "From:" and an anchor on the raw text can never match —
+  // the rule silently did nothing for every real email until this skipped the
+  // header block. Only the anchor needs the body; every other signal here is
+  // positional-agnostic and reads the full text as before.
+  const anchorText = (channel === "email" ? bodyAfterHeaders(text) : text).trim();
+  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
+    new RegExp(`^\\W{0,3}(?:hi|hey|hello|good\\s+\\w+)?[\\s,!.]*\\b${r}\\b`, "i").test(anchorText),
+  );
+  const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
+  const hasMoneyAsk =
+    /\b(?:send|transfer|pay|lend|e-?transfer|etransfer|deposit|spot)\b[^.!?]{0,40}?(?:\b(?:me|us|it)\b[^.!?]{0,20})?[$£€]?\s?\d{2,6}\b/i.test(text) ||
+    /[$£€]\s?\d{2,6}\b/.test(text) ||
+    /\b(?:send|transfer|lend|pay)\s+(?:me|us)\b[^.!?]{0,30}\b(?:money|cash|funds)\b/i.test(text) ||
+    /\b(?:can|could)\s+you\s+(?:please\s+)?(?:send|transfer|lend|pay)\b/i.test(text) ||
+    /\bneed\s+(?:you\s+to\s+)?(?:send|transfer|pay|lend)\b/i.test(text);
+
+  // The pretext is required, not merely one of two ways in. An earlier version
+  // accepted "any other signal present" as the third half, which sounds like
+  // corroboration and isn't: a single urgency word satisfied it, and urgency is
+  // ordinary in real family texts. "Mum, don't forget to pay the school fees of
+  // 250 before Friday, it's urgent!" scored 55 and called a parent's own child
+  // a scammer — the one false positive this rule must never produce, since it
+  // teaches the reader to distrust the verdict and the family member at once.
+  //
+  // What makes the script detectable is not that it is urgent; it is that the
+  // sender has to explain why they are contacting you from a number you don't
+  // recognise. A real family member never needs that sentence.
+  if (opensWithRelation && hasMoneyAsk && hasNumberPretext) {
+    // +45 lands on the "likely_scam" boundary on its own. That is deliberate
+    // and unlike the +20 composites above: those pair two innocent halves into
+    // a suspicion, whereas this is a complete scam script end to end, and the
+    // whole cost of the attack falls in the minutes before the victim thinks
+    // to ring the real number. Warning quietly here would be the same as not
+    // warning. A genuine family member is inconvenienced by one verification
+    // call; a victim is not made whole.
+    sig.add("message",
+      `${FAMILY_IMPERSONATION_FLAG} — an unexpected message opening as your child or parent, explaining away an unfamiliar number, and asking for money. The broken-phone or new-number line is the load-bearing part: it exists to explain why the voice and number are both wrong, and to stop you ringing the number you already have. Call your family member on their usual number before sending anything. If they don't pick up, ask them something only they could answer.`,
+      45,
+    );
   }
 
   // Payment details presented as *changed* — the core of redirect fraud (D5 /
@@ -1106,6 +1212,27 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   });
   // Email gets a bit more lenience than the same words in an SMS.
   sig.merge("message", smsCheck, Math.floor(smsCheck.score * 0.7));
+
+  // …but not for the family-impersonation script. The 0.7 discount is right for
+  // the signals it was written for — urgency and reward keywords really are
+  // weaker evidence in a long email than in a 160-character text. It is wrong
+  // here: this composite already requires three independent halves to line up,
+  // so it is not the kind of loose keyword hit the discount exists to soften,
+  // and the script runs by email as readily as by SMS.
+  //
+  // Left alone, the discount turned a 45 into a 31 and demoted the verdict from
+  // "likely scam" to "something's a bit sus" — advice that reads as permission
+  // to keep reading. The floor restores the SMS score for this one signal
+  // instead of weakening the discount for every other, so nothing else moves.
+  // Restored by re-adding the shortfall to the signal's OWN row rather than as
+  // a separate one: flags are rendered straight from signal text, so a padding
+  // row would show the reader a blank bullet.
+  const familyImpersonationHit = (smsCheck.signals ?? []).find((x) =>
+    x.text.startsWith(FAMILY_IMPERSONATION_FLAG),
+  );
+  if (familyImpersonationHit) {
+    sig.restore(FAMILY_IMPERSONATION_FLAG, familyImpersonationHit.points);
+  }
 
   // Header-aware sender analysis: parse From / Reply-To / Return-Path and flag
   // display-name masking and From≠Reply-To spoofing.

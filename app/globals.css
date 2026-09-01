@@ -117,3 +117,80 @@ body:has(dialog[open]) {
   white-space: nowrap;
   border-width: 0;
 }
+
+
+/* ── check flow transitions ──────────────────────────────────────────────
+   Three moments where the check changes shape, and what each one needs.
+
+   The rule throughout: cross-fade things that occupy the same place, and give
+   the container time to reach its new size rather than snapping to it. The
+   panel replacing the textarea moved the card 25px in a single frame, and the
+   verdict replacing the whole flow moved the page by over a thousand — both
+   read as a flinch rather than a change.
+
+   All of it is opt-in via motion-safe. Someone who has asked for less motion
+   gets the same states, arriving instantly. */
+
+/* 1. The panel and the textarea swap inside the card.
+      They occupy the same slot, so the card has to move between two heights it
+      does not know in advance. CSS cannot interpolate to `auto`, and the
+      grid-rows 0fr→1fr trick only animates a row being revealed, not one whose
+      contents change size — so the height is measured and set as a custom
+      property (see useSwapHeight in CheckFlow), and the transition runs between
+      the two pixel values. `auto` is restored once it lands, so the box stays
+      resizable and nothing is pinned to a stale measurement. */
+.check-swap {
+  height: var(--swap-h, auto);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .check-swap {
+    transition: height 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* 2. Anything entering the card in place of something else. */
+@keyframes check-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.check-fade-in {
+  animation: check-fade-in 0.26s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 2b. The stage rows settle rather than snapping between states. The dot and
+       its label change colour as a row goes active and then done, and the DONE
+       label appears — a transition keeps those reading as one row progressing
+       instead of three separate repaints. */
+@media (prefers-reduced-motion: no-preference) {
+  .check-step,
+  .check-step .check-dot,
+  .check-step .check-meta {
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      opacity 0.2s ease;
+  }
+}
+
+/* 3. The verdict, which replaces the entire flow rather than part of it.
+      It rises a little as it fades: this is the payoff of the whole product and
+      the one transition worth being felt, where the in-card swaps should pass
+      unnoticed. Small enough (6px) that it never reads as the page sliding. */
+@keyframes check-result-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.check-result-in {
+  animation: check-result-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-fade-in,
+  .check-result-in {
+    animation: none;
+  }
+}
