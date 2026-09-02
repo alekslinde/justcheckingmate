@@ -1,0 +1,33 @@
+# AU benign — genuine sender templates.
+#
+# Sourced from what the impersonated organisations themselves publish about
+# their real messages, not invented. That matters: these are the messages a
+# false positive costs the most, because telling someone a real AusPost or ATO
+# message is a scam teaches them to distrust the verdict AND the sender.
+#
+# The shared shape is deliberate. AusPost, the ATO, Services Australia and
+# Scamwatch all publish the same rule — a genuine unsolicited message from them
+# carries NO login link, and directs you to the app or to sign in yourself. So
+# every case here is link-free by construction, which is precisely the form the
+# engine finds hardest: the lure vocabulary is identical to a scam's, and only
+# the absence of a link and of an ask separates them.
+#
+# Sources (fetched 2026-09-02):
+#   auspost.com.au/about-us/about-our-site/online-security-scams-fraud/scam-alerts
+#     — "will never call, text or email you asking for personal or financial
+#       information", "will never ... request payment"
+#   ato.gov.au/online-services/scams-cyber-safety-and-identity-protection/
+#     verify-or-report-an-ato-scam — "will never send an unsolicited SMS that
+#     contains a hyperlink"; myGov notifications "will not contain links"
+#   scamwatch.gov.au/types-of-scams/phishing — government "won't ever send a
+#     text message or email with a link to log onto online services such as myGov"
+{"id": "au-sms-2001", "type": "sms", "region": "AU", "content": "AusPost: your parcel is on board for delivery today. No action needed.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:auspost", "addedAt": "2026-09-02", "notes": "Link-free delivery notice, the form AusPost says its real SMS takes."}
+{"id": "au-sms-2002", "type": "sms", "region": "AU", "content": "AusPost: your parcel is ready for collection at Newtown Post Office. Bring ID and your tracking number.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:auspost", "addedAt": "2026-09-02", "notes": "Collection notice. Asks for ID at a counter, not for data by reply."}
+{"id": "au-sms-2003", "type": "sms", "region": "AU", "content": "AusPost: your parcel has been delivered. Track your deliveries in the AusPost app.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:auspost", "addedAt": "2026-09-02", "notes": "Directs to the app rather than a link — AusPost's own published advice."}
+{"id": "au-sms-2004", "type": "sms", "region": "AU", "content": "You have a new message in your myGov Inbox. Sign in to myGov to read it.", "label": "benign", "category": "government", "source": "sender-template:mygov", "addedAt": "2026-09-02", "notes": "myGov notifications do not contain links; the user signs in themselves."}
+{"id": "au-sms-2005", "type": "sms", "region": "AU", "content": "The ATO has sent you a message. Sign in to myGov to read it. We will never send you a link to log on.", "label": "benign", "category": "tax-refund", "source": "sender-template:ato", "addedAt": "2026-09-02", "notes": "Carries the ATO's own anti-phishing line. Currently scores likely_scam (55)."}
+{"id": "au-sms-2006", "type": "sms", "region": "AU", "content": "Medicare: your claim has been processed. Your benefit will be paid to your nominated bank account within 3 business days.", "label": "benign", "category": "government", "source": "sender-template:services-australia", "addedAt": "2026-09-02", "notes": "\"claim\" here is a Medicare claim, not a prize — reward-language signal misfires."}
+{"id": "au-sms-2007", "type": "sms", "region": "AU", "content": "Linkt: your account balance is low. Top up in the Linkt app or at a service centre.", "label": "benign", "category": "toll", "source": "sender-template:linkt", "addedAt": "2026-09-02", "notes": "Toll top-up reminder with no link and no payment request in-message."}
+{"id": "au-sms-2008", "type": "sms", "region": "AU", "content": "CommBank: 472913 is your one-time code. We will never call and ask for this code.", "label": "benign", "category": "bank-impersonation", "source": "sender-template:commbank", "addedAt": "2026-09-02", "notes": "OTP with the standard warning. Currently clean."}
+{"id": "au-sms-2009", "type": "sms", "region": "AU", "content": "Telstra: your bill of $89.00 is due on 15 September. View it in the My Telstra app.", "label": "benign", "category": "billing", "source": "sender-template:telstra", "addedAt": "2026-09-02", "notes": "Billing notice directing to the app. Currently clean."}
+{"id": "au-sms-2010", "type": "sms", "region": "AU", "content": "Reminder: your appointment at Newtown Medical Centre is on Tuesday at 10:15am. Call 02 9000 1234 to reschedule.", "label": "benign", "category": "government", "source": "sender-template:health", "addedAt": "2026-09-02", "identifiers": ["02 9000 1234"], "notes": "Callback number is a documentation-range fixed line, not a real practice."}

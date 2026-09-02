@@ -272,6 +272,61 @@ corpus exercised it, and that is a corpus gap worth filling. `phone-e164` and
 `type: "phone"` case and no AU-format number at all, while `phoneIntel.ts` is
 the second-largest module in the engine.
 
+## Corpus composition
+
+| File | Cases | What it is |
+|---|---|---|
+| `au-sms.jsonl`, `au-url.jsonl`, `au-email.jsonl` | 47 | AU scams and a small benign set |
+| `au-benign-senders.jsonl` | 10 | Genuine sender templates — see below |
+| `au-phone.jsonl` | 5 | The phone path, previously unmeasured |
+| `multi-region.jsonl` | 12 | GB / US / NZ / CA / fallback |
+
+### Benign sender templates
+
+`au-benign-senders.jsonl` holds messages sourced from what the impersonated
+organisations publish about their own real mail, rather than invented benign
+text. AusPost, the ATO, Services Australia and Scamwatch all publish the same
+rule: a genuine unsolicited message carries **no login link** and directs you to
+an app or to sign in yourself.
+
+That makes these the hardest possible benign cases, and the right ones. The lure
+vocabulary is identical to a scam's — parcel, myGov, claim, balance — and only
+the absence of a link and of an ask separates them. They are also the cases a
+false positive costs most: telling someone a real ATO message is a scam teaches
+them to distrust the verdict *and* the sender.
+
+Seven of the ten currently flag. The signals responsible are visible in a run:
+
+- **"Claims to be from a government agency" (+25)** fires on any mention of the
+  agency, including genuine mail from it. Every real ATO message says "ATO".
+- **"Asks for sensitive info" (+15/+30)** fires on merely *naming* myGov or
+  Medicare, with no request present.
+- **"Prize/reward language: claim" (+12)** fires on "your claim has been
+  processed" — a Medicare claim, not a prize.
+
+### The phone slice
+
+`phoneIntel.ts` is 839 lines and had no corpus coverage at all; two metamorphic
+transforms reported "never applied" for want of an AU number to run against.
+Every number in that file is from the ACMA drama range (0491 570 156-216),
+reserved for fiction, or a documentation-style 02 9000 / 1900 number — none is a
+number anyone answers.
+
+`au-phone-1003` (an ordinary Sydney landline) scores suspicious (30): every AU
+fixed line raises "easy to spoof". The note is educational and true, but it
+lands as a *verdict* on any real number a user checks.
+
+## Why AU breaches its FPR gate
+
+AU measures **42.9% [27-61]** against 28 benign cases, up from 0.3 against 9.
+
+The gate was deliberately **not** raised to match. The 0.3 figure was never a
+target — it recorded what the engine did when the benign corpus was too small to
+see past — and moving it to 42.9% would ratchet backwards to accommodate
+failures the new cases just made visible, which is the opposite of what the
+ratchet is for. AU is expected to breach until the signals above stop firing on
+genuine sender mail. Every other slice still gates.
+
 ## Known open violation
 
 `benign-padding` on `au-sms-0010` is currently red, and deliberately left so.
