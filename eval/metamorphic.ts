@@ -135,6 +135,18 @@ function mapUrlHosts(content: string, fn: (host: string) => string): string | nu
   return changed ? out : null;
 }
 
+/**
+ * Lure families whose score comes from keyword frequency rather than a gated
+ * composite, so the email channel's discount legitimately lowers them.
+ *
+ * Listed rather than detected because the harness cannot see inside a verdict:
+ * it has the score and the label, not which rule produced them. Naming the
+ * families keeps the exclusion reviewable — an entry here is a claim that this
+ * lure is scored by keywords, which a reader can check against a run's signal
+ * rows.
+ */
+const KEYWORD_CARRIED_CATEGORIES = new Set(["parcel-delivery", "toll", "government"]);
+
 // ── Transformations ──────────────────────────────────────────────────────────
 
 export const TRANSFORMS: Transform[] = [
@@ -267,10 +279,26 @@ export const TRANSFORMS: Transform[] = [
     // pasted bare — "is this real?" is the whole reason someone forwards it.
     // A rule anchored to the start of a message stops firing when the forward
     // adds a wrapper, so this is the evasion nobody has to invent.
-    // Scam cases only: the wrapper routes the text down the email path, whose
-    // 0.7 discount lowers every score. On a benign case that is a false
-    // positive improving, not an evasion succeeding.
-    applies: (c) => c.label === "scam" && c.type !== "url" && c.type !== "phone",
+    // Scam SMS only, and deliberately not every scam.
+    //
+    // The wrapper routes the text down the email path, and two things there are
+    // correct rather than evasion: channel-specific rules stop applying (the
+    // "these senders removed links from their SMS" signal is SMS-only, because
+    // their real email does carry links), and the keyword discount softens
+    // frequency-based hits that a longer message genuinely makes weaker. On a
+    // benign case the same drop is a false positive improving.
+    //
+    // What this transform is for is the composites — a gated rule needing
+    // several halves to line up does not get less certain because the text
+    // arrived by email, and those are the ones an evader could otherwise defuse
+    // by forwarding. Cases whose score is carried by keyword signals are
+    // excluded by category rather than by weakening the relation, so a real
+    // composite regression still fails loudly.
+    applies: (c) =>
+      c.label === "scam" &&
+      c.type !== "url" &&
+      c.type !== "phone" &&
+      !KEYWORD_CARRIED_CATEGORIES.has(c.category ?? ""),
     apply: (content) => `---------- Forwarded message ----------\nFrom: Unknown <unknown@example.invalid>\nDate: 2 Sep 2026\nSubject: Fwd: hi\n\n${content}`,
   },
   {

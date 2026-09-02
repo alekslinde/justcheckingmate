@@ -248,6 +248,9 @@ function mentionsAny(text: string, entries: string[]): boolean {
   return entries.some((entry) => mentions(text, entry));
 }
 
+const WIN_CLICKFIX_FLAG =
+  "'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step";
+
 const MAC_CLICKFIX_FLAG =
   "'Open Terminal and paste this' instruction detected — this is the macOS ClickFix variant: a fake CAPTCHA or 'browser fix' overlay talks you into running the attacker's command yourself, usually via Spotlight and Terminal. No legitimate site or verification step ever asks for this.";
 
@@ -643,7 +646,12 @@ const MAX_SCAFFOLD_LINES = 8;
  * message that opens with ordinary prose is returned untouched.
  */
 export function stripForwardingPrefix(text: string): string {
-  const lines = text.split(/\r?\n/);
+  // Quote markers come off first and per-line, because the two wrappers nest:
+  // forwarding a message someone already forwarded you quote-marks the whole
+  // thing, so the scaffold lines arrive as "> ---------- Forwarded message ---".
+  // Stripping quotes only at the end left that shape unmatched, and each
+  // wrapper worked alone while the pair — the commonest real case — did not.
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/^[ \t]*(?:>[ \t]?)+/, ""));
   let i = 0;
   while (i < lines.length && i < MAX_SCAFFOLD_LINES) {
     const line = lines[i];
@@ -662,8 +670,7 @@ export function stripForwardingPrefix(text: string): string {
     }
     i++;
   }
-  // Quote markers are per-line and survive the scaffold pass.
-  return lines.slice(i).join("\n").replace(/^[\s>]+/, "");
+  return lines.slice(i).join("\n").replace(/^\s+/, "");
 }
 
 export function bodyAfterHeaders(raw: string): string {
@@ -708,6 +715,14 @@ export interface MessageCheckOptions {
  * drop both.
  */
 const RELATION_AS_SUBJECT = String.raw`(?:'s|s'|\s+(?:said|says|is|was|of|will|has|had|and|or|thinks|told|wants|needs))\b`;
+
+/** Opening words of the task-payment composite, shared so checkEmail can find it. */
+const TASK_PAYMENT_FLAG =
+  "Earnings held behind a task you must pay to complete";
+
+/** Opening words of the messaging-hijack composite, shared for the same reason. */
+const MESSAGING_HIJACK_FLAG =
+  "Claims a messaging account has been flagged or restricted";
 
 export const FAMILY_IMPERSONATION_FLAG =
   'Reads as the "Hi Mum" family-impersonation script';
@@ -952,7 +967,7 @@ export function checkSms(
   // this, so the fuzzy match scores near-certain.
   if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
       /powershell\s+-[ec]/i.test(text)) {
-    sig.add("message", "'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step", 50);
+    sig.add("message", WIN_CLICKFIX_FLAG, 50);
   } else if (isMacClickFix(text)) {
     sig.add("message", MAC_CLICKFIX_FLAG, 50);
   }
@@ -1016,7 +1031,7 @@ export function checkSms(
     (/\byou\s+have\s+(?:\d+\s+)?unfinished\s+tasks?\b/i.test(text) &&
       /\b(withdraw|withdrawal|earnings?|commission|balance|deposit|top\s?up|recharge|unlock|frozen|payout)\b/i.test(text));
   if (taskPaymentGate) {
-    sig.add("message", "Earnings held behind a task you must pay to complete — this is the moment a task-scam takes the money. A real employer never asks you to deposit funds to release your own wages, and the small payouts that came before exist to make this step feel safe. Anything sent here is gone, and the 'balance' on screen is not real.", 40);
+    sig.add("message", TASK_PAYMENT_FLAG + " — this is the moment a task-scam takes the money. A real employer never asks you to deposit funds to release your own wages, and the small payouts that came before exist to make this step feel safe. Anything sent here is gone, and the 'balance' on screen is not real.", 40);
   }
 
   // Verification-code harvesting — messaging-app account takeover (D3 / #227 /
@@ -1106,7 +1121,7 @@ export function checkSms(
     new RegExp(`\\b${SIGNAL_APP}\\b[^.!?]{0,70}\\b(?:has\\s+been\\s+)?${STATUS}\\b`).test(text) ||
     new RegExp(`\\b${STATUS}\\b[^.!?]{0,40}\\b(?:${UNAMBIGUOUS_APP}|signal)\\s+account\\b`, "i").test(text);
   if (messagingAppStatusLure) {
-    sig.add("message", "Claims a messaging account has been flagged or restricted — Signal, WhatsApp and Telegram never send account notices by SMS or email. Anything they need to tell you appears inside the app itself, so a message like this arriving any other way is the scam.", 30);
+    sig.add("message", MESSAGING_HIJACK_FLAG + " — Signal, WhatsApp and Telegram never send account notices by SMS or email. Anything they need to tell you appears inside the app itself, so a message like this arriving any other way is the scam.", 30);
   }
 
   // Withdrawal-gate lure — fake gambling platforms, "scambling" (D1 / #225 /
@@ -1280,6 +1295,26 @@ export function checkSms(
   return scoreToResult(score, sig, "SMS", PACK.coverage, PACK.reportingBody);
 }
 
+/**
+ * Signals the email channel's 0.7 discount must not touch.
+ *
+ * Every entry is a composite whose gate requires two or more independent
+ * conditions to hold at once. The discount exists to soften loose keyword hits,
+ * whose false-positive rate really does rise with message length; a composite's
+ * does not, so discounting one only moves a correct verdict down a tier.
+ *
+ * Adding a composite to the engine means adding it here. __tests__ asserts each
+ * entry survives the email path at its SMS weight, so a forgotten one fails
+ * loudly rather than quietly scoring a tier low.
+ */
+const UNDISCOUNTED_COMPOSITES: string[] = [
+  FAMILY_IMPERSONATION_FLAG,
+  TASK_PAYMENT_FLAG,
+  MESSAGING_HIJACK_FLAG,
+  MAC_CLICKFIX_FLAG,
+  WIN_CLICKFIX_FLAG,
+];
+
 // ────────────────────────────────────────────────────────────────────────────
 // Email checker
 // ────────────────────────────────────────────────────────────────────────────
@@ -1309,25 +1344,34 @@ export function checkEmail(text: string, blocklist?: Set<string>, region?: Regio
   // Email gets a bit more lenience than the same words in an SMS.
   sig.merge("message", smsCheck, Math.floor(smsCheck.score * 0.7));
 
-  // …but not for the family-impersonation script. The 0.7 discount is right for
-  // the signals it was written for — urgency and reward keywords really are
-  // weaker evidence in a long email than in a 160-character text. It is wrong
-  // here: this composite already requires three independent halves to line up,
-  // so it is not the kind of loose keyword hit the discount exists to soften,
-  // and the script runs by email as readily as by SMS.
+  // …but not for the gated composites. The 0.7 discount is right for the
+  // signals it was written for — urgency and reward keywords really are weaker
+  // evidence in a long email than in a 160-character text, because a long
+  // message has more room to say an ordinary word. That reasoning is about
+  // keyword FREQUENCY, and it does not transfer to a rule that already requires
+  // several independent halves to line up: those do not become more likely to
+  // misfire because the message is longer, and every one of these scripts runs
+  // by email as readily as by SMS.
   //
-  // Left alone, the discount turned a 45 into a 31 and demoted the verdict from
-  // "likely scam" to "something's a bit sus" — advice that reads as permission
-  // to keep reading. The floor restores the SMS score for this one signal
-  // instead of weakening the discount for every other, so nothing else moves.
-  // Restored by re-adding the shortfall to the signal's OWN row rather than as
-  // a separate one: flags are rendered straight from signal text, so a padding
-  // row would show the reader a blank bullet.
-  const familyImpersonationHit = (smsCheck.signals ?? []).find((x) =>
-    x.text.startsWith(FAMILY_IMPERSONATION_FLAG),
-  );
-  if (familyImpersonationHit) {
-    sig.restore(FAMILY_IMPERSONATION_FLAG, familyImpersonationHit.points);
+  // Left alone the discount demoted them across the verdict boundary, which is
+  // the part that reaches the reader: the family script went 45 → 31, the
+  // task-payment composite 52 → 36 and the messaging-hijack lure 60 → 42, each
+  // landing on "something's a bit sus" — advice that reads as permission to
+  // keep reading.
+  //
+  // A list rather than one special case, because the previous shape covered
+  // only the family script and every composite added since silently inherited a
+  // discount nobody decided to give it. The entry test is structural: a signal
+  // belongs here when its gate requires two or more independent conditions, so
+  // it is not the loose keyword hit the discount exists to soften. Keyword-count
+  // signals (urgency, reward, sensitive-info, generic keywords) stay discounted.
+  //
+  // Each is restored by lifting the signal's OWN row back to its pre-discount
+  // weight rather than adding a separate one: flags are rendered straight from
+  // signal text, so a padding row would show the reader a blank bullet.
+  for (const flag of UNDISCOUNTED_COMPOSITES) {
+    const hit = (smsCheck.signals ?? []).find((x) => x.text.startsWith(flag));
+    if (hit) sig.restore(flag, hit.points);
   }
 
   // Header-aware sender analysis: parse From / Reply-To / Return-Path and flag
@@ -1615,7 +1659,7 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
   // fuzzy match. No legitimate site tells you to press Win+R and paste a command.
   if (/press\s+(win|windows)\s*\+?\s*r\b/i.test(text) ||
       /powershell\s+-[ec]/i.test(text)) {
-    sig.add("message", "'Press Win+R' instruction detected — this is ClickFix social engineering: scammers trick you into running malware on your own computer disguised as a 'human verification' step", 50);
+    sig.add("message", WIN_CLICKFIX_FLAG, 50);
   } else if (isMacClickFix(text)) {
     // The macOS variant matters more here than in checkSms: a pasted fake-CAPTCHA
     // page is the likeliest way this reaches us.

@@ -329,23 +329,9 @@ genuine sender mail. Every other slice still gates.
 
 ## Known open violations
 
-Three, all deliberately left red.
+Two, both the same case, deliberately left red.
 
-**`forwarded-prefix` (2), on scam cases.** Wrapping a scam in a mail client's
-forwarding scaffolding routes it down the email path, whose 0.7 discount lowers
-every score: `au-sms-0003` goes likely_scam (55) → suspicious (30). The family
-gate's own comment records the same discount demoting a 45 to a 31 once before.
-`checkSms` scores the two forms identically, so this is the email discount, not
-the anchor. Closing it means deciding what that discount is for and whether it
-should apply to a message that was merely forwarded rather than authored as
-email.
-
-The transform is scoped to `label === "scam"` on purpose. Forwarding also drops
-the benign AusPost and Linkt cases from suspicious to safe — a false positive
-improving, not an evasion succeeding — and reporting those as violations buried
-the two real ones.
-
-**`benign-padding` (1), on `au-sms-0010`.** Prepending ordinary prose moves the
+**`benign-padding` (2), on `au-sms-0010` and `au-sms-0014`.** Prepending ordinary prose moves the
 family script's opener out of anchor range. Unlike a forwarding wrapper this is
 arguably correct: the stripper handles a closed list of recognised scaffolding
 shapes, and skipping arbitrary prose instead would make the anchor meaningless —
