@@ -374,15 +374,21 @@ everything that did use it. They are now routed through the one matcher.
 
 ## Known open violations
 
-Two, both the same case, deliberately left red.
+None. All 14 relations hold across 354 checks.
 
-**`benign-padding` (2), on `au-sms-0010` and `au-sms-0014`.** Prepending ordinary prose moves the
-family script's opener out of anchor range. Unlike a forwarding wrapper this is
-arguably correct: the stripper handles a closed list of recognised scaffolding
-shapes, and skipping arbitrary prose instead would make the anchor meaningless —
-any scam could buy immunity by prepending a sentence. Left red because the
-boundary between "scaffolding" and "prose" is a judgement someone should revisit
-with real forwarded samples, not because the current behaviour is wrong.
+The last two — `benign-padding` on `au-sms-0010` and `au-sms-0014` — were closed
+by giving the family gate a second way to recognise address. It anchored on
+*position*, which is not the same thing: "Just letting you know, I got a new
+number after my phone broke. Mum, can you transfer $200 for the rego?" carries
+all three halves and scored **safe (0)** purely because the term is not first.
+The relation was reporting a live false negative, not a harness artefact.
+
+The gate now matches an opening term (which carries the no-comma cases the
+corpus holds, "mum send me 400 my phone broke") **or** a vocative anywhere in
+the body, marked by a following comma or exclamation. Both branches exclude the
+subject reading, so "Mum's phone broke" and "dad said he'd transfer the 300"
+stay out, and the pretext requirement is still the half a real family member
+never writes.
 
 ## What a violation is not
 

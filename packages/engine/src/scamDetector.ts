@@ -1011,12 +1011,35 @@ export function checkSms(
   const anchorText = stripForwardingPrefix(
     (channel === "email" ? bodyAfterHeaders(text) : text),
   ).trim();
-  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
-    new RegExp(
+  // Two ways to be addressed, because neither alone covers the script.
+  //
+  //   · opening — the term starts the body, with or without a greeting. This is
+  //     the classic shape and carries the cases with no comma at all: the corpus
+  //     holds "mum send me 400 my phone broke" and "Hi Dad I dropped my phone".
+  //   · vocative — the term is addressed anywhere in the message, marked by a
+  //     following comma or exclamation after a sentence break.
+  //
+  // Position alone was scoring a live scam safe: "Just letting you know, I got a
+  // new number after my phone broke. Mum, can you transfer $200 for the rego?"
+  // has all three halves and went undetected purely because the term is not
+  // first. That is also what the benign-padding metamorphic relation was
+  // reporting — prepending prose moved the opener out of range.
+  //
+  // Both branches exclude the subject reading, so "Mum's phone broke" and
+  // "dad said he'd transfer the 300" stay out. The remaining protection against
+  // an ordinary family text is the pretext requirement below, which is the half
+  // a real family member never writes.
+  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) => {
+    const opening = new RegExp(
       `^\\W{0,3}(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})`,
       "i",
-    ).test(anchorText),
-  );
+    );
+    const vocative = new RegExp(
+      `(?:^|[.!?]\\s+|\\n\\s*)(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})\\s*[,!]`,
+      "i",
+    );
+    return opening.test(anchorText) || vocative.test(anchorText);
+  });
   const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
   const hasMoneyAsk =
     /\b(?:send|transfer|pay|lend|e-?transfer|etransfer|deposit|spot)\b[^.!?]{0,40}?(?:\b(?:me|us|it)\b[^.!?]{0,20})?[$£€]?\s?\d{2,6}\b/i.test(text) ||
