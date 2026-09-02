@@ -315,3 +315,46 @@ describe("checkPhone — region-neutral copy", () => {
     expect(checkPhone("+61412345678", "AU").phoneIntel?.isDomestic).toBe(true);
   });
 });
+
+describe("line-type spoofability is context, not evidence", () => {
+  // Every fixed-line, toll-free and shared-cost number IS trivially spoofable,
+  // and the note says so. Scored, that put a flat 30 — "suspicious" — on the
+  // published contact number of essentially every business and government
+  // agency in the country, so someone checking their own GP's number was told
+  // it was dodgy. Found by eval/corpus/au-phone.jsonl.
+
+  it.each([
+    ["AU", "02 9000 1234", "landline"],
+    ["AU", "1800 000 000", "toll-free"],
+    ["AU", "13 00 00", "shared-cost"],
+    ["GB", "020 7946 0000", "landline"],
+    ["GB", "0800 001 0000", "toll-free"],
+    ["US", "800 555 0100", "toll-free"],
+    ["IE", "01 234 5678", "landline"],
+    ["NZ", "09 373 5000", "landline"],
+  ])("%s: does not call an ordinary %s number suspicious (%s)", (region, number) => {
+    expect(checkPhone(number, region as never).verdict).toBe("safe");
+  });
+
+  it("still tells the reader the number type is spoofable", () => {
+    // The caution is not deleted, only unscored — it reaches the reader through
+    // spoofingNotes, which is where "here is how caller ID works" belongs.
+    const intel = analysePhone("02 9000 1234", "AU");
+    expect(intel.spoofingNotes.join(" ")).toMatch(/easy to fake|local area code/i);
+    expect(intel.spoofingRisk).toBe("low");
+  });
+
+  it.each([
+    ["AU", "1900 654 321", "premium rate"],
+    ["AU", "+234 801 234 5678", "high-scam international"],
+    ["NZ", "0900 12345", "premium rate"],
+  ])("%s: still scores %s, which says something about this number (%s)", (region, number) => {
+    expect(checkPhone(number, region as never).verdict).toBe("likely_scam");
+  });
+
+  it("still flags a number that is not a valid format", () => {
+    // "09 123 4567" is one digit short for an NZ geographic number. The max
+    // metadata catches it, and saying so is correct.
+    expect(checkPhone("09 123 4567", "NZ" as never).verdict).not.toBe("safe");
+  });
+});

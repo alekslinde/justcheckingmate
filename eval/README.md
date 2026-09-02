@@ -318,7 +318,7 @@ lands as a *verdict* on any real number a user checks.
 
 ## AU false-positive rate
 
-AU measures **3.4% [1-17]** against 29 benign cases, down from 41.4%.
+AU measures **0.0% [0-12]** against 29 benign cases, down from 41.4%.
 
 The drop is three signals that fired on a message's *subject* rather than on
 anything wrong with it, all found by the sender-template cases:
@@ -336,8 +336,18 @@ anything wrong with it, all found by the sender-template cases:
 - **"claim" as reward language** (+12) fired on "your claim has been processed".
   The noun sense is now excluded; the verb sense every lure uses still scores.
 
+A fourth was in the phone path: fixed-line, toll-free and shared-cost numbers
+carried a flat +30 for being spoofable. They are — every one of those line types
+is — but that is a fact about the phone network, not evidence about the number in
+front of the reader, and it made an ordinary landline, an 1800 number and a 1300
+number all come back "suspicious". Someone checking their own GP's number was
+told it was dodgy. The caution still reaches the reader through `spoofingNotes`;
+it just no longer scores. What stays scored is a range unusual for its claimed
+purpose — VoIP, premium rate, wangiri, elevated-volume origins.
+
 Recall is unchanged at 100%. The gates stay at 0.3 as a drift ceiling rather
-than a target — see `thresholds.json`.
+than a target — see `thresholds.json`. The interval still reaches 12%, so 0.0%
+is 29 cases' worth of evidence rather than a settled number.
 
 Fixing these also surfaced that six phrase-list matchers used a raw `includes()`
 instead of `mentions()`, so they carried the whitespace bug fixed earlier for

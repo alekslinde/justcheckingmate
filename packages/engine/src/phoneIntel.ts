@@ -652,10 +652,23 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
   const normalised = parsed.formatInternational();
 
   // ── Domestic, plan-aware analysis ──────────────────────────────────────────
+  //
+  // Fixed-line, toll-free and shared-cost numbers carry their spoofing note but
+  // no risk bump. Every one of those line types IS trivially spoofable, and the
+  // note says so — but that is a fact about the phone network, not evidence
+  // about the number in front of the reader. Scored, it put a flat 30 on the
+  // published contact number of essentially every business and government
+  // agency in the country: an ordinary landline, an 1800 line and a 1300 line
+  // all came back "suspicious", so someone checking their own GP's number was
+  // told it was dodgy.
+  //
+  // The note still reaches the reader through spoofingNotes, which is where a
+  // "here is how caller ID works" caution belongs. What stays scored is a range
+  // that is unusual for its claimed purpose — VoIP, premium rate, wangiri, an
+  // elevated-volume origin — because those say something about THIS number.
   if (isDomestic) {
     if (type === "TOLL_FREE") {
       if (plan.tollFreeFlag) spoofingNotes.push(plan.tollFreeFlag);
-      bump("medium");
       return {
         lineType: "freecall",
         region: "National — free call",
@@ -671,7 +684,6 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
 
     if (type === "SHARED_COST") {
       if (plan.sharedCostFlag) spoofingNotes.push(plan.sharedCostFlag);
-      bump("medium");
       return {
         lineType: "shared_cost",
         region: "National — shared cost",
@@ -708,7 +720,6 @@ export function analysePhone(raw: string, region?: RegionInput): PhoneIntel {
     if (type === "FIXED_LINE") {
       const area = areaFor(plan, national);
       spoofingNotes.push("Landline numbers are easy to fake — a local area code doesn't mean the caller is actually nearby or who they claim to be");
-      bump("medium");
       return {
         lineType: "fixed",
         region: area,
