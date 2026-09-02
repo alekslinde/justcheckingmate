@@ -46,7 +46,10 @@ export default function CoverageNotice({
   recheck?:
     | { state: "idle" }
     | { state: "loading"; region: string }
-    | { state: "error"; message: string };
+    | { state: "done"; region: string }
+    // The kind, not a resolved sentence: the message is copy, and copy belongs
+    // to whatever renders it rather than to the state that travels here.
+    | { state: "error"; kind: "rate_limited" | "server" };
 }) {
   const { t } = useLang();
   if (coverage === "full") return null;
@@ -90,10 +93,13 @@ export default function CoverageNotice({
             ))}
           </select>
 
-          {/* Both states are announced: the verdict below changes underneath
-              the reader on success, and on failure it conspicuously does not. */}
+          {/* Both outcomes are announced, and success needs saying most: the
+              verdict below is swapped underneath the reader with no navigation,
+              which a sighted reader may catch and a screen-reader user cannot.
+              The region is kept mounted across the whole transition so the
+              change is announced rather than the node being replaced. */}
           <div role="status" aria-live="polite">
-            {busy && (
+            {recheck?.state === "loading" && (
               <p className="flex items-center gap-2 text-[13px] text-[var(--text-dim)]">
                 <span
                   aria-hidden="true"
@@ -102,10 +108,19 @@ export default function CoverageNotice({
                 {t("verdict.coverage.rechecking", { region: regionName(recheck.region) })}
               </p>
             )}
+            {recheck?.state === "done" && (
+              <p className="text-[13px] text-[var(--text-dim)]">
+                {t("verdict.coverage.recheckDone", { region: regionName(recheck.region) })}
+              </p>
+            )}
           </div>
           {recheck?.state === "error" && (
             <p role="alert" className="text-[13px] leading-relaxed text-[var(--scam-text)]">
-              {recheck.message}
+              {t(
+                recheck.kind === "rate_limited"
+                  ? "verdict.coverage.recheckRateLimited"
+                  : "verdict.coverage.recheckError",
+              )}
             </p>
           )}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { AnalyzedIdentifier, ScamType } from "@justcheckingmate/engine/scamDetector";
 import { detectType } from "@justcheckingmate/engine/detectType";
 import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSanitizer";
@@ -13,6 +13,7 @@ import { useLang, MessageKey } from "@/lib/lang";
 // WASM core is never downloaded by someone who does not upload an image.
 import { canRunClientOcr } from "@/lib/clientOcr";
 import { saveCheckDraft, readCheckDraft, clearCheckDraft } from "@/lib/checkDraft";
+import { checkFeedback, INITIAL_FEEDBACK } from "@/lib/checkFeedback";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge, { Tactics } from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
@@ -462,23 +463,22 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
   // Region the server used for the last check. Null until a check has run.
   const [region, setRegion] = useState<string | null>(null);
-  const [checkLoading, setCheckLoading] = useState(false);
-  const [checkError, setCheckError] = useState<string | null>(null);
-  // The region re-check is a different interaction from the first check, and
-  // needs its own state because it runs on a step where none of the input
-  // step's feedback is on screen.
+  // Everything the reader is told about a run, in one place.
   //
-  // It fires from the coverage notice on the *result* step, while the pipeline
-  // panel, the submit spinner and the checkError block all render on the
-  // *input* step. So a re-check used to run with no indication it was running,
-  // swap the results underneath the reader with no transition, and — on
-  // failure — set a checkError nothing rendered, leaving the previous region's
-  // verdict on screen as though the correction had been applied. Someone
-  // stepping through regions to find their own is exactly who hits the rate
-  // limit, so the silent failure was reachable, not theoretical.
-  const [recheck, setRecheck] = useState<
-    { state: "idle" } | { state: "loading"; region: string } | { state: "error"; message: string }
-  >({ state: "idle" });
+  // These four moved out of scattered useState calls into lib/checkFeedback
+  // because the transitions between them are where the bugs were, and none of
+  // them were reachable by a test while they lived here: a re-check error
+  // survived into the next check and sat under a fresh verdict telling the
+  // reader to distrust it; `busy` stayed false through a re-check, so pressing
+  // Back left the Check button live and a second request could race the first;
+  // and a .eml upload left the image banner up describing content it had just
+  // replaced. The reducer is driven directly by __tests__/checkFeedback.
+  const [feedback, dispatch] = useReducer(checkFeedback, INITIAL_FEEDBACK);
+  const { recheck, imageRead } = feedback;
+  const checkError = feedback.checkError
+    ? t(feedback.checkError === "rate_limited" ? "check.rateLimited" : "check.serverError")
+    : null;
+
   const [uploadLoading, setUploadLoading] = useState(false);
   // Which stage the running pipeline is in, and which pipeline it is. Both map
   // 1:1 onto branches in handleImageUpload / runCheck — there is no stage here
@@ -495,21 +495,6 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   // that has genuinely finished — it never gates the result.
   const [pipelineDone, setPipelineDone] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  // What an image read produced, held until the reader either checks it or
-  // changes it.
-  //
-  // The image path reads text; it does not check it. That second step was
-  // signposted nowhere: the panel's closing tick said "Checked" (of the *read*)
-  // and then vanished, leaving text in a box with no indication that anything
-  // further was expected — and a reader who uploaded a screenshot of a scam
-  // reasonably believes they have asked for a verdict. This says what happened
-  // and what is left to do, and unlike the 900ms tick it stays until the
-  // question is settled.
-  //
-  // QR and OCR are distinguished because they warrant different words: a
-  // decoded QR yields an address the reader should be warned not to visit,
-  // where OCR yields text they should check came out right.
-  const [imageRead, setImageRead] = useState<"qr" | "ocr" | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   // Forward-address copy confirmation. Copying is the one part of forwarding the
   // web can actually do for someone — the forward itself happens in their mail
@@ -622,7 +607,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   // Image → QR decode (client-side) first, OCR fallback via /api/ocr.
   async function handleImageUpload(file: File) {
     setUploadError(null);
-    setImageRead(null);
+    dispatch({ type: "content-replaced" });
     setUploadLoading(true);
     setPipelineDone(false);
     setPipeline("image");
@@ -656,7 +641,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       if (qrData) {
         setContent(qrData);
         read = true;
-        setImageRead("qr");
+        dispatch({ type: "image-read", via: "qr" });
         setPipelineDone(true);
         return;
       }
@@ -705,7 +690,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         // panel's last frame is the only confirmation that the read finished
         // and that it finished where we said it would.
         read = true;
-        setImageRead("ocr");
+        dispatch({ type: "image-read", via: "ocr" });
         setPipelineDone(true);
       } else setUploadError(t("check.ocr.noText"));
     } catch (err) {
@@ -736,6 +721,11 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   // the textarea so the headers (From/Reply-To) feed the check.
   async function handleEmlUpload(file: File) {
     setUploadError(null);
+    // This replaces the textarea's contents, so a banner describing what an
+    // earlier image read put there stops being true. The QR variant is the
+    // worst of it: it would assert "that QR code points to the address now in
+    // the box" about email source.
+    dispatch({ type: "content-replaced" });
     try {
       const text = await file.text();
       setContent(text);
@@ -770,12 +760,8 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     // in-place state on the coverage notice instead; the panel would otherwise
     // spin on a step nobody is looking at.
     const isRecheck = !!overrideRegion;
-    setImageRead(null);
-    if (isRecheck) {
-      setRecheck({ state: "loading", region: overrideRegion });
-    } else {
-      setCheckLoading(true);
-      setCheckError(null);
+    dispatch({ type: "check-started", region: overrideRegion });
+    if (!isRecheck) {
       setPipelineDone(false);
       setPipeline("paste");
     }
@@ -839,26 +825,26 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // No "Checked" hold on this path: the verdict *is* the completion, and
       // pausing on a tick before showing it would be padding the very wait the
       // panel exists to explain.
-      if (isRecheck) setRecheck({ state: "idle" });
-      else goForward("result");
+      dispatch({ type: "check-succeeded", region: overrideRegion });
+      if (!isRecheck) goForward("result");
     } catch (err) {
       const limited = err instanceof CheckRequestError && err.kind === "rate_limited";
-      if (isRecheck) {
-        // Said inside the coverage notice, next to the control that started it.
-        // It also has to say the verdict on screen is the *old* one — silence
-        // here reads as "your correction applied", which is the opposite of
-        // what happened.
-        setRecheck({
-          state: "error",
-          message: t(limited ? "verdict.coverage.recheckRateLimited" : "verdict.coverage.recheckError"),
-        });
-      } else {
-        setCheckError(t(limited ? "check.rateLimited" : "check.serverError"));
-      }
+      // The reducer routes this to whichever surface is on screen: the coverage
+      // notice for a re-check, the input step's block for a first check. A
+      // re-check failure must never be silent — silence there reads as "your
+      // correction applied", which is the opposite of what happened.
+      dispatch({
+        type: "check-failed",
+        region: overrideRegion,
+        kind: limited ? "rate_limited" : "server",
+      });
       // A rate limit is the service working as designed, not a fault to file.
       if (!limited) reportFailure("check", err);
     } finally {
-      setCheckLoading(false);
+      // `busy` is cleared by the reducer on both terminal events, so there is
+      // nothing to reset here. What is left is the pipeline panel, which only
+      // the first-check path ever raised.
+      //
       // The rest of this block tears down the pipeline panel, which a re-check
       // never put up — and clearing `pipeline` here would take the *input*
       // step's panel down mid-run if one were somehow live. A re-check owns
@@ -908,7 +894,10 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     }
   }
 
-  const busy = uploadLoading || checkLoading;
+  // One flag for "a run is in progress", covering both kinds. A re-check used
+  // to leave this false, so only the region <select> was disabled and the
+  // submit and upload controls stayed live behind it.
+  const busy = uploadLoading || feedback.busy;
   // The panel is on screen while a pipeline is running, and for the closing
   // frame after an image read finishes. `pipeline` alone is the switch, and it
   // also gates the textarea's visibility — so every exit from every path must
@@ -1376,7 +1365,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
               hidden={!!pipeStages}
               id="check-content"
               value={content}
-              onChange={(e) => { setContent(e.target.value); setImageRead(null); }}
+              onChange={(e) => { setContent(e.target.value); dispatch({ type: "content-replaced" }); }}
               placeholder={t("check.placeholder")}
               rows={4}
               className="w-full min-h-[118px] px-4 py-4 bg-transparent text-[var(--ink)] placeholder-[#8A93A1] border-0 resize-y text-base leading-relaxed focus:outline-none block"
@@ -1445,7 +1434,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
           <button
             onClick={() => runCheck()}
             disabled={busy || !content.trim()}
-            aria-busy={checkLoading}
+            aria-busy={feedback.busy}
             className={`ml-auto max-sm:w-full max-sm:ml-0 min-w-[172px] inline-flex items-center justify-center gap-2.5 rounded-[9px] px-5 py-2.5 font-semibold text-[15px] transition-colors ${
               pipelineDone
                 ? "bg-[#00805B] text-white"
