@@ -184,3 +184,62 @@ describe("#233 — real signals still fire", () => {
     expect(checkSms(text, undefined, "AU").verdict).not.toBe("safe");
   });
 });
+
+describe("multi-word phrases tolerate whitespace variation", () => {
+  // Found by the metamorphic eval: mentions() matched phrases with includes(),
+  // so the single space an entry happens to be written with was load-bearing.
+  // Any variation defeated it — and that is ~65% of every region pack (2,917 of
+  // 4,493 entries), failing silently because a phrase that does not match
+  // raises no flag to notice.
+
+  it.each([
+    ["doubled space", "i dropped  my phone in the sink"],
+    ["tab", "i dropped\tmy phone in the sink"],
+    ["hard wrap mid-phrase", "i dropped\nmy phone in the sink"],
+    ["non-breaking space", "i dropped my phone in the sink"],
+    ["several spaces", "i dropped   my    phone in the sink"],
+  ])("matches across a %s", (_label, text) => {
+    expect(mentions(text, "dropped my phone")).toBe(true);
+  });
+
+  it("still requires the words themselves, not just their letters", () => {
+    // The separators are relaxed; nothing else is. A missing space joins two
+    // words into a third, which is a different string and not a match.
+    expect(mentions("i droppedmy phone", "dropped my phone")).toBe(false);
+  });
+
+  it("still requires the words in order", () => {
+    expect(mentions("my phone dropped", "dropped my phone")).toBe(false);
+  });
+
+  it("tolerates irregular spacing in the entry as well as the text", () => {
+    // Pack entries are hand-written; a stray double space in one should not
+    // quietly disable it.
+    expect(mentions("press win r now", "win  r")).toBe(true);
+  });
+
+  it("keeps regex metacharacters in a phrase literal", () => {
+    // The phrase branch builds a RegExp now, so an unescaped "+" or "." in an
+    // entry would change from a literal to a quantifier or wildcard.
+    expect(mentions("press win+r to open run", "win+r to")).toBe(true);
+    expect(mentions("press winxr to open run", "win+r to")).toBe(false);
+  });
+});
+
+describe("the whitespace evasion, end to end", () => {
+  it("scores the family-impersonation script the same however it is spaced", () => {
+    // The regression that motivated the fix: this dropped from likely_scam (45)
+    // to safe (0) with no flags at all, because the gate needs its pretext
+    // phrase and had no other way to see one.
+    const single =
+      "Hi Mum, I dropped my phone in the sink and this is my new number. Can you transfer $850 today?";
+    const doubled = single.replace(/ /g, "  ");
+
+    const a = checkSms(single, undefined, "AU");
+    const b = checkSms(doubled, undefined, "AU");
+
+    expect(a.verdict).toBe("likely_scam");
+    expect(b.verdict).toBe(a.verdict);
+    expect(b.score).toBe(a.score);
+  });
+});

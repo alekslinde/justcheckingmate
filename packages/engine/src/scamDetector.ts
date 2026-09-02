@@ -204,10 +204,27 @@ const INFLECTION_MIN_LEN = 4;
  */
 export function mentions(text: string, entry: string): boolean {
   const needle = entry.toLowerCase();
-  // Multi-word phrases keep substring matching — their specificity is their
-  // own protection, and \b would break matching across punctuation.
-  if (/\s/.test(needle)) return text.includes(needle);
   const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Multi-word phrases keep substring matching — their specificity is their
+  // own protection, and \b would break matching across punctuation — but the
+  // gap between the words is matched as \s+ rather than the literal single
+  // space the entry happens to be written with.
+  //
+  // An includes() here made every phrase in the packs defeatable by any
+  // whitespace variation: a doubled space, a tab, a hard wrap mid-phrase, or
+  // the non-breaking space a mail client leaves behind when text is pasted out
+  // of Word. That is ~65% of every region pack (2,917 of 4,493 entries), and it
+  // failed silently — "Hi Mum, I dropped  my phone …" dropped from likely_scam
+  // to safe with no flags at all, because the family-impersonation gate needs
+  // its pretext phrase and had no other way to see one. Whitespace carries no
+  // meaning inside a phrase, so nothing is given up by ignoring its shape.
+  //
+  // Only the separators are relaxed. The words themselves stay literal, and no
+  // boundary is asserted at either end, so this matches exactly what
+  // includes() did on well-formed input.
+  if (/\s/.test(needle)) {
+    return new RegExp(escaped.replace(/\s+/g, "\\s+"), "i").test(text);
+  }
   // \b is a word-character boundary, so an entry that starts or ends with a
   // non-word character (".shop", "gov.au") has no boundary to anchor on there —
   // asserting one would never match. Anchor each side only where it applies.
