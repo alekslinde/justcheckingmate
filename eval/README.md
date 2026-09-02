@@ -327,23 +327,31 @@ failures the new cases just made visible, which is the opposite of what the
 ratchet is for. AU is expected to breach until the signals above stop firing on
 genuine sender mail. Every other slice still gates.
 
-## Known open violation
+## Known open violations
 
-`benign-padding` on `au-sms-0010` is currently red, and deliberately left so.
+Three, all deliberately left red.
 
-The family-impersonation gate requires the relation term to *open* the message
-("Hi Mum, …"), which is what stops "I'll ask mum about the weekend" from
-matching. Prepending prose moves the opener out of that position and the gate
-stops firing. A trailing suffix and a `>` quote marker are both tolerated; a
-`---------- Forwarded message ----------` header is not — and forwarding is
-exactly how someone asks "is this real?".
+**`forwarded-prefix` (2), on scam cases.** Wrapping a scam in a mail client's
+forwarding scaffolding routes it down the email path, whose 0.7 discount lowers
+every score: `au-sms-0003` goes likely_scam (55) → suspicious (30). The family
+gate's own comment records the same discount demoting a 45 to a 31 once before.
+`checkSms` scores the two forms identically, so this is the email discount, not
+the anchor. Closing it means deciding what that discount is for and whether it
+should apply to a message that was merely forwarded rather than authored as
+email.
 
-That is a real gap, but closing it is a judgement call rather than a mechanical
-fix: the anchor exists to prevent a specific false positive the rule's comment
-names ("Mum, don't forget to pay the school fees of 250 before Friday"), which
-would call a parent's own child a scammer. Widening it needs a decision about
-how much prefix to skip and evidence it does not reopen that case. Left red so
-the run keeps asking.
+The transform is scoped to `label === "scam"` on purpose. Forwarding also drops
+the benign AusPost and Linkt cases from suspicious to safe — a false positive
+improving, not an evasion succeeding — and reporting those as violations buried
+the two real ones.
+
+**`benign-padding` (1), on `au-sms-0010`.** Prepending ordinary prose moves the
+family script's opener out of anchor range. Unlike a forwarding wrapper this is
+arguably correct: the stripper handles a closed list of recognised scaffolding
+shapes, and skipping arbitrary prose instead would make the anchor meaningless —
+any scam could buy immunity by prepending a sentence. Left red because the
+boundary between "scaffolding" and "prose" is a judgement someone should revisit
+with real forwarded samples, not because the current behaviour is wrong.
 
 ## What a violation is not
 

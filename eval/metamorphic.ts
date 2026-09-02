@@ -52,6 +52,12 @@ export interface Transform {
    * Which cases this applies to. A phone reformatter has nothing to say about
    * a URL-only case, and running it anyway produces noise that hides real
    * violations behind a wall of no-ops.
+   *
+   * Some transforms are also label-scoped. `noWeaker` asks "did the trick
+   * work", which is only a question about content that SHOULD score — a benign
+   * case scoring lower is a false positive getting better, and reporting that
+   * as a violation buries the real ones. Scope with `c.label === "scam"` where
+   * the relation only makes sense in that direction.
    */
   applies: (c: EvalCase) => boolean;
   /**
@@ -252,6 +258,27 @@ export const TRANSFORMS: Transform[] = [
       `Hi there, hope you had a good weekend. Just passing this along, ` +
       `let me know what you think when you get a chance.\n\n${content}\n\n` +
       `Thanks again, and no rush on this at all. Talk soon.`,
+  },
+  {
+    id: "forwarded-prefix",
+    intent: "Forward the message, wrapping it in a mail client's scaffolding",
+    relation: "noWeaker",
+    // The most likely way a scam text reaches a checker is forwarded, not
+    // pasted bare — "is this real?" is the whole reason someone forwards it.
+    // A rule anchored to the start of a message stops firing when the forward
+    // adds a wrapper, so this is the evasion nobody has to invent.
+    // Scam cases only: the wrapper routes the text down the email path, whose
+    // 0.7 discount lowers every score. On a benign case that is a false
+    // positive improving, not an evasion succeeding.
+    applies: (c) => c.label === "scam" && c.type !== "url" && c.type !== "phone",
+    apply: (content) => `---------- Forwarded message ----------\nFrom: Unknown <unknown@example.invalid>\nDate: 2 Sep 2026\nSubject: Fwd: hi\n\n${content}`,
+  },
+  {
+    id: "quoted-reply",
+    intent: "Quote the message in a reply, as forwarding to a family member would",
+    relation: "noWeaker",
+    applies: (c) => c.label === "scam" && c.type !== "url" && c.type !== "phone",
+    apply: (content) => content.split("\n").map((l) => `> ${l}`).join("\n"),
   },
   {
     id: "defanged",

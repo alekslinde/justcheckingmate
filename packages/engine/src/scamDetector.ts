@@ -608,6 +608,64 @@ function isOwnDomainSender(
  * when what precedes it actually looks like headers, so a plain body whose
  * second paragraph happens to follow a blank line is left alone.
  */
+/**
+ * Scaffolding a forwarded or quoted message carries ahead of its real body.
+ *
+ * Each entry matches a whole line, except the inline forms (Fwd:, a chat
+ * export's timestamp) which prefix the body on the same line and are stripped
+ * in place. Deliberately a closed list of recognised shapes rather than "skip
+ * anything before the first blank line": arbitrary prose must NOT be skipped,
+ * or the family gate's opener anchor stops meaning anything at all.
+ */
+const FORWARD_SCAFFOLD: RegExp[] = [
+  /^\s*-{2,}\s*forwarded message\s*-{2,}\s*$/i,
+  /^\s*begin forwarded message:?\s*$/i,
+  /^\s*(?:fwd|fw|re)\s*:\s*/i,
+  /^\s*(?:from|to|sent|date|subject|reply-to)\s*:.*$/i,
+  /^\s*on .+ wrote:\s*$/i,
+  // Chat-export line: "02/09/2026, 10:42 - Unknown: <body>"
+  /^\s*\[?\d{1,2}[:/]\d{2}.*?\]?\s*[-–]\s*[^:]{0,40}:\s*/i,
+];
+
+/** How many scaffold lines to skip before giving up and treating it as body. */
+const MAX_SCAFFOLD_LINES = 8;
+
+/**
+ * Strip forwarding and quoting scaffolding from the front of a message.
+ *
+ * Forwarding is how people ask "is this real?", so a rule that anchors on the
+ * start of a message has to see past the wrapper the forward added. Before
+ * this, "---------- Forwarded message ----------" ahead of the "Hi Mum" script
+ * took it from likely_scam to safe — the single most likely way for that text
+ * to arrive here was also the one way it went unscored.
+ *
+ * Only leading scaffolding is removed, and only shapes on the list above. A
+ * message that opens with ordinary prose is returned untouched.
+ */
+export function stripForwardingPrefix(text: string): string {
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && i < MAX_SCAFFOLD_LINES) {
+    const line = lines[i];
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+    const hit = FORWARD_SCAFFOLD.find((re) => re.test(line));
+    if (!hit) break;
+    // An inline prefix leaves the body on the same line; a whole-line one does
+    // not. Stripping in place keeps "Fwd: Hi Mum, …" anchorable.
+    const remainder = line.replace(hit, "").trim();
+    if (remainder) {
+      lines[i] = remainder;
+      break;
+    }
+    i++;
+  }
+  // Quote markers are per-line and survive the scaffold pass.
+  return lines.slice(i).join("\n").replace(/^[\s>]+/, "");
+}
+
 export function bodyAfterHeaders(raw: string): string {
   const split = raw.search(/\r?\n\r?\n/);
   if (split === -1) return raw;
@@ -635,6 +693,22 @@ export interface MessageCheckOptions {
  * Opening words of the family-impersonation flag, shared so checkEmail can
  * recognise the signal in a merged sub-result without re-running the match.
  */
+/**
+ * Grammar that marks a relation term as the SUBJECT of a sentence rather than
+ * the person being addressed.
+ *
+ * The opener anchor used to test position alone, which is not the same thing:
+ * "Dad said he'd lend me 500 … when I get my new number sorted" satisfied it
+ * and scored likely_scam (45), calling a real family message a scam. "Mother of
+ * all storms", "Son of a gun" and "Mum's phone broke" satisfied it too.
+ *
+ * A possessive or a following verb is what separates the two readings.
+ * Punctuation does not: the corpus carries "mum send me 400 my phone broke" and
+ * "Hi Dad I dropped my phone" with no comma at all, and requiring one would
+ * drop both.
+ */
+const RELATION_AS_SUBJECT = String.raw`(?:'s|s'|\s+(?:said|says|is|was|of|will|has|had|and|or|thinks|told|wants|needs))\b`;
+
 export const FAMILY_IMPERSONATION_FLAG =
   'Reads as the "Hi Mum" family-impersonation script';
 
@@ -754,9 +828,14 @@ export function checkSms(
   // the rule silently did nothing for every real email until this skipped the
   // header block. Only the anchor needs the body; every other signal here is
   // positional-agnostic and reads the full text as before.
-  const anchorText = (channel === "email" ? bodyAfterHeaders(text) : text).trim();
+  const anchorText = stripForwardingPrefix(
+    (channel === "email" ? bodyAfterHeaders(text) : text),
+  ).trim();
   const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
-    new RegExp(`^\\W{0,3}(?:hi|hey|hello|good\\s+\\w+)?[\\s,!.]*\\b${r}\\b`, "i").test(anchorText),
+    new RegExp(
+      `^\\W{0,3}(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})`,
+      "i",
+    ).test(anchorText),
   );
   const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
   const hasMoneyAsk =

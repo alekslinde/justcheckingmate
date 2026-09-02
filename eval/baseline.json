@@ -43,6 +43,8 @@
     "au-sms-1006": "clean",
     "au-sms-1007": "clean",
     "au-sms-1008": "clean",
+    "au-sms-0014": "flagged",
+    "au-sms-1009": "clean",
     "au-url-0001": "flagged",
     "au-url-0002": "flagged",
     "au-url-0003": "flagged",
