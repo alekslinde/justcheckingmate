@@ -272,6 +272,24 @@ corpus exercised it, and that is a corpus gap worth filling. `phone-e164` and
 `type: "phone"` case and no AU-format number at all, while `phoneIntel.ts` is
 the second-largest module in the engine.
 
+## Known open violation
+
+`benign-padding` on `au-sms-0010` is currently red, and deliberately left so.
+
+The family-impersonation gate requires the relation term to *open* the message
+("Hi Mum, …"), which is what stops "I'll ask mum about the weekend" from
+matching. Prepending prose moves the opener out of that position and the gate
+stops firing. A trailing suffix and a `>` quote marker are both tolerated; a
+`---------- Forwarded message ----------` header is not — and forwarding is
+exactly how someone asks "is this real?".
+
+That is a real gap, but closing it is a judgement call rather than a mechanical
+fix: the anchor exists to prevent a specific false positive the rule's comment
+names ("Mum, don't forget to pay the school fees of 250 before Friday"), which
+would call a parent's own child a scammer. Widening it needs a decision about
+how much prefix to skip and evidence it does not reopen that case. Left red so
+the run keeps asking.
+
 ## What a violation is not
 
 Proof the original verdict was correct. These relations police consistency, not

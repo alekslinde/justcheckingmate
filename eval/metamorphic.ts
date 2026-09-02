@@ -259,7 +259,15 @@ export const TRANSFORMS: Transform[] = [
     relation: "equal",
     applies: (c) => /https?:\/\//i.test(c.content),
     apply: (content) => {
-      const out = content.replace(/https?:\/\//gi, "hxxps://").replace(/\./g, "[.]");
+      // The scheme's own s is preserved. Rewriting http:// as hxxps:// asks
+      // refang to restore a DIFFERENT url — one carrying TLS where the
+      // original had none — and the engine is right to score those apart,
+      // since "No HTTPS" is a real signal about the plain-http original. The
+      // relation only holds if the two strings mean the same thing, and an
+      // upgraded scheme does not.
+      const out = content
+        .replace(/http(s?):\/\//gi, (_m, s: string) => `hxx${s ? "ps" : "p"}://`)
+        .replace(/\./g, "[.]");
       return out === content ? null : out;
     },
   },

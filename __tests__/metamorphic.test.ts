@@ -92,6 +92,21 @@ describe("obfuscation transforms", () => {
     expect(byId("benign-padding").apply(original)).toContain(original);
   });
 
+  it("defanged preserves the scheme's own s", () => {
+    // Rewriting http:// as hxxps:// asks refang to restore a URL carrying TLS
+    // where the original had none, and the engine is right to score those
+    // apart — "No HTTPS" is a real signal about the plain-http original. The
+    // relation only holds if both strings mean the same thing.
+    expect(byId("defanged").apply("http://a.tk/x")).toBe("hxxp://a[.]tk/x");
+    expect(byId("defanged").apply("https://a.tk/x")).toBe("hxxps://a[.]tk/x");
+  });
+
+  it("defanged handles mixed schemes in one message", () => {
+    expect(byId("defanged").apply("visit http://a.tk and https://b.tk")).toBe(
+      "visit hxxp://a[.]tk and hxxps://b[.]tk",
+    );
+  });
+
   it("fullwidth-digits maps every ASCII digit", () => {
     expect(byId("fullwidth-digits").apply("call 0412")).toBe("call ０４１２");
   });
