@@ -281,7 +281,7 @@ the second-largest module in the engine.
 | `au-phone.jsonl` | 5 | The phone path, previously unmeasured |
 | `multi-region.jsonl` | 12 | GB / US / NZ / CA / fallback |
 
-### Benign sender templates
+### Benign sender templates (AU)
 
 `au-benign-senders.jsonl` holds messages sourced from what the impersonated
 organisations publish about their own real mail, rather than invented benign
@@ -303,6 +303,25 @@ Seven of the ten currently flag. The signals responsible are visible in a run:
   Medicare, with no request present.
 - **"Prize/reward language: claim" (+12)** fires on "your claim has been
   processed" — a Medicare claim, not a prize.
+
+### Benign sender templates (GB / US / NZ / IE / CA)
+
+`intl-benign-senders.jsonl` extends the same sourcing to every other pack, and
+it was needed: the AU set measured one region while every other had exactly
+**one** benign case, reporting an FPR of "0.0% [0-79]" from a single
+observation. NZ had none at all, so its rate was unmeasurable.
+
+Six of the twelve cases scored suspicious or likely_scam when first written.
+Postal operators sit in **both** `authorityMentions` and `brandMentions` in GB,
+US, NZ and IE — AU is the only pack where they do not overlap — so one mention
+scored twice and each half corroborated the other. `USPS: your package is out
+for delivery today. No action needed.` reached likely_scam (45) while its AU
+twin scored 0.
+
+Two more were regional twins of already-fixed AU bugs: `social security` is a
+service name in `requestWords` that the AU-only constant missed, and
+`vehicle tax is due` sat in GB `urgencyWords` — a due date is what the genuine
+DVLA reminder says, and the threat phrasing is `untaxed`.
 
 ### The phone slice
 
