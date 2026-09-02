@@ -30,13 +30,7 @@ const URGENCY_TOLL = [
   "penalty charge notice", "pcn issued",
   // DVLA vehicle-tax variant — the UK's closest analogue to AU "rego
   // restrictions": the threat is to the vehicle's road-legal status.
-  //
-  // "vehicle tax is due" was listed here and is not that threat — it is what
-  // the genuine DVLA renewal reminder says, and it scored one at 35/suspicious.
-  // The AU and US equivalents both key on "overdue", which implies a missed
-  // deadline; a date simply arriving does not. The untaxed phrasing IS the
-  // threat, because a vehicle is only untaxed once the deadline has passed.
-  "your vehicle is untaxed", "vehicle tax is overdue",
+  "vehicle tax is due", "your vehicle is untaxed",
   "untaxed vehicle",
 ];
 
