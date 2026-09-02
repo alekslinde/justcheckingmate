@@ -13,7 +13,6 @@
   "check.help.photo.body": "Point your camera dead-on at the message or QR code in decent light, fill the frame, and keep it steady. We'll decode QR codes and read the text for you.",
   "check.help.image.body": "A clear screenshot of the whole message is the go. Any format (PNG, JPG, HEIC) is fine — just make sure the text and any links are readable.",
   "check.placeholder": "Paste the sus stuff here — link, number, text message, whatever you've got…",
-  "check.analysing": "Checking it out…",
   "check.serverError": "Couldn't run that check just now. Give it another crack.",
   "verdict.safe.label": "Looks alright, mate",
   "verdict.suspicious.label": "Something's a bit off",
@@ -58,5 +57,13 @@
   "bug.error": "Couldn't send that report just now. Give it another crack.",
   "learn.headline": "How the mongrels **operate**",
   "learn.caught.intro": "Don't panic, and don't be embarrassed — this happens to switched-on people too. Move quick, based on what you shared.",
-  "footer.scope": "Universal checks run worldwide. Full rules where we've done the legwork."
+  "footer.scope": "Universal checks run worldwide. Full rules where we've done the legwork.",
+  "check.nothing": "Couldn't spot a link, phone number, or email address in that. We check those, plus how a message is worded — so if you've still got the original, paste it in with the link or the sender's address.",
+  "check.rateLimited": "Steady on — that's a lot of checks in a short stretch. Give it a minute and have another go.",
+  "check.ocr.readTitle": "Got the text — now check it",
+  "check.ocr.readBody": "Here's what we pulled out of your image. Give it a squiz to make sure it came out right, then check it.",
+  "check.qr.readTitle": "Got the QR code — now check it",
+  "check.qr.readBody": "That QR code points to the address now in the box. We haven't opened a thing. Check it before you go anywhere near it.",
+  "verdict.coverage.recheckError": "Couldn't re-check against that region just now — what's below is still the old verdict. Give it another crack shortly.",
+  "verdict.coverage.recheckRateLimited": "Steady on — that's a lot of checks in a short stretch. What's below is still the old verdict; give it a minute, then try another region."
 }
