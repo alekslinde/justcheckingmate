@@ -28,8 +28,11 @@ export type { PhoneIntel };
 // did it, because the ceiling is part of each checker's policy, not of
 // collection: see finalise(), which records the clamp as its own visible row.
 
+/** A signal row plus, while scanning, its unresolved corroborated alternative. */
+type PendingSignal = Signal & { deferred?: { corroborated: string; points: number } };
+
 class Signals {
-  private readonly list: Signal[] = [];
+  private readonly list: PendingSignal[] = [];
 
   /** Record one reason and the points it contributes. Returns the points so a
    *  caller can still branch on what it just added. */
@@ -78,8 +81,51 @@ class Signals {
     if (row && row.points < points) row.points = points;
   }
 
-  /** Pre-clamp sum of every contribution so far. */
+  /**
+   * Record a row whose weight depends on whether anything ELSE scores.
+   *
+   * The authority-mention rule needs "is this corroborated", and asking mid-scan
+   * answers a different question: whether corroboration happened to be found
+   * *before* this point in the function. Signals added later — the call-back
+   * prompt, foreign-authority, brand and crypto rules all run afterwards — could
+   * not corroborate it, so "ATO: you owe a debt. Call back now on 1800 123 456"
+   * reported "nothing else unusual in the message" while a call-back signal
+   * scored 20 forty lines below.
+   *
+   * The row is placed now, so evidence keeps the order it was found in, and
+   * resolved by resolveDeferred() once every rule has run.
+   */
+  addDeferred(source: SignalSource, alone: string, corroborated: string, points: number): void {
+    this.list.push({ text: alone, points: 0, source, deferred: { corroborated, points } });
+  }
+
+  /**
+   * Settle every deferred row against the finished evidence list.
+   *
+   * "Corroborated" means some OTHER row scored — a deferred row cannot
+   * corroborate itself, and two deferred rows cannot corroborate each other.
+   */
+  resolveDeferred(): void {
+    const scoredElsewhere = this.list.some((s) => s.points > 0 && !s.deferred);
+    for (const row of this.list) {
+      if (!row.deferred) continue;
+      if (scoredElsewhere) {
+        row.text = row.deferred.corroborated;
+        row.points = row.deferred.points;
+      }
+      delete row.deferred;
+    }
+  }
+
+  /**
+   * Pre-clamp sum of every contribution.
+   *
+   * Settles deferred rows first: their weight is a question about the finished
+   * evidence list, and every caller reads the total exactly once, after all
+   * rules have run. resolveDeferred is idempotent, so a second read is safe.
+   */
   total(): number {
+    this.resolveDeferred();
     return this.list.reduce((n, s) => n + s.points, 0);
   }
 
@@ -202,6 +248,24 @@ const INFLECTION_MIN_LEN = 4;
  * own rule instead of a hand-copied mirror — three copies of this logic drifted
  * apart once already (#233 review).
  */
+/**
+ * Substring match, tolerant of whitespace variation but WITHOUT word boundaries.
+ *
+ * For lists whose entries are meant to fire inside a longer token — brand names
+ * in "amazonsupport.tk", an exchange in "coinspotsecure.com". mentions() refuses
+ * exactly those, so routing these lists through it dropped a live lure from 20
+ * to 0; includes() catches them but reintroduces the literal-single-space bug
+ * for the multi-word entries (fakeInvestmentPlatforms is 8/8 multi-word). This
+ * is the intersection: the words stay glued-matchable, the gaps between them
+ * match any run of whitespace.
+ */
+export function containsLoose(text: string, entry: string): boolean {
+  const needle = entry.toLowerCase();
+  if (!/\s/.test(needle)) return text.includes(needle);
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(escaped.replace(/\s+/g, "\\s+"), "i").test(text);
+}
+
 export function mentions(text: string, entry: string): boolean {
   const needle = entry.toLowerCase();
   const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -620,18 +684,41 @@ function isOwnDomainSender(
  * anything before the first blank line": arbitrary prose must NOT be skipped,
  * or the family gate's opener anchor stops meaning anything at all.
  */
+/**
+ * An RFC 5322-shaped header line.
+ *
+ * Broader than a named list, which missed "Cc:", "Bcc:" and every "X-" header a
+ * client adds — and one unmatched line stops the scaffold loop, so an ordinary
+ * Gmail forward left "Cc: …" in front of the body and the family anchor failed
+ * on exactly the case the stripper exists for.
+ *
+ * Only counted after a forwarding marker, because this shape cannot be told
+ * from prose: "Note: they told me to check this" matches it exactly. See the
+ * guard in stripForwardingPrefix.
+ */
+const HEADER_LINE = /^\s*(?:[A-Za-z][A-Za-z0-9-]{1,40})\s*:\s.*$/;
+
 const FORWARD_SCAFFOLD: RegExp[] = [
   /^\s*-{2,}\s*forwarded message\s*-{2,}\s*$/i,
   /^\s*begin forwarded message:?\s*$/i,
   /^\s*(?:fwd|fw|re)\s*:\s*/i,
-  /^\s*(?:from|to|sent|date|subject|reply-to)\s*:.*$/i,
+  HEADER_LINE,
   /^\s*on .+ wrote:\s*$/i,
   // Chat-export line: "02/09/2026, 10:42 - Unknown: <body>"
   /^\s*\[?\d{1,2}[:/]\d{2}.*?\]?\s*[-–]\s*[^:]{0,40}:\s*/i,
 ];
 
-/** How many scaffold lines to skip before giving up and treating it as body. */
-const MAX_SCAFFOLD_LINES = 8;
+/**
+ * How many scaffold lines to skip before giving up and treating it as body.
+ *
+ * An ordinary Gmail forward runs to nine or more — marker, From, Date, Subject,
+ * To, Cc, Reply-To, X-Mailer, Sent — and at 8 the leftovers stayed in front of
+ * the body, so the family anchor failed on exactly the forwards this was built
+ * to handle. Raised with room to spare; the loop stops at the first line that is
+ * not recognised scaffolding, so the cap only bounds the pathological case
+ * rather than deciding the common one.
+ */
+const MAX_SCAFFOLD_LINES = 25;
 
 /**
  * Strip forwarding and quoting scaffolding from the front of a message.
@@ -653,6 +740,8 @@ export function stripForwardingPrefix(text: string): string {
   // wrapper worked alone while the pair — the commonest real case — did not.
   const lines = text.split(/\r?\n/).map((l) => l.replace(/^[ \t]*(?:>[ \t]?)+/, ""));
   let i = 0;
+  let sawForwardMarker = false;
+  let headersSeen = 0;
   while (i < lines.length && i < MAX_SCAFFOLD_LINES) {
     const line = lines[i];
     if (line.trim() === "") {
@@ -661,6 +750,23 @@ export function stripForwardingPrefix(text: string): string {
     }
     const hit = FORWARD_SCAFFOLD.find((re) => re.test(line));
     if (!hit) break;
+    // A lone header-shaped line is not scaffolding. "Note: they told me to
+    // check this" and "Warning: this looks dodgy" match the header pattern
+    // exactly — syntax cannot separate them — so stripping on one line would let
+    // any scam buy immunity by opening with a word and a colon. What a real
+    // forward always has is a RUN: either an explicit marker/attribution, or
+    // several consecutive headers. One line of either is ambiguous; two is not.
+    if (hit === HEADER_LINE && !sawForwardMarker) {
+      // Part of a run, looking either way: the last header in a block has no
+      // header after it, so a forward-only test stripped every line but that
+      // one and left it in front of the body.
+      const next = lines[i + 1];
+      const inRun =
+        headersSeen > 0 || (next !== undefined && HEADER_LINE.test(next));
+      if (!inRun) break;
+      headersSeen++;
+    }
+    if (hit !== HEADER_LINE) sawForwardMarker = true;
     // An inline prefix leaves the body on the same line; a whole-line one does
     // not. Stripping in place keeps "Fwd: Hi Mum, …" anchorable.
     const remainder = line.replace(hit, "").trim();
@@ -802,9 +908,17 @@ export function checkSms(
   // claim has been processed" — a Medicare or insurance claim, which is exactly
   // what the real sender writes. Dropped only when it appears as that noun, so
   // the verb sense every reward lure uses still scores.
-  const claimAsNoun = /\b(?:your|the|this|a|my|their|our)\s+claims?\b|\bclaims?\s+(?:has|have|was|were|is|are)\b/i.test(text);
+  // Per occurrence, not per message. A whole-text test let one appended
+  // sentence defuse a live lure — "Congratulations! Claim your $1000 prize now.
+  // Your claim is ready." dropped from 40 to 24, a one-sentence evasion. The
+  // word only stops counting when EVERY occurrence reads as the noun.
+  const claimIsAlwaysNoun =
+    /\bclaims?\b/i.test(text) &&
+    (text.match(/\bclaims?\b/gi) ?? []).length ===
+      (text.match(/\b(?:your|the|this|a|my|their|our)\s+claims?\b|\bclaims?\s+(?:has|have|was|were|is|are)\b/gi) ?? [])
+        .length;
   const rewardHits = REWARD_WORDS.filter(
-    (w) => mentions(lower, w) && !(w === "claim" && claimAsNoun),
+    (w) => mentions(lower, w) && !(w === "claim" && claimIsAlwaysNoun),
   );
   if (rewardHits.length > 0) {
     sig.add("message", `Prize/reward language: "${rewardHits.slice(0, 2).join('", "')}"`, Math.min(rewardHits.length * 12, 40));
@@ -1236,13 +1350,11 @@ export function checkSms(
     // The flag is still emitted at zero weight when it stands alone, because
     // the reader should see that we noticed the agency name — silence would
     // read as "nothing here", which is not what was concluded.
-    const corroborated = sig.total() > 0;
-    sig.add(
+    sig.addDeferred(
       "message",
-      corroborated
-        ? "Claims to be from a government agency — verify directly via official channels"
-        : "Names a government agency, with nothing else unusual in the message — on its own that is ordinary for mail from that agency. Check anything it asks you to do by going to the official app or site yourself, not through this message.",
-      corroborated ? 25 : 0,
+      "Names a government agency, with nothing else unusual in the message — on its own that is ordinary for mail from that agency. Check anything it asks you to do by going to the official app or site yourself, not through this message.",
+      "Claims to be from a government agency — verify directly via official channels",
+      25,
     );
 
     // Senders that have publicly removed links from their unsolicited SMS — a
@@ -1277,7 +1389,14 @@ export function checkSms(
   const shortBrandHit = BRAND_MENTIONS.word.some((b) =>
     new RegExp(`\\b${b}\\b`, "i").test(lower));
 
-  if (shortBrandHit || mentionsAny(lower, BRAND_MENTIONS.substring)) {
+  // containsLoose, not mentions: these entries exist to catch the GLUED form a
+  // scam domain uses — "amazonsupport.tk", "coinspotsecure.com" — which is
+  // exactly what a word boundary refuses. Routing them through mentions()
+  // dropped "Verify at amazonsupport.tk now" from 20 to 0 with no flags at all.
+  // Their protection against firing inside an innocent word is entry length,
+  // not an anchor; the short ones live in BRAND_MENTIONS.word, which IS
+  // boundary-matched.
+  if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => containsLoose(lower, b))) {
     sig.add("message", "Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message", 20);
   }
 
@@ -1297,7 +1416,7 @@ export function checkSms(
   // region's own exchanges) rather than a hardcoded AU trio, and the flag names
   // whichever brand actually matched — the old copy asserted "CoinSpot, Swyftx
   // and Binance" to every region.
-  const cryptoToadHit = CRYPTO_TOAD_BRANDS.find((b) => mentions(lower, b));
+  const cryptoToadHit = CRYPTO_TOAD_BRANDS.find((b) => containsLoose(lower, b));
   // Region-agnostic, but a *dialable* number only. Three shapes: international
   // `+NN…`, a national trunk-prefixed `0…`, and non-geographic service ranges
   // that carry no trunk prefix (AU 1800/1300/13xx, US/CA 1-8xx). The previous
@@ -1340,7 +1459,7 @@ export function checkSms(
   // Named fraudulent investment platforms (D4 / #104). ASIC/Scamwatch have
   // explicitly warned against these exact names — a single match is a
   // high-confidence scam signal with essentially no legitimate use case.
-  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => mentions(lower, p));
+  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => containsLoose(lower, p));
   if (platformHit) {
     sig.add("message", PACK.fakeInvestmentPlatformFlag(platformHit), 50);
   }
@@ -1730,7 +1849,7 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
 
   // Named fraudulent investment platforms (D4 / #104) — mirror of the checkSms
   // rule so pasted ad text / recruitment messages are caught here too.
-  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => mentions(lower, p));
+  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => containsLoose(lower, p));
   if (platformHit) {
     sig.add("message", PACK.fakeInvestmentPlatformFlag(platformHit), 50);
   }

@@ -255,11 +255,14 @@ export const TRANSFORMS: Transform[] = [
     id: "fullwidth-digits",
     intent: "Write phone digits as full-width Unicode forms",
     relation: "noWeaker",
-    applies: (c) => /\d{4,}/.test(c.content),
-    apply: (content) => {
-      const out = content.replace(/\d/g, (d) => String.fromCharCode(0xff10 + d.charCodeAt(0) - 48));
-      return out === content ? null : out;
-    },
+    // Phone numbers only. Rewriting every digit also mutated hostnames and paths
+    // ("bit.ly/3xYz9"), so a violation could not be attributed — the transformed
+    // input differed from the original in more ways than the one under test.
+    applies: (c) => hasAuPhone(c.content),
+    apply: (content) =>
+      mapAuPhones(content, (d) =>
+        [...d].map((ch) => String.fromCharCode(0xff10 + ch.charCodeAt(0) - 48)).join(""),
+      ),
   },
   {
     id: "benign-padding",
@@ -325,9 +328,19 @@ export const TRANSFORMS: Transform[] = [
       // since "No HTTPS" is a real signal about the plain-http original. The
       // relation only holds if the two strings mean the same thing, and an
       // upgraded scheme does not.
-      const out = content
-        .replace(/http(s?):\/\//gi, (_m, s: string) => `hxx${s ? "ps" : "p"}://`)
-        .replace(/\./g, "[.]");
+      // Dots inside the URL only. A blanket replace also defanged sentence
+      // periods — "Pay at hxxp://a[.]tk/x[.] Then call us[.]" — which corrupts
+      // the prose an equal relation is asserting about.
+      const out = content.replace(
+        /(https?):\/\/([^\s<>"']+)/gi,
+        (_m, scheme: string, rest: string) => {
+          const defangedScheme = scheme.toLowerCase() === "https" ? "hxxps" : "hxxp";
+          // Trailing sentence punctuation is not part of the URL.
+          const trailing = rest.match(/[.,;:!?)]+$/)?.[0] ?? "";
+          const body = trailing ? rest.slice(0, -trailing.length) : rest;
+          return `${defangedScheme}://${body.replace(/\./g, "[.]")}${trailing}`;
+        },
+      );
       return out === content ? null : out;
     },
   },

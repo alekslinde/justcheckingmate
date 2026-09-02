@@ -107,8 +107,15 @@ describe("obfuscation transforms", () => {
     );
   });
 
-  it("fullwidth-digits maps every ASCII digit", () => {
-    expect(byId("fullwidth-digits").apply("call 0412")).toBe("call ０４１２");
+  it("fullwidth-digits rewrites a phone number's digits", () => {
+    expect(byId("fullwidth-digits").apply("call 0412 345 678")).toBe("call ０４１２３４５６７８");
+  });
+
+  it("fullwidth-digits leaves digits outside a phone number alone", () => {
+    // Rewriting every digit also mutated hostnames and paths, so a violation
+    // could not be attributed to the transformation under test.
+    const out = byId("fullwidth-digits").apply("Track at bit.ly/3xYz9 or call 0412 345 678") ?? "";
+    expect(out).toContain("bit.ly/3xYz9");
   });
 });
 
