@@ -1,0 +1,41 @@
+# GB / US / NZ / IE / CA benign — genuine sender templates.
+#
+# The AU set (au-benign-senders.jsonl) measured one region's false positives
+# while every other pack had exactly ONE benign case each — an FPR of "0.0%
+# [0-79]" from a single observation, which is an absence of measurement rather
+# than evidence of a low rate. NZ had none at all.
+#
+# That mattered because the topic-signal fixes were AU-shaped. Six of the twelve
+# cases below scored suspicious or likely_scam when first written: postal
+# operators sit in BOTH authorityMentions and brandMentions in GB, US, NZ and IE
+# (AU is the only pack where they do not overlap), so one mention scored twice
+# and each half corroborated the other.
+#
+# Sources (fetched 2026-09-02):
+#   royalmail.com/help/scam-protection — Royal Mail will not email or text about
+#     undeliverable items unless tracking was requested at posting; a real
+#     missed delivery leaves a card
+#   uspis.gov/news/scam-article/smishing-package-tracking-text-scams — "USPS
+#     doesn't send unsolicited text messages"; tracking texts require sign-up
+#   gov.uk/guidance/check-if-a-text-message-youve-received-from-hmrc-is-genuine
+#     — HMRC never asks for personal or financial information by text and never
+#     notifies a rebate that way
+#   ird.govt.nz/managing-my-tax/scams/signs-of-a-scam — IRD does not include
+#     links in email; refund messages always go to myIR
+{"id": "gb-sms-1002", "type": "sms", "region": "GB", "content": "Royal Mail: your parcel is ready for collection at your local delivery office. Bring ID and your reference number.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:royalmail", "addedAt": "2026-09-02", "notes": "A real missed delivery leaves a card; collection notices carry no link."}
+{"id": "gb-sms-1003", "type": "sms", "region": "GB", "content": "HMRC has sent you a message. Sign in to your personal tax account to read it.", "label": "benign", "category": "tax-refund", "source": "sender-template:hmrc", "addedAt": "2026-09-02", "notes": "HMRC never notifies a rebate or asks for details by text."}
+{"id": "gb-sms-1004", "type": "sms", "region": "GB", "content": "DVLA: your vehicle tax is due this month. Renew in the DVLA app or at a Post Office.", "label": "benign", "category": "government", "source": "sender-template:dvla", "addedAt": "2026-09-02", "notes": "\"vehicle tax is due\" was in urgencyWords and scored this at 35 — a due date is what the genuine reminder says; the threat phrasing is \"untaxed\"."}
+{"id": "gb-sms-1005", "type": "sms", "region": "GB", "content": "NHS: your GP appointment is confirmed for Monday at 9:40am. Reply CANCEL if you cannot attend.", "label": "benign", "category": "government", "source": "sender-template:nhs", "addedAt": "2026-09-02"}
+{"id": "us-sms-1002", "type": "sms", "region": "US", "content": "USPS: your package is out for delivery today. No action needed.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:usps", "addedAt": "2026-09-02", "notes": "Scored likely_scam (45) while its AU twin scored 0: usps is in both authorityMentions and brandMentions."}
+{"id": "us-sms-1003", "type": "sms", "region": "US", "content": "The IRS has mailed you a notice. Sign in to your IRS online account to view it.", "label": "benign", "category": "tax-refund", "source": "sender-template:irs", "addedAt": "2026-09-02"}
+{"id": "us-sms-1004", "type": "sms", "region": "US", "content": "Social Security: your benefit statement is ready in your my Social Security account.", "label": "benign", "category": "government", "source": "sender-template:ssa", "addedAt": "2026-09-02", "notes": "\"social security\" is a service name in requestWords; scored 40 as \"asks for sensitive info\" about a message that asks for nothing."}
+{"id": "nz-sms-1001", "type": "sms", "region": "NZ", "content": "NZ Post: your parcel is ready for collection at your local depot.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:nzpost", "addedAt": "2026-09-02", "notes": "NZ had no benign case at all before this — its FPR was unmeasurable."}
+{"id": "nz-sms-1002", "type": "sms", "region": "NZ", "content": "Inland Revenue has sent you a message. Sign in to myIR to read it.", "label": "benign", "category": "tax-refund", "source": "sender-template:ird", "addedAt": "2026-09-02", "notes": "IRD does not put links in email; refund messages go to myIR."}
+{"id": "ie-sms-1001", "type": "sms", "region": "IE", "content": "An Post: your parcel is on board for delivery today. No action needed.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:anpost", "addedAt": "2026-09-02"}
+{"id": "ie-sms-1002", "type": "sms", "region": "IE", "content": "Revenue has sent you a message. Sign in to myAccount to read it.", "label": "benign", "category": "tax-refund", "source": "sender-template:revenue", "addedAt": "2026-09-02"}
+{"id": "ca-sms-1002", "type": "sms", "region": "CA", "content": "The CRA has sent you a message. Sign in to My Account to read it.", "label": "benign", "category": "tax-refund", "source": "sender-template:cra", "addedAt": "2026-09-02", "notes": "CA ships coverage:\"partial\", so this abstains rather than committing — see no-french-reviewer note in eval/README.md."}
+{"id": "gb-sms-1006", "type": "sms", "region": "GB", "content": "Royal Mail: your parcel is on its way. Track it at www.royalmail.com or in the Royal Mail app.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:royalmail", "addedAt": "2026-09-03", "notes": "Cites the sender's OWN domain. Scored 45 while the brand-in-hostname exemption rejected any subdomain."}
+{"id": "us-sms-1005", "type": "sms", "region": "US", "content": "USPS: your package is out for delivery today. Track it at tools.usps.com with your tracking number.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:usps", "addedAt": "2026-09-03", "notes": "Own subdomain. The commonest real shape and the one the link-free corpus could not see."}
+{"id": "nz-sms-1003", "type": "sms", "region": "NZ", "content": "NZ Post: your parcel is ready for collection. Details at www.nzpost.co.nz.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:nzpost", "addedAt": "2026-09-03", "notes": "Two-part public suffix — a single-label exemption guard rejected co.nz and scored this 45."}
+{"id": "ie-sms-1003", "type": "sms", "region": "IE", "content": "An Post: your parcel is on board for delivery. Details at www.anpost.ie.", "label": "benign", "category": "parcel-delivery", "source": "sender-template:anpost", "addedAt": "2026-09-03"}
+{"id": "gb-sms-0002", "type": "sms", "region": "GB", "content": "Royal Mail: your parcel is held pending a GBP 2.99 fee. Pay now at https://royalmail.com.secure-pay.tk/fee", "label": "scam", "category": "parcel-delivery", "source": "handwritten", "addedAt": "2026-09-03", "notes": "The sender's real domain used as a PREFIX of the attacker's — the shape a naive dot exemption would have whitelisted."}

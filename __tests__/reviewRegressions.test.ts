@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, containsLoose } from "@justcheckingmate/engine/scamDetector";
+import { checkSms, containsLoose, stripForwardingPrefix } from "@justcheckingmate/engine/scamDetector";
 
 // Regressions found reviewing this branch. Each was a false NEGATIVE introduced
 // or left by the false-positive work above, which is the trade that pass was
@@ -78,7 +78,12 @@ describe("forwarding scaffolding covers a real client's headers", () => {
   ])("does not mistake a lone prose line for a header: %s", (prefix) => {
     // These match the header pattern exactly — syntax cannot separate them.
     // What a real forward has is a RUN of headers, or an explicit marker.
-    expect(au(`${prefix}\n\n${CORE}`).verdict).toBe("safe");
+    //
+    // Asserted on the stripper rather than the verdict: the family anchor now
+    // also matches a vocative anywhere in the body, so the score no longer
+    // distinguishes "prefix was stripped" from "prefix was kept". The stripper
+    // is what this test is about.
+    expect(stripForwardingPrefix(`${prefix}\n\n${CORE}`)).toContain(prefix);
   });
 });
 

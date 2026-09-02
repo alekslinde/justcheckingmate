@@ -3,7 +3,7 @@ import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged, n
 import { detectType } from "./detectType";
 import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
-import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage } from "./regions";
+import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage, type RegionPack } from "./regions";
 import { KEYS_BY_POST_PHRASES, FAMILY_RELATION_TERMS, NEW_NUMBER_PRETEXT_PHRASES } from "./regions/base";
 import type { CheckResult, Signal, SignalSource } from "./engineTypes";
 
@@ -831,17 +831,28 @@ const MESSAGING_HIJACK_FLAG =
   "Claims a messaging account has been flagged or restricted";
 
 /**
- * Entries in requestWords that name a service rather than request something.
+ * Entries that name a service rather than request something.
  *
- * They earn their place in the list — an impersonation names what it is
- * impersonating — but "asks for sensitive info" is a claim about the text, and
- * naming myGov is not asking for anything. Kept as a set here so the two uses
- * stay separable without duplicating the regional lists.
+ * Derived from the pack, not hardcoded: a word listed in BOTH requestWords and
+ * authorityMentions is by definition the name of a body, so "asks for sensitive
+ * info: mygov" is a false statement about a message that merely named it. The
+ * two lists already carry that fact, and reading it beats maintaining a third
+ * list — an AU-only constant here missed the US "social security", which scored
+ * a genuine Social Security notice at 40/suspicious.
+ *
+ * The crypto entries are the exception the rule does not reach: "crypto" and
+ * "bitcoin" name a subject rather than a body, so they are not in
+ * authorityMentions but are equally not an ask.
  */
-const SERVICE_NAMES = new Set([
-  "medicare", "mygov", "mygovid", "centrelink", "ato",
-  "crypto", "bitcoin",
-]);
+const SUBJECT_NOT_ASK = new Set(["crypto", "bitcoin"]);
+
+function serviceNames(pack: RegionPack): Set<string> {
+  const authorities = new Set(pack.authorityMentions.map((a) => a.toLowerCase()));
+  return new Set([
+    ...SUBJECT_NOT_ASK,
+    ...pack.requestWords.filter((w) => authorities.has(w.toLowerCase())),
+  ]);
+}
 
 export const FAMILY_IMPERSONATION_FLAG =
   'Reads as the "Hi Mum" family-impersonation script';
@@ -937,8 +948,9 @@ export function checkSms(
   // where "this message is about a government service" belongs. Here they are
   // separated so the remaining hits are things actually being requested.
   const requestHits = REQUEST_WORDS.filter((w) => mentions(lower, w));
-  const genuineAsks = requestHits.filter((w) => !SERVICE_NAMES.has(w));
-  const namedServices = requestHits.filter((w) => SERVICE_NAMES.has(w));
+  const SERVICE = serviceNames(PACK);
+  const genuineAsks = requestHits.filter((w) => !SERVICE.has(w));
+  const namedServices = requestHits.filter((w) => SERVICE.has(w));
   if (genuineAsks.length > 0) {
     // A service name alongside a real ask still counts — "confirm your myGovID
     // and tax file number" is a stronger signal than the ask by itself, because
@@ -999,12 +1011,35 @@ export function checkSms(
   const anchorText = stripForwardingPrefix(
     (channel === "email" ? bodyAfterHeaders(text) : text),
   ).trim();
-  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
-    new RegExp(
+  // Two ways to be addressed, because neither alone covers the script.
+  //
+  //   · opening — the term starts the body, with or without a greeting. This is
+  //     the classic shape and carries the cases with no comma at all: the corpus
+  //     holds "mum send me 400 my phone broke" and "Hi Dad I dropped my phone".
+  //   · vocative — the term is addressed anywhere in the message, marked by a
+  //     following comma or exclamation after a sentence break.
+  //
+  // Position alone was scoring a live scam safe: "Just letting you know, I got a
+  // new number after my phone broke. Mum, can you transfer $200 for the rego?"
+  // has all three halves and went undetected purely because the term is not
+  // first. That is also what the benign-padding metamorphic relation was
+  // reporting — prepending prose moved the opener out of range.
+  //
+  // Both branches exclude the subject reading, so "Mum's phone broke" and
+  // "dad said he'd transfer the 300" stay out. The remaining protection against
+  // an ordinary family text is the pretext requirement below, which is the half
+  // a real family member never writes.
+  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) => {
+    const opening = new RegExp(
       `^\\W{0,3}(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})`,
       "i",
-    ).test(anchorText),
-  );
+    );
+    const vocative = new RegExp(
+      `(?:^|[.!?]\\s+|\\n\\s*)(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})\\s*[,!]`,
+      "i",
+    );
+    return opening.test(anchorText) || vocative.test(anchorText);
+  });
   const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
   const hasMoneyAsk =
     /\b(?:send|transfer|pay|lend|e-?transfer|etransfer|deposit|spot)\b[^.!?]{0,40}?(?:\b(?:me|us|it)\b[^.!?]{0,20})?[$£€]?\s?\d{2,6}\b/i.test(text) ||
@@ -1396,8 +1431,57 @@ export function checkSms(
   // Their protection against firing inside an innocent word is entry length,
   // not an anchor; the short ones live in BRAND_MENTIONS.word, which IS
   // boundary-matched.
+  // A brand glued into a hostname is evidence on its own — "amazonsupport.tk"
+  // is not something a genuine message contains, and no legitimate sender
+  // writes their own name that way. A brand in prose ("Your Amazon order has
+  // shipped") is what a genuine message DOES contain, so only that half is
+  // deferred. Without this split "Verify at amazonsupport.tk now" scored 0.
+  const brandInHostname = [...BRAND_MENTIONS.substring, ...BRAND_MENTIONS.word].some((b) => {
+    const brand = b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // The brand appears inside a hostname label.
+    const glued = new RegExp(`[a-z0-9-]*${brand}[a-z0-9-]*\\.[a-z]{2,}`, "i");
+    // …but not as the sender's own registrable domain. The leading class admits
+    // a DOT so a subdomain qualifies: "tools.usps.com" and "www.royalmail.com"
+    // are the carrier's own tracking pages, and without it every legitimate
+    // subdomain read as a squat — which then corroborated the deferred agency
+    // row and put a genuine carrier SMS back at 45, the exact double-score this
+    // split exists to remove.
+    //
+    // The trailing guard keeps that dot safe: the brand must end the host, so
+    // "usps.com.evil.tk" and "royalmail.com.secure-pay.tk" (the real domain used
+    // as a PREFIX of the attacker's) and "myusps.net" are all still caught. The
+    // optional second suffix group admits a two-part public suffix —
+    // "nzpost.co.nz", "auspost.com.au" — which a single-label guard rejected,
+    // putting a genuine NZ Post SMS at 45.
+    //
+    // The lookahead rejects a further host character OR a dot that begins
+    // another label, but not a bare trailing dot: "Details at www.nzpost.co.nz."
+    // ends a sentence, and reading that period as part of the host scored the
+    // message 45 too.
+    const ownDomain = new RegExp(
+      `(?:^|[\\s/@.])${brand}\\.[a-z]{2,}(?:\\.[a-z]{2,})?(?![a-z0-9-]|\\.[a-z0-9-])`,
+      "i",
+    );
+    return glued.test(lower) && !ownDomain.test(lower);
+  });
   if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => containsLoose(lower, b))) {
-    sig.add("message", "Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message", 20);
+    // Deferred for the same reason as the agency mention above: naming a brand
+    // is what a genuine message from that brand does. Left scored, it also
+    // became the agency mention's corroboration — postal operators sit in BOTH
+    // lists in GB, US, NZ and IE (AU is the only pack where they do not
+    // overlap), so one mention scored twice and each half propped up the other.
+    // "USPS: your package is out for delivery today. No action needed." reached
+    // likely_scam (45) while its AU twin scored 0.
+    if (brandInHostname) {
+      sig.add("message", "Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message", 20);
+    } else {
+      sig.addDeferred(
+        "message",
+        "Names a well-known company, with nothing else unusual in the message — on its own that is ordinary for mail from that company. If it asks you to do something, go to the official app or website yourself rather than through this message.",
+        "Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message",
+        20,
+      );
+    }
   }
 
   // Asks to call back a number
