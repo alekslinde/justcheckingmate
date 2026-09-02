@@ -108,6 +108,76 @@ export function stripTrackingParams(raw: string): string {
   }
 }
 
+// ── Unicode normalisation ────────────────────────────────────────────────────
+//
+// Runs before extraction, so every downstream checker sees one spelling of a
+// character rather than the dozen Unicode offers for it. Without this the
+// packs' keyword lists and the URL extractor are both defeatable by characters
+// that render identically to what they replace:
+//
+//   "com<U+200B>mbank-secure-login.tk"  → extractor keeps only "mbank-…",
+//                                         so the brand-impersonation flag is
+//                                         correctly absent from a host that is
+//                                         genuinely no longer commbank
+//   "commbank–secure–login.tk"          → en-dash is not a URL character, so
+//                                         extraction starts at "login.tk"
+//
+// Both scored likely_scam (85) → suspicious (40) with the brand flag gone.
+// Found by the metamorphic eval, which asserts an obfuscated input may score
+// higher but never lower.
+//
+// Three passes, because no single one is sufficient:
+//
+//   1. Strip invisibles. NFKC does NOT remove zero-width characters — it
+//      preserves U+200B/200C/200D/2060/FEFF and the soft hyphen unchanged —
+//      and they carry no meaning in any input we score, so they go first.
+//   2. NFKC. Folds full-width forms ("ｃｏｍｍｂａｎｋ" → "commbank",
+//      "０４１２" → "0412"), most exotic spaces, and compatibility variants.
+//   3. Fold the separator families NFKC leaves alone. It maps U+FF0D to "-"
+//      but leaves the en-dash, em-dash, figure dash and minus sign as
+//      themselves, and those are what a hostname evasion actually uses.
+//
+// What this deliberately does NOT do is fold Cyrillic or Greek homoglyphs to
+// Latin. "commbаnk.tk" with a Cyrillic а is a genuinely different domain that
+// resolves elsewhere, and rewriting it to the Latin spelling would make the
+// engine report the real CommBank's hostname while describing the scammer's
+// site — telling the reader the wrong thing about which domain they visited.
+// A mixed-script hostname is a signal to raise, not a string to rewrite, and
+// that belongs in the scorer rather than here.
+
+/** Invisible characters: zero-width, joiners, BOM, soft hyphen, Mongolian vowel separator. */
+const INVISIBLE = /[\u00AD\u180E\u200B-\u200F\u2060-\u2064\u206A-\u206F\uFEFF]/g;
+
+/** Dash-like characters NFKC leaves as themselves, folded to ASCII hyphen. */
+const DASHES = /[\u2010-\u2015\u2212\u2043]/g;
+
+/** Dot-like characters used in IDN-style host evasion, folded to ASCII full stop. */
+const DOTS = /[\u3002\uFF61\u2024]/g;
+
+/** Slash-like characters, folded to ASCII solidus. */
+const SLASHES = /[\u2044\u2215]/g;
+
+/**
+ * Fold a string to one canonical spelling before any pattern matching.
+ *
+ * Length is not preserved — invisibles are removed and NFKC can expand a
+ * character — so this must not be used to compute offsets into the original
+ * text. Every caller here re-extracts from the normalised string instead.
+ */
+export function normaliseUnicode(text: string): string {
+  return text
+    .replace(INVISIBLE, "")
+    .normalize("NFKC")
+    .replace(DASHES, "-")
+    .replace(DOTS, ".")
+    .replace(SLASHES, "/");
+}
+
+/** Whether normalisation changes anything — i.e. the input carried confusables. */
+export function hasConfusables(text: string): boolean {
+  return normaliseUnicode(text) !== text;
+}
+
 // ── Normalise for analysis ────────────────────────────────────────────────────
 // Closes common evasion tricks before pattern matching:
 //   - Lowercase hostname (checkers are case-insensitive but lists are lowercase)

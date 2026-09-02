@@ -13,7 +13,7 @@
 //     should say so in its notes rather than silently hitting the wire.
 
 import { analyzeContent, type AnalyzedIdentifier } from "@justcheckingmate/engine/scamDetector";
-import { toPrediction, type EvalCase, type SuspiciousPolicy } from "./schema";
+import { toPrediction, type EvalCase, type Prediction, type SuspiciousPolicy } from "./schema";
 import type { Outcome } from "./metrics";
 
 const NO_BLOCKLIST: Set<string> = new Set();
@@ -52,30 +52,52 @@ function worstCard(cards: AnalyzedIdentifier[]): AnalyzedIdentifier | undefined 
   }, undefined);
 }
 
+/** The scored reading of one piece of content, before it is tied to a label. */
+export interface Scored {
+  prediction: Prediction;
+  score: number;
+  verdict: string;
+  coverage: string;
+}
+
+/**
+ * Score one piece of content exactly as the corpus eval does.
+ *
+ * Exported so the metamorphic suite scores its transformed inputs through the
+ * same path rather than assembling its own analyzeContent call. A second copy
+ * would be free to drift on the details that decide a verdict — which card
+ * wins, how an empty result reads, whether the blocklist is stubbed — and a
+ * consistency checker running a different pipeline from the thing it checks
+ * reports differences that belong to the harness, not the engine.
+ */
+export async function scoreContent(
+  content: string,
+  region: EvalCase["region"],
+  suspiciousAs: SuspiciousPolicy,
+): Promise<Scored> {
+  // Same entrypoint as app/api/check/route.ts, so the eval measures what
+  // users are shown rather than an internal checker they never hit directly.
+  const cards = await analyzeContent(content, NO_BLOCKLIST, region, { fetcher: NO_FETCH });
+  const worst = worstCard(cards);
+
+  // No identifiers extracted at all — the engine had nothing to say.
+  if (!worst) return { prediction: "abstain", score: 0, verdict: "unknown", coverage: "unknown" };
+
+  return {
+    prediction: toPrediction(worst.result, suspiciousAs),
+    score: worst.result.score,
+    verdict: worst.result.verdict,
+    coverage: worst.result.coverage ?? "unknown",
+  };
+}
+
 export async function runCorpus(
   cases: EvalCase[],
   suspiciousAs: SuspiciousPolicy,
 ): Promise<Outcome[]> {
   const outcomes: Outcome[] = [];
   for (const c of cases) {
-    // Same entrypoint as app/api/check/route.ts, so the eval measures what
-    // users are shown rather than an internal checker they never hit directly.
-    const cards = await analyzeContent(c.content, NO_BLOCKLIST, c.region, { fetcher: NO_FETCH });
-    const worst = worstCard(cards);
-
-    if (!worst) {
-      // No identifiers extracted at all — the engine had nothing to say.
-      outcomes.push({ case: c, prediction: "abstain", score: 0, verdict: "unknown", coverage: "unknown" });
-      continue;
-    }
-
-    outcomes.push({
-      case: c,
-      prediction: toPrediction(worst.result, suspiciousAs),
-      score: worst.result.score,
-      verdict: worst.result.verdict,
-      coverage: worst.result.coverage ?? "unknown",
-    });
+    outcomes.push({ case: c, ...(await scoreContent(c.content, c.region, suspiciousAs)) });
   }
   return outcomes;
 }

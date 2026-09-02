@@ -214,3 +214,160 @@ tuned — the sensitivity table above shows that tier carries all of them.
   message", a Medicare appointment confirmation), all scoring 25-40 in the
   `suspicious` tier. Whether that caution is right is a product decision the
   eval surfaces rather than settles.
+
+---
+
+# Metamorphic eval
+
+```bash
+npm run eval:metamorphic                       # all relations
+npm run eval:metamorphic -- --list             # what the transforms do
+npm run eval:metamorphic -- --only=zero-width  # one transform
+npm run eval:metamorphic -- --json             # machine-readable
+```
+
+## Why it exists alongside the corpus eval
+
+The corpus eval asks "how often is the engine right", which needs labels and is
+capped by how many exist — currently tens of cases, with the confidence
+intervals above. The metamorphic eval asks a question needing no labels at all:
+**is the engine self-consistent?**
+
+A metamorphic relation says how a verdict must respond to a transformation,
+without knowing the right answer for either side. `0412 345 678` and
+`+61 412 345 678` are the same number, so they must score the same — whatever
+that score is. When they don't, that difference is a bug, and nobody had to
+label anything to find it.
+
+This matters most exactly where the corpus is weakest. Nine benign cases cannot
+measure a false-positive rate, but every case can be *transformed*, so each
+relation multiplies the existing corpus into hundreds of checks. It also probes
+the surface an evader actually attacks: a scammer does not write new scams to
+beat a detector, they rewrite the one they have until it slips through — which
+is precisely a metamorphic transformation.
+
+## The two relations
+
+| Relation | Meaning | Example |
+|---|---|---|
+| `equal` | Meaning-preserving. Any verdict change is a bug. | Reformatting a phone number, recasing a hostname |
+| `noWeaker` | Obfuscation. Scoring *higher* is fine; scoring lower means the trick worked. | Zero-width spaces, homoglyphs, padding |
+
+`noWeaker` is not laziness. Several packs treat obfuscation as a signal in its
+own right, so asserting equality there would file every correct penalty as a
+failure and train everyone to ignore the output.
+
+Both are judged on the **verdict**, not the score. The score is internal and
+moves for legitimate reasons; the verdict is what the product asserts.
+
+## Reading a run
+
+There is no threshold to tune and no baseline to ratchet. A violation is a
+self-inconsistency, which is a bug rather than a trade someone chose — so the
+exit code is simply non-zero when any relation breaks.
+
+A transform marked `(never applied)` is **not** passing: it means no case in the
+corpus exercised it, and that is a corpus gap worth filling. `phone-e164` and
+`fullwidth-digits` currently read this way because the corpus holds no
+`type: "phone"` case and no AU-format number at all, while `phoneIntel.ts` is
+the second-largest module in the engine.
+
+## Corpus composition
+
+| File | Cases | What it is |
+|---|---|---|
+| `au-sms.jsonl`, `au-url.jsonl`, `au-email.jsonl` | 47 | AU scams and a small benign set |
+| `au-benign-senders.jsonl` | 10 | Genuine sender templates — see below |
+| `au-phone.jsonl` | 5 | The phone path, previously unmeasured |
+| `multi-region.jsonl` | 12 | GB / US / NZ / CA / fallback |
+
+### Benign sender templates
+
+`au-benign-senders.jsonl` holds messages sourced from what the impersonated
+organisations publish about their own real mail, rather than invented benign
+text. AusPost, the ATO, Services Australia and Scamwatch all publish the same
+rule: a genuine unsolicited message carries **no login link** and directs you to
+an app or to sign in yourself.
+
+That makes these the hardest possible benign cases, and the right ones. The lure
+vocabulary is identical to a scam's — parcel, myGov, claim, balance — and only
+the absence of a link and of an ask separates them. They are also the cases a
+false positive costs most: telling someone a real ATO message is a scam teaches
+them to distrust the verdict *and* the sender.
+
+Seven of the ten currently flag. The signals responsible are visible in a run:
+
+- **"Claims to be from a government agency" (+25)** fires on any mention of the
+  agency, including genuine mail from it. Every real ATO message says "ATO".
+- **"Asks for sensitive info" (+15/+30)** fires on merely *naming* myGov or
+  Medicare, with no request present.
+- **"Prize/reward language: claim" (+12)** fires on "your claim has been
+  processed" — a Medicare claim, not a prize.
+
+### The phone slice
+
+`phoneIntel.ts` is 839 lines and had no corpus coverage at all; two metamorphic
+transforms reported "never applied" for want of an AU number to run against.
+Every number in that file is from the ACMA drama range (0491 570 156-216),
+reserved for fiction, or a documentation-style 02 9000 / 1900 number — none is a
+number anyone answers.
+
+`au-phone-1003` (an ordinary Sydney landline) scores suspicious (30): every AU
+fixed line raises "easy to spoof". The note is educational and true, but it
+lands as a *verdict* on any real number a user checks.
+
+## AU false-positive rate
+
+AU measures **0.0% [0-12]** against 29 benign cases, down from 41.4%.
+
+The drop is three signals that fired on a message's *subject* rather than on
+anything wrong with it, all found by the sender-template cases:
+
+- **Agency mention** (+25) fired on any mention, including genuine mail from
+  that agency. It now needs corroboration — a link, a callback number, urgency,
+  an actual ask — and emits a zero-weight note when it stands alone, so the
+  reader still sees that the name was noticed and judged unremarkable. Across
+  every AU case carrying an authority mention this separates the classes
+  exactly: benign ones have no other positive signal, scams all do.
+- **Service-name-as-ask** (+15 each) claimed "asks for sensitive info: mygov"
+  about a message that asked for nothing. Service names no longer gate the row,
+  but still add weight alongside a genuine ask, since that pairing is the scam's
+  actual shape.
+- **"claim" as reward language** (+12) fired on "your claim has been processed".
+  The noun sense is now excluded; the verb sense every lure uses still scores.
+
+A fourth was in the phone path: fixed-line, toll-free and shared-cost numbers
+carried a flat +30 for being spoofable. They are — every one of those line types
+is — but that is a fact about the phone network, not evidence about the number in
+front of the reader, and it made an ordinary landline, an 1800 number and a 1300
+number all come back "suspicious". Someone checking their own GP's number was
+told it was dodgy. The caution still reaches the reader through `spoofingNotes`;
+it just no longer scores. What stays scored is a range unusual for its claimed
+purpose — VoIP, premium rate, wangiri, elevated-volume origins.
+
+Recall is unchanged at 100%. The gates stay at 0.3 as a drift ceiling rather
+than a target — see `thresholds.json`. The interval still reaches 12%, so 0.0%
+is 29 cases' worth of evidence rather than a settled number.
+
+Fixing these also surfaced that six phrase-list matchers used a raw `includes()`
+instead of `mentions()`, so they carried the whitespace bug fixed earlier for
+everything that did use it. They are now routed through the one matcher.
+
+## Known open violations
+
+Two, both the same case, deliberately left red.
+
+**`benign-padding` (2), on `au-sms-0010` and `au-sms-0014`.** Prepending ordinary prose moves the
+family script's opener out of anchor range. Unlike a forwarding wrapper this is
+arguably correct: the stripper handles a closed list of recognised scaffolding
+shapes, and skipping arbitrary prose instead would make the anchor meaningless —
+any scam could buy immunity by prepending a sentence. Left red because the
+boundary between "scaffolding" and "prose" is a judgement someone should revisit
+with real forwarded samples, not because the current behaviour is wrong.
+
+## What a violation is not
+
+Proof the original verdict was correct. These relations police consistency, not
+accuracy: a relation holding across a transformation of a case the engine
+already scores wrongly keeps it wrong. The corpus eval says whether the engine
+is right; this says whether it can be talked out of it.

@@ -82,6 +82,54 @@ describe("family impersonation (Hi Mum)", () => {
     });
   });
 
+  // Forwarding is how the script most often reaches a checker — "is this real?"
+  // is the whole reason someone forwards it — and the opener anchor stopped
+  // firing the moment a mail client wrapped the text.
+  describe("survives being forwarded", () => {
+    const core = "Hi Mum, I dropped my phone in the sink and this is my new number. Can you transfer $850 today?";
+
+    it.each([
+      ["a forwarded-message marker", `---------- Forwarded message ----------\n\n${core}`],
+      ["a Fwd: subject prefix", `Fwd: ${core}`],
+      ["an FW: subject prefix", `FW: ${core}`],
+      ["Begin forwarded message:", `Begin forwarded message:\n\n${core}`],
+      ["a header block", `From: +61 400 000 000\nDate: 2 Sep 2026\nSubject: hi\n\n${core}`],
+      ["an on-wrote attribution", `On Tue, 2 Sep 2026 at 10:42, Unknown wrote:\n\n${core}`],
+      ["a chat export line", `02/09/2026, 10:42 - Unknown: ${core}`],
+      ["quote markers", `> ${core}`],
+    ])("fires through %s", (_label, text) => {
+      expect(checkSms(text, undefined, "AU").verdict).toBe("likely_scam");
+    });
+
+    it("does not skip ordinary prose", () => {
+      // Only recognised scaffolding is stripped. Skipping anything before the
+      // first blank line would make the opener anchor meaningless — any scam
+      // could buy immunity by prepending a sentence.
+      const padded = `Hi there, hope you had a good weekend.\n\n${core}`;
+      expect(checkSms(padded, undefined, "AU").verdict).toBe("safe");
+    });
+  });
+
+  // The anchor tested position, which is not the same as being addressed.
+  describe("distinguishes address from subject", () => {
+    it.each([
+      "Dad said he'd lend me 500 for the car, I'll pay you back when I get my new number sorted.",
+      "Mum's phone broke, can you send her $200 on this new number?",
+      "Daughter's birthday is Friday, can you transfer $200 for the cake? New number btw",
+      "Mother of all storms out there, my phone died, send $100 when you can on my new number",
+    ])("does not fire when the relation term is the subject: %s", (text) => {
+      expect(checkSms(text, undefined, "AU").verdict).not.toBe("likely_scam");
+    });
+
+    it.each([
+      "mum send me 400 my phone broke, send it as quick as you can",
+      "Hi Dad I dropped my phone, text me on this number. I need you to transfer 1200 today please",
+    ])("still fires without a comma after the term: %s", (text) => {
+      // Punctuation is not the discriminator — the script often omits it.
+      expect(checkSms(text, undefined, "AU").verdict).toBe("likely_scam");
+    });
+  });
+
   // The gate briefly accepted "any other signal present" instead of requiring
   // the pretext, which let a single urgency word open a +45. These are the
   // messages a real family member sends.

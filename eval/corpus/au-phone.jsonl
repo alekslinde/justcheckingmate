@@ -1,0 +1,22 @@
+# AU phone cases.
+#
+# The corpus held no type:"phone" case and no AU-format number at all, while
+# phoneIntel.ts is 839 lines — the second-largest module in the engine. Two
+# metamorphic transforms (phone-e164, fullwidth-digits) reported "never
+# applied" for want of anything to run against.
+#
+# Every number here is from the ACMA drama range (0491 570 156 - 0491 570 216),
+# reserved for use in fiction precisely so a published example can never reach a
+# real person, or from the 02 9000 xxxx / 1900 documentation-style ranges. None
+# is a number anyone answers. They are declared in "identifiers" because the
+# corpus loader requires every PII-shaped token to be named by hand — see
+# eval/corpus.ts.
+#
+# Bare numbers, not messages: analyzeContent raises a phone card only when the
+# number is the submission, so scoring the phone path directly is what exercises
+# phoneIntel rather than the SMS scorer.
+{"id": "au-phone-0001", "type": "phone", "region": "AU", "content": "1900 654 321", "label": "scam", "category": "premium-rate", "source": "handwritten", "addedAt": "2026-09-02", "identifiers": ["1900 654 321"], "notes": "Premium-rate 1900 prefix — the caller is billed at a high per-minute rate."}
+{"id": "au-phone-0002", "type": "phone", "region": "AU", "content": "+234 801 234 5678", "label": "scam", "category": "international", "source": "handwritten", "addedAt": "2026-09-02", "identifiers": ["+234 801 234 5678"], "notes": "Wangiri one-ring callback from a high-cost international range."}
+{"id": "au-phone-1001", "type": "phone", "region": "AU", "content": "0491 570 156", "label": "benign", "source": "handwritten", "addedAt": "2026-09-02", "identifiers": ["0491 570 156"], "notes": "ACMA drama-range mobile. An ordinary mobile number is not evidence of anything."}
+{"id": "au-phone-1002", "type": "phone", "region": "AU", "content": "+61 491 570 158", "label": "benign", "source": "handwritten", "addedAt": "2026-09-02", "identifiers": ["+61 491 570 158"], "notes": "Same drama range in E.164 form — must score identically to the 0-prefixed spelling."}
+{"id": "au-phone-1003", "type": "phone", "region": "AU", "content": "02 9000 1234", "label": "benign", "source": "handwritten", "addedAt": "2026-09-02", "identifiers": ["02 9000 1234"], "notes": "Sydney fixed line. Spoofable like every landline, and the note says so — but that is a fact about the network, not evidence about this number, so it no longer scores."}
