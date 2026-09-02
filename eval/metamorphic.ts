@@ -265,7 +265,12 @@ export const TRANSFORMS: Transform[] = [
     id: "benign-padding",
     intent: "Bury the scam in ordinary prose to dilute a ratio-based score",
     relation: "noWeaker",
-    applies: (c) => c.type !== "url" && c.type !== "phone",
+    // Not on a case whose content opens with email headers: prose above a
+    // "From:" line means the text is no longer an email, and the header-derived
+    // signals it loses were correctly earned. That is the harness changing the
+    // input's kind, not an evasion working.
+    applies: (c) =>
+      c.type !== "url" && c.type !== "phone" && !/^[A-Za-z-]+:\s/.test(c.content),
     apply: (content) =>
       `Hi there, hope you had a good weekend. Just passing this along, ` +
       `let me know what you think when you get a chance.\n\n${content}\n\n` +

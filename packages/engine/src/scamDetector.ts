@@ -724,6 +724,19 @@ const TASK_PAYMENT_FLAG =
 const MESSAGING_HIJACK_FLAG =
   "Claims a messaging account has been flagged or restricted";
 
+/**
+ * Entries in requestWords that name a service rather than request something.
+ *
+ * They earn their place in the list — an impersonation names what it is
+ * impersonating — but "asks for sensitive info" is a claim about the text, and
+ * naming myGov is not asking for anything. Kept as a set here so the two uses
+ * stay separable without duplicating the regional lists.
+ */
+const SERVICE_NAMES = new Set([
+  "medicare", "mygov", "mygovid", "centrelink", "ato",
+  "crypto", "bitcoin",
+]);
+
 export const FAMILY_IMPERSONATION_FLAG =
   'Reads as the "Hi Mum" family-impersonation script';
 
@@ -785,14 +798,40 @@ export function checkSms(
     );
   }
 
-  const rewardHits = REWARD_WORDS.filter((w) => mentions(lower, w));
+  // "claim" is a prize word in "claim your prize" and an ordinary noun in "your
+  // claim has been processed" — a Medicare or insurance claim, which is exactly
+  // what the real sender writes. Dropped only when it appears as that noun, so
+  // the verb sense every reward lure uses still scores.
+  const claimAsNoun = /\b(?:your|the|this|a|my|their|our)\s+claims?\b|\bclaims?\s+(?:has|have|was|were|is|are)\b/i.test(text);
+  const rewardHits = REWARD_WORDS.filter(
+    (w) => mentions(lower, w) && !(w === "claim" && claimAsNoun),
+  );
   if (rewardHits.length > 0) {
     sig.add("message", `Prize/reward language: "${rewardHits.slice(0, 2).join('", "')}"`, Math.min(rewardHits.length * 12, 40));
   }
 
+  // Service names are matched but not counted as an ask.
+  //
+  // "medicare", "mygov", "ato" and friends sit in requestWords because naming
+  // one is part of the impersonation, not because the message asked for
+  // anything. The flag said "Asks for sensitive info: mygov" about a message
+  // whose whole content was "you have a new myGov message, sign in to read it",
+  // which is a false statement about the text in front of the reader as well as
+  // a false positive: every genuine myGov notification names myGov.
+  //
+  // They still contribute through the authority-mention rule below, which is
+  // where "this message is about a government service" belongs. Here they are
+  // separated so the remaining hits are things actually being requested.
   const requestHits = REQUEST_WORDS.filter((w) => mentions(lower, w));
-  if (requestHits.length > 0) {
-    sig.add("message", `Asks for sensitive info: "${requestHits.slice(0, 2).join('", "')}"`, Math.min(requestHits.length * 15, 50));
+  const genuineAsks = requestHits.filter((w) => !SERVICE_NAMES.has(w));
+  const namedServices = requestHits.filter((w) => SERVICE_NAMES.has(w));
+  if (genuineAsks.length > 0) {
+    // A service name alongside a real ask still counts — "confirm your myGovID
+    // and tax file number" is a stronger signal than the ask by itself, because
+    // the pairing is the whole scam shape. It just cannot score on its own, so
+    // it is added to the weight rather than to the count that gates the row.
+    const weight = Math.min(genuineAsks.length * 15 + namedServices.length * 15, 50);
+    sig.add("message", `Asks for sensitive info: "${[...genuineAsks, ...namedServices].slice(0, 2).join('", "')}"`, weight);
   }
 
   // Rental/property bond redirect fraud (D5 / #105). Composite: a rental
@@ -806,7 +845,7 @@ export function checkSms(
   // region, leaving only the generic phrasings.
   const hasRentalContext = /rental bond|holding deposit|lease agreement|property manager/i.test(text);
   const hasBankAsk = /bank details|account number|account no\b/i.test(text) ||
-    BANK_IDENTIFIERS.some((w) => lower.includes(w));
+    mentionsAny(lower, BANK_IDENTIFIERS);
   if (hasRentalContext && hasBankAsk) {
     sig.add("message", "Property bond fraud pattern — scammers intercept rental communications to redirect bond payments. Always verify bank detail changes by calling the agency on a number from their official website, never one in the message.", 25);
   }
@@ -817,7 +856,7 @@ export function checkSms(
   // the part that makes the scam work. Scored modestly: the deposit phrasing in
   // REQUEST_WORDS already carries the main weight, and this only corroborates.
   const hasDepositAsk = /deposit/i.test(text);
-  if (KEYS_BY_POST_PHRASES.some((k) => lower.includes(k)) && (hasDepositAsk || hasBankAsk)) {
+  if (mentionsAny(lower, KEYS_BY_POST_PHRASES) && (hasDepositAsk || hasBankAsk)) {
     sig.add("message", "Keys promised by post alongside a deposit request — in the fake-landlord script the 'landlord' is always abroad, so there's no viewing and no key handover. Never send a deposit for a property you or someone you trust hasn't physically viewed.", 15);
   }
 
@@ -1181,7 +1220,30 @@ export function checkSms(
   // suspicious. The domain is matched exactly or as a subdomain, so a lookalike
   // like `auspost.com.au.evil.tk` does not qualify (see isOwnDomainSender).
   if (mentionsAny(lower, PACK.authorityMentions) && !isOwnDomainSender(channel, options?.senderDomain, PACK)) {
-    sig.add("message", "Claims to be from a government agency — verify directly via official channels", 25);
+    // Naming an agency is not by itself evidence of anything: every genuine
+    // message from the ATO says "ATO", and the real AusPost delivery notice
+    // says "AusPost". Uncorroborated, this rule scored a 25 on ordinary mail
+    // and told the reader to "verify directly via official channels" about a
+    // message that had already arrived through one.
+    //
+    // What separates the scam is never the mention — it is what the mention is
+    // paired with: a link, a callback number, urgency, an actual ask. So the
+    // points are held back until something else has already scored. Across
+    // every AU corpus case carrying an authority mention this separates the two
+    // classes exactly: the benign ones have no other positive signal, the scams
+    // all do.
+    //
+    // The flag is still emitted at zero weight when it stands alone, because
+    // the reader should see that we noticed the agency name — silence would
+    // read as "nothing here", which is not what was concluded.
+    const corroborated = sig.total() > 0;
+    sig.add(
+      "message",
+      corroborated
+        ? "Claims to be from a government agency — verify directly via official channels"
+        : "Names a government agency, with nothing else unusual in the message — on its own that is ordinary for mail from that agency. Check anything it asks you to do by going to the official app or site yourself, not through this message.",
+      corroborated ? 25 : 0,
+    );
 
     // Senders that have publicly removed links from their unsolicited SMS — a
     // link alongside one of these is a scam. Scoped to the confirmed no-link
@@ -1215,7 +1277,7 @@ export function checkSms(
   const shortBrandHit = BRAND_MENTIONS.word.some((b) =>
     new RegExp(`\\b${b}\\b`, "i").test(lower));
 
-  if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => lower.includes(b))) {
+  if (shortBrandHit || mentionsAny(lower, BRAND_MENTIONS.substring)) {
     sig.add("message", "Claims to be from a well-known company — verify by logging in directly through the official app or website, not via any link in this message", 20);
   }
 
@@ -1235,7 +1297,7 @@ export function checkSms(
   // region's own exchanges) rather than a hardcoded AU trio, and the flag names
   // whichever brand actually matched — the old copy asserted "CoinSpot, Swyftx
   // and Binance" to every region.
-  const cryptoToadHit = CRYPTO_TOAD_BRANDS.find((b) => lower.includes(b));
+  const cryptoToadHit = CRYPTO_TOAD_BRANDS.find((b) => mentions(lower, b));
   // Region-agnostic, but a *dialable* number only. Three shapes: international
   // `+NN…`, a national trunk-prefixed `0…`, and non-geographic service ranges
   // that carry no trunk prefix (AU 1800/1300/13xx, US/CA 1-8xx). The previous
@@ -1278,7 +1340,7 @@ export function checkSms(
   // Named fraudulent investment platforms (D4 / #104). ASIC/Scamwatch have
   // explicitly warned against these exact names — a single match is a
   // high-confidence scam signal with essentially no legitimate use case.
-  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
+  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => mentions(lower, p));
   if (platformHit) {
     sig.add("message", PACK.fakeInvestmentPlatformFlag(platformHit), 50);
   }
@@ -1287,7 +1349,7 @@ export function checkSms(
   // than a govMentions entry, because these are "digital identity" phrases, not
   // an agency name — the govMentions "claims to be a government agency" flag
   // would read wrong here.
-  if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
+  if (mentionsAny(lower, MYID_REREG_PHRASES)) {
     sig.add("message", PACK.identityReregFlag, 25);
   }
 
@@ -1668,14 +1730,14 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
 
   // Named fraudulent investment platforms (D4 / #104) — mirror of the checkSms
   // rule so pasted ad text / recruitment messages are caught here too.
-  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => lower.includes(p));
+  const platformHit = FAKE_INVESTMENT_PLATFORMS.find((p) => mentions(lower, p));
   if (platformHit) {
     sig.add("message", PACK.fakeInvestmentPlatformFlag(platformHit), 50);
   }
 
   // myID forced re-registration phishing (D6 / #106) — mirror for pasted email
   // bodies routed through the free-text checker.
-  if (MYID_REREG_PHRASES.some((p) => lower.includes(p))) {
+  if (mentionsAny(lower, MYID_REREG_PHRASES)) {
     sig.add("message", PACK.identityReregFlag, 25);
   }
 

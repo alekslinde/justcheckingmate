@@ -316,16 +316,32 @@ number anyone answers.
 fixed line raises "easy to spoof". The note is educational and true, but it
 lands as a *verdict* on any real number a user checks.
 
-## Why AU breaches its FPR gate
+## AU false-positive rate
 
-AU measures **42.9% [27-61]** against 28 benign cases, up from 0.3 against 9.
+AU measures **3.4% [1-17]** against 29 benign cases, down from 41.4%.
 
-The gate was deliberately **not** raised to match. The 0.3 figure was never a
-target — it recorded what the engine did when the benign corpus was too small to
-see past — and moving it to 42.9% would ratchet backwards to accommodate
-failures the new cases just made visible, which is the opposite of what the
-ratchet is for. AU is expected to breach until the signals above stop firing on
-genuine sender mail. Every other slice still gates.
+The drop is three signals that fired on a message's *subject* rather than on
+anything wrong with it, all found by the sender-template cases:
+
+- **Agency mention** (+25) fired on any mention, including genuine mail from
+  that agency. It now needs corroboration — a link, a callback number, urgency,
+  an actual ask — and emits a zero-weight note when it stands alone, so the
+  reader still sees that the name was noticed and judged unremarkable. Across
+  every AU case carrying an authority mention this separates the classes
+  exactly: benign ones have no other positive signal, scams all do.
+- **Service-name-as-ask** (+15 each) claimed "asks for sensitive info: mygov"
+  about a message that asked for nothing. Service names no longer gate the row,
+  but still add weight alongside a genuine ask, since that pairing is the scam's
+  actual shape.
+- **"claim" as reward language** (+12) fired on "your claim has been processed".
+  The noun sense is now excluded; the verb sense every lure uses still scores.
+
+Recall is unchanged at 100%. The gates stay at 0.3 as a drift ceiling rather
+than a target — see `thresholds.json`.
+
+Fixing these also surfaced that six phrase-list matchers used a raw `includes()`
+instead of `mentions()`, so they carried the whitespace bug fixed earlier for
+everything that did use it. They are now routed through the one matcher.
 
 ## Known open violations
 
