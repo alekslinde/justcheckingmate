@@ -1,5 +1,5 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "./emailHeaders";
-import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged } from "./urlSanitizer";
+import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged, normaliseUnicode } from "./urlSanitizer";
 import { detectType } from "./detectType";
 import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
@@ -1891,8 +1891,23 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
   // could not be pasted back in.
   //
   // This is a string transformation for analysis only; nothing is ever fetched.
-  const wasDefanged = isDefanged(raw);
-  const text = wasDefanged ? refang(raw) : raw;
+  // Fold Unicode confusables first, on the same terms as refang below: a string
+  // transformation for analysis only, nothing is ever fetched. Zero-width
+  // characters and dash lookalikes split a hostname during extraction, so
+  // "com<U+200B>mbank-secure-login.tk" was extracted as "mbank-…" and lost its
+  // brand-impersonation flag while rendering identically to the victim.
+  //
+  // Before refang rather than after, because refang keys off literal ASCII
+  // "[.]" and "hxxp". A defanged link written with full-width brackets
+  // ("evil［.］tk") survives refang untouched if it runs first, and normalising
+  // afterwards cannot recover it — the defang markers are gone from the
+  // extractor's view but the dot never came back. Normalising first folds them
+  // to ASCII so refang sees the form it was written for. On every other input
+  // the two orders produce identical output.
+  const normalised = normaliseUnicode(raw);
+
+  const wasDefanged = isDefanged(normalised);
+  const text = wasDefanged ? refang(normalised) : normalised;
 
   const type = detectType(text);
   const ids = extractIdentifiers(text);
