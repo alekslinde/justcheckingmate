@@ -1011,12 +1011,35 @@ export function checkSms(
   const anchorText = stripForwardingPrefix(
     (channel === "email" ? bodyAfterHeaders(text) : text),
   ).trim();
-  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) =>
-    new RegExp(
+  // Two ways to be addressed, because neither alone covers the script.
+  //
+  //   · opening — the term starts the body, with or without a greeting. This is
+  //     the classic shape and carries the cases with no comma at all: the corpus
+  //     holds "mum send me 400 my phone broke" and "Hi Dad I dropped my phone".
+  //   · vocative — the term is addressed anywhere in the message, marked by a
+  //     following comma or exclamation after a sentence break.
+  //
+  // Position alone was scoring a live scam safe: "Just letting you know, I got a
+  // new number after my phone broke. Mum, can you transfer $200 for the rego?"
+  // has all three halves and went undetected purely because the term is not
+  // first. That is also what the benign-padding metamorphic relation was
+  // reporting — prepending prose moved the opener out of range.
+  //
+  // Both branches exclude the subject reading, so "Mum's phone broke" and
+  // "dad said he'd transfer the 300" stay out. The remaining protection against
+  // an ordinary family text is the pretext requirement below, which is the half
+  // a real family member never writes.
+  const opensWithRelation = FAMILY_RELATION_TERMS.some((r) => {
+    const opening = new RegExp(
       `^\\W{0,3}(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})`,
       "i",
-    ).test(anchorText),
-  );
+    );
+    const vocative = new RegExp(
+      `(?:^|[.!?]\\s+|\\n\\s*)(?:(?:hi|hey|hello|good\\s+\\w+)[\\s,!.]*)?\\b${r}\\b(?!${RELATION_AS_SUBJECT})\\s*[,!]`,
+      "i",
+    );
+    return opening.test(anchorText) || vocative.test(anchorText);
+  });
   const hasNumberPretext = NEW_NUMBER_PRETEXT_PHRASES.some((p) => mentions(lower, p));
   const hasMoneyAsk =
     /\b(?:send|transfer|pay|lend|e-?transfer|etransfer|deposit|spot)\b[^.!?]{0,40}?(?:\b(?:me|us|it)\b[^.!?]{0,20})?[$£€]?\s?\d{2,6}\b/i.test(text) ||
@@ -1413,10 +1436,34 @@ export function checkSms(
   // writes their own name that way. A brand in prose ("Your Amazon order has
   // shipped") is what a genuine message DOES contain, so only that half is
   // deferred. Without this split "Verify at amazonsupport.tk now" scored 0.
-  const brandInHostname = [...BRAND_MENTIONS.substring, ...BRAND_MENTIONS.word].some((b) =>
-    new RegExp(`[a-z0-9-]*${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-z0-9-]*\\.[a-z]{2,}`, "i").test(lower) &&
-    !new RegExp(`(?:^|[\\s/@])${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.[a-z]{2,}`, "i").test(lower),
-  );
+  const brandInHostname = [...BRAND_MENTIONS.substring, ...BRAND_MENTIONS.word].some((b) => {
+    const brand = b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // The brand appears inside a hostname label.
+    const glued = new RegExp(`[a-z0-9-]*${brand}[a-z0-9-]*\\.[a-z]{2,}`, "i");
+    // …but not as the sender's own registrable domain. The leading class admits
+    // a DOT so a subdomain qualifies: "tools.usps.com" and "www.royalmail.com"
+    // are the carrier's own tracking pages, and without it every legitimate
+    // subdomain read as a squat — which then corroborated the deferred agency
+    // row and put a genuine carrier SMS back at 45, the exact double-score this
+    // split exists to remove.
+    //
+    // The trailing guard keeps that dot safe: the brand must end the host, so
+    // "usps.com.evil.tk" and "royalmail.com.secure-pay.tk" (the real domain used
+    // as a PREFIX of the attacker's) and "myusps.net" are all still caught. The
+    // optional second suffix group admits a two-part public suffix —
+    // "nzpost.co.nz", "auspost.com.au" — which a single-label guard rejected,
+    // putting a genuine NZ Post SMS at 45.
+    //
+    // The lookahead rejects a further host character OR a dot that begins
+    // another label, but not a bare trailing dot: "Details at www.nzpost.co.nz."
+    // ends a sentence, and reading that period as part of the host scored the
+    // message 45 too.
+    const ownDomain = new RegExp(
+      `(?:^|[\\s/@.])${brand}\\.[a-z]{2,}(?:\\.[a-z]{2,})?(?![a-z0-9-]|\\.[a-z0-9-])`,
+      "i",
+    );
+    return glued.test(lower) && !ownDomain.test(lower);
+  });
   if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => containsLoose(lower, b))) {
     // Deferred for the same reason as the agency mention above: naming a brand
     // is what a genuine message from that brand does. Left scored, it also

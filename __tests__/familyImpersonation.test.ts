@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkEmail, checkSms } from "@justcheckingmate/engine/scamDetector";
+import { checkEmail, checkSms, stripForwardingPrefix } from "@justcheckingmate/engine/scamDetector";
 
 // The "Hi Mum" script (D2 / #251). Before this rule every message below scored
 // zero and rendered as "Looks pretty right to us" — the worst possible answer
@@ -102,11 +102,46 @@ describe("family impersonation (Hi Mum)", () => {
     });
 
     it("does not skip ordinary prose", () => {
-      // Only recognised scaffolding is stripped. Skipping anything before the
-      // first blank line would make the opener anchor meaningless — any scam
-      // could buy immunity by prepending a sentence.
+      // Only recognised scaffolding is stripped — a closed list of shapes, not
+      // "anything before the first blank line".
+      //
+      // Asserted on the stripper, not the verdict: the anchor now also matches
+      // a vocative anywhere in the body, so a padded script is caught either
+      // way. That is deliberate — burying the script in prose was a live false
+      // negative — and it means the verdict can no longer tell us whether the
+      // prefix was stripped.
       const padded = `Hi there, hope you had a good weekend.\n\n${core}`;
-      expect(checkSms(padded, undefined, "AU").verdict).toBe("safe");
+      expect(stripForwardingPrefix(padded)).toContain("hope you had a good weekend");
+    });
+
+    it("still catches the script when it is buried in prose", () => {
+      const padded = `Hi there, hope you had a good weekend.\n\n${core}\n\nThanks again.`;
+      expect(checkSms(padded, undefined, "AU").verdict).toBe("likely_scam");
+    });
+  });
+
+  describe("catches the script when the term is not first", () => {
+    // Position and address are different things. These carry all three halves —
+    // relation term, money ask, number pretext — and scored safe (0) purely
+    // because the term is not at the start. Found by the benign-padding
+    // metamorphic relation, which was reporting the same gap as a violation.
+    it.each([
+      "Just letting you know, I got a new number after my phone broke. Mum, can you transfer $200 for the rego?",
+      "Hope you're well. I dropped my phone and this is my new number. Mum, can you send $300 for the car?",
+      "Hi! Long time. My phone broke so this is my new number. Dad, could you send me 500 when you get a chance?",
+    ])("flags a mid-message vocative: %s", (text) => {
+      expect(checkSms(text, undefined, "AU").verdict).toBe("likely_scam");
+    });
+
+    it.each([
+      "Tell mum I got a new number and I'll send her the 200 I owe her tomorrow.",
+      "I'll ask mum about the weekend and send you 50 for petrol",
+      "Just letting you know, dad said he'd transfer the 300 for the car tomorrow",
+      "Mum's phone broke, can you send her $200 on this new number?",
+    ])("does not widen to a bare mention: %s", (text) => {
+      // A vocative is ADDRESSED — marked by a following comma or exclamation.
+      // Merely naming a relation mid-sentence is ordinary family talk.
+      expect(checkSms(text, undefined, "AU").verdict).not.toBe("likely_scam");
     });
   });
 

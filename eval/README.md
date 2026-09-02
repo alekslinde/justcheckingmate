@@ -318,6 +318,15 @@ scored twice and each half corroborated the other. `USPS: your package is out
 for delivery today. No action needed.` reached likely_scam (45) while its AU
 twin scored 0.
 
+A carrier linking its **own** tracking page is the common shape, and the first
+version of this corpus could not see it: all 12 cases were link-free. The brand
+row's own-domain exemption rejected any subdomain, so `tools.usps.com` and
+`www.royalmail.com` read as squats — and that false hit then corroborated the
+deferred agency row, reinstating the very double-score the split removes. Five
+cases now cover it, including a scam using the real domain as a *prefix* of the
+attacker's (`royalmail.com.secure-pay.tk`), which is what a naive "allow a
+preceding dot" fix would have whitelisted.
+
 Two more were regional twins of already-fixed AU bugs: `social security` is a
 service name in `requestWords` that the AU-only constant missed, and
 `vehicle tax is due` sat in GB `urgencyWords` — a due date is what the genuine
@@ -374,15 +383,21 @@ everything that did use it. They are now routed through the one matcher.
 
 ## Known open violations
 
-Two, both the same case, deliberately left red.
+None. All 14 relations hold across 354 checks.
 
-**`benign-padding` (2), on `au-sms-0010` and `au-sms-0014`.** Prepending ordinary prose moves the
-family script's opener out of anchor range. Unlike a forwarding wrapper this is
-arguably correct: the stripper handles a closed list of recognised scaffolding
-shapes, and skipping arbitrary prose instead would make the anchor meaningless —
-any scam could buy immunity by prepending a sentence. Left red because the
-boundary between "scaffolding" and "prose" is a judgement someone should revisit
-with real forwarded samples, not because the current behaviour is wrong.
+The last two — `benign-padding` on `au-sms-0010` and `au-sms-0014` — were closed
+by giving the family gate a second way to recognise address. It anchored on
+*position*, which is not the same thing: "Just letting you know, I got a new
+number after my phone broke. Mum, can you transfer $200 for the rego?" carries
+all three halves and scored **safe (0)** purely because the term is not first.
+The relation was reporting a live false negative, not a harness artefact.
+
+The gate now matches an opening term (which carries the no-comma cases the
+corpus holds, "mum send me 400 my phone broke") **or** a vocative anywhere in
+the body, marked by a following comma or exclamation. Both branches exclude the
+subject reading, so "Mum's phone broke" and "dad said he'd transfer the 300"
+stay out, and the pretext requirement is still the half a real family member
+never writes.
 
 ## What a violation is not
 
