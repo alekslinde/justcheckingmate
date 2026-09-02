@@ -214,3 +214,67 @@ tuned — the sensitivity table above shows that tier carries all of them.
   message", a Medicare appointment confirmation), all scoring 25-40 in the
   `suspicious` tier. Whether that caution is right is a product decision the
   eval surfaces rather than settles.
+
+---
+
+# Metamorphic eval
+
+```bash
+npm run eval:metamorphic                       # all relations
+npm run eval:metamorphic -- --list             # what the transforms do
+npm run eval:metamorphic -- --only=zero-width  # one transform
+npm run eval:metamorphic -- --json             # machine-readable
+```
+
+## Why it exists alongside the corpus eval
+
+The corpus eval asks "how often is the engine right", which needs labels and is
+capped by how many exist — currently tens of cases, with the confidence
+intervals above. The metamorphic eval asks a question needing no labels at all:
+**is the engine self-consistent?**
+
+A metamorphic relation says how a verdict must respond to a transformation,
+without knowing the right answer for either side. `0412 345 678` and
+`+61 412 345 678` are the same number, so they must score the same — whatever
+that score is. When they don't, that difference is a bug, and nobody had to
+label anything to find it.
+
+This matters most exactly where the corpus is weakest. Nine benign cases cannot
+measure a false-positive rate, but every case can be *transformed*, so each
+relation multiplies the existing corpus into hundreds of checks. It also probes
+the surface an evader actually attacks: a scammer does not write new scams to
+beat a detector, they rewrite the one they have until it slips through — which
+is precisely a metamorphic transformation.
+
+## The two relations
+
+| Relation | Meaning | Example |
+|---|---|---|
+| `equal` | Meaning-preserving. Any verdict change is a bug. | Reformatting a phone number, recasing a hostname |
+| `noWeaker` | Obfuscation. Scoring *higher* is fine; scoring lower means the trick worked. | Zero-width spaces, homoglyphs, padding |
+
+`noWeaker` is not laziness. Several packs treat obfuscation as a signal in its
+own right, so asserting equality there would file every correct penalty as a
+failure and train everyone to ignore the output.
+
+Both are judged on the **verdict**, not the score. The score is internal and
+moves for legitimate reasons; the verdict is what the product asserts.
+
+## Reading a run
+
+There is no threshold to tune and no baseline to ratchet. A violation is a
+self-inconsistency, which is a bug rather than a trade someone chose — so the
+exit code is simply non-zero when any relation breaks.
+
+A transform marked `(never applied)` is **not** passing: it means no case in the
+corpus exercised it, and that is a corpus gap worth filling. `phone-e164` and
+`fullwidth-digits` currently read this way because the corpus holds no
+`type: "phone"` case and no AU-format number at all, while `phoneIntel.ts` is
+the second-largest module in the engine.
+
+## What a violation is not
+
+Proof the original verdict was correct. These relations police consistency, not
+accuracy: a relation holding across a transformation of a case the engine
+already scores wrongly keeps it wrong. The corpus eval says whether the engine
+is right; this says whether it can be talked out of it.
