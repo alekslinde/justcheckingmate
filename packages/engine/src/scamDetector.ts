@@ -1436,10 +1436,34 @@ export function checkSms(
   // writes their own name that way. A brand in prose ("Your Amazon order has
   // shipped") is what a genuine message DOES contain, so only that half is
   // deferred. Without this split "Verify at amazonsupport.tk now" scored 0.
-  const brandInHostname = [...BRAND_MENTIONS.substring, ...BRAND_MENTIONS.word].some((b) =>
-    new RegExp(`[a-z0-9-]*${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-z0-9-]*\\.[a-z]{2,}`, "i").test(lower) &&
-    !new RegExp(`(?:^|[\\s/@])${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.[a-z]{2,}`, "i").test(lower),
-  );
+  const brandInHostname = [...BRAND_MENTIONS.substring, ...BRAND_MENTIONS.word].some((b) => {
+    const brand = b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // The brand appears inside a hostname label.
+    const glued = new RegExp(`[a-z0-9-]*${brand}[a-z0-9-]*\\.[a-z]{2,}`, "i");
+    // …but not as the sender's own registrable domain. The leading class admits
+    // a DOT so a subdomain qualifies: "tools.usps.com" and "www.royalmail.com"
+    // are the carrier's own tracking pages, and without it every legitimate
+    // subdomain read as a squat — which then corroborated the deferred agency
+    // row and put a genuine carrier SMS back at 45, the exact double-score this
+    // split exists to remove.
+    //
+    // The trailing guard keeps that dot safe: the brand must end the host, so
+    // "usps.com.evil.tk" and "royalmail.com.secure-pay.tk" (the real domain used
+    // as a PREFIX of the attacker's) and "myusps.net" are all still caught. The
+    // optional second suffix group admits a two-part public suffix —
+    // "nzpost.co.nz", "auspost.com.au" — which a single-label guard rejected,
+    // putting a genuine NZ Post SMS at 45.
+    //
+    // The lookahead rejects a further host character OR a dot that begins
+    // another label, but not a bare trailing dot: "Details at www.nzpost.co.nz."
+    // ends a sentence, and reading that period as part of the host scored the
+    // message 45 too.
+    const ownDomain = new RegExp(
+      `(?:^|[\\s/@.])${brand}\\.[a-z]{2,}(?:\\.[a-z]{2,})?(?![a-z0-9-]|\\.[a-z0-9-])`,
+      "i",
+    );
+    return glued.test(lower) && !ownDomain.test(lower);
+  });
   if (shortBrandHit || BRAND_MENTIONS.substring.some((b) => containsLoose(lower, b))) {
     // Deferred for the same reason as the agency mention above: naming a brand
     // is what a genuine message from that brand does. Left scored, it also

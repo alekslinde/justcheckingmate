@@ -112,6 +112,29 @@ describe("the same protections apply outside AU", () => {
     expect(lure.verdict).toBe("likely_scam");
   });
 
+  it.each([
+    ["US", "USPS: your package is out for delivery today. Track it at tools.usps.com"],
+    ["GB", "Royal Mail: your parcel is on its way. Track it at www.royalmail.com"],
+    ["NZ", "NZ Post: your parcel is ready for collection. Details at www.nzpost.co.nz."],
+    ["IE", "An Post: your parcel is on board for delivery. Details at www.anpost.ie."],
+  ])("%s: leaves a sender citing its own domain alone", (region, text) => {
+    // The exemption for a brand's own domain rejected any subdomain, so
+    // "tools.usps.com" read as a squat — and that false hit then corroborated
+    // the deferred agency row, reinstating the exact double-score the split
+    // exists to remove. A carrier linking its own tracking page is the common
+    // shape; the link-free corpus could not see it.
+    expect(checkSms(text, undefined, region as never).verdict).toBe("safe");
+  });
+
+  it.each([
+    ["US", "USPS: package held. Update at http://usps.com.evil.tk/fix"],
+    ["GB", "Royal Mail: pay the fee at https://royalmail.com.secure-pay.tk/fee"],
+    ["NZ", "NZ Post: pay the redelivery fee at http://nzpost.co.nz.evil.tk/fix"],
+  ])("%s: still catches the real domain used as a prefix of the attacker's", (region, text) => {
+    // The shape a naive "allow a preceding dot" fix would have whitelisted.
+    expect(checkSms(text, undefined, region as never).verdict).toBe("likely_scam");
+  });
+
   it("scores a brand glued into a hostname even with nothing else", () => {
     // Deferring the brand row wholesale dropped "Verify at amazonsupport.tk
     // now" to 0. A brand in prose is what genuine mail contains; a brand glued

@@ -318,6 +318,15 @@ scored twice and each half corroborated the other. `USPS: your package is out
 for delivery today. No action needed.` reached likely_scam (45) while its AU
 twin scored 0.
 
+A carrier linking its **own** tracking page is the common shape, and the first
+version of this corpus could not see it: all 12 cases were link-free. The brand
+row's own-domain exemption rejected any subdomain, so `tools.usps.com` and
+`www.royalmail.com` read as squats — and that false hit then corroborated the
+deferred agency row, reinstating the very double-score the split removes. Five
+cases now cover it, including a scam using the real domain as a *prefix* of the
+attacker's (`royalmail.com.secure-pay.tk`), which is what a naive "allow a
+preceding dot" fix would have whitelisted.
+
 Two more were regional twins of already-fixed AU bugs: `social security` is a
 service name in `requestWords` that the AU-only constant missed, and
 `vehicle tax is due` sat in GB `urgencyWords` — a due date is what the genuine
