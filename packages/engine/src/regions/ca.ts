@@ -352,6 +352,7 @@ export const CA: RegionDefinition = {
   // the field is absent.
 
   reportingBody: "the Canadian Anti-Fraud Centre",
+  reportingUrl: "https://antifraudcentre-centreantifraude.ca",
 
   phonePlan: {
     // NANP premium-rate, shared with the US: 900 is the premium range and 976

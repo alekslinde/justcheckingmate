@@ -971,6 +971,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             initialScamEmail={headers.fromAddress || ids.scamEmail}
             initialScamReplyTo={headers.replyTo}
             initialAuth={{ spf: headers.spf, dkim: headers.dkim, dkimDomain: headers.dkimDomain, dmarc: headers.dmarc }}
+            region={region}
           />
         </div>
       </div>
@@ -1150,6 +1151,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
                     scam" in the verdict's own colour. */}
                 <VerdictBadge
                   result={overall}
+                  region={region}
                   supporting={
                     <>
                 {/* Region correction + coverage honesty. The picker is always

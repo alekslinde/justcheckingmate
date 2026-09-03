@@ -433,6 +433,7 @@ export const GB: RegionDefinition = {
   // resolution to act on it, so the copy stays with the body that covers most
   // GB users rather than asserting something wrong for Scottish ones.
   reportingBody: "Report Fraud (reportfraud.police.uk)",
+  reportingUrl: "https://reportfraud.police.uk",
 
   phonePlan: {
     // Ofcom premium-rate ranges: 09 (premium services) and 070 (personal

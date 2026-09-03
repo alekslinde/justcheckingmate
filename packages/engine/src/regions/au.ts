@@ -562,6 +562,7 @@ export const AU: RegionDefinition = {
     "'Unverified' label override attempt — since 1 July 2026, legitimate Australian senders must register their SMS Sender ID with ACMA. A message asking you to ignore an 'Unverified' label is almost certainly a scam.",
 
   reportingBody: "Scamwatch",
+  reportingUrl: "https://www.scamwatch.gov.au",
 
   phonePlan: {
     premiumPrefixes: ["0190"],

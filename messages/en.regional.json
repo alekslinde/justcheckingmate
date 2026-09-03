@@ -27,7 +27,7 @@
   "verdict.likely_scam.step1": "Don't click any links or ring any numbers from this thing",
   "verdict.likely_scam.step2": "Block the mongrel and delete the message",
   "verdict.likely_scam.step3": "If you gave 'em your bank details, call your bank right now",
-  "verdict.likely_scam.step4": "Report the scam to Scamwatch — scamwatch.gov.au",
+  "verdict.likely_scam.step4.pre": "Report the scam to",
   "verdict.unknown.label": "Couldn't work it out",
   "verdict.unknown.sub": "Not enough to go on, mate — trust your gut.",
   "verdict.safe.status": "Looks alright",

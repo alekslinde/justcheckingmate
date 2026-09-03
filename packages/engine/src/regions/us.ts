@@ -378,6 +378,7 @@ export const US: RegionDefinition = {
   // absent.
 
   reportingBody: "the FTC (reportfraud.ftc.gov)",
+  reportingUrl: "https://reportfraud.ftc.gov",
 
   phonePlan: {
     // NANP premium-rate: 900 is the classic premium range, and 976 is the
