@@ -401,6 +401,9 @@ export const IE: RegionDefinition = {
   // false, and the rule is skipped where the field is absent.
 
   reportingBody: "An Garda Síochána (or FraudSMART)",
+  // FraudSMART is the dedicated report-a-fraud portal (BPFI, linked by the
+  // Garda); the Garda's own site has no stable deep reporting URL.
+  reportingUrl: "https://www.fraudsmart.ie",
 
   phonePlan: {
     // ComReg premium-rate: 15xx is the premium services range. 076 is the VoIP

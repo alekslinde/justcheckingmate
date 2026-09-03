@@ -7,8 +7,10 @@ import { summariseAuth } from "@justcheckingmate/engine/emailHeaders";
 import { EmailTrackingReport } from "@/lib/emailTracking";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";
+import { reportingFor, victimHelpline } from "@/lib/reportingResources";
 import { useBugReport } from "./BugReportProvider";
 import EmailExportGuide from "./EmailExportGuide";
+import ReportingLink from "./ReportingLink";
 
 // Stroke icons for the type picker, matching the set CheckFlow draws for its
 // capture options. Emoji were the previous answer and are the wrong one here:
@@ -136,9 +138,13 @@ function AuthChip({ label, verdict }: { label: string; verdict: string }) {
   );
 }
 
-export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth } = {}) {
+export default function ReportForm({ initialType, initialContent, initialScamUrl, initialScamPhone, initialScamEmail, initialScamReplyTo, initialAuth, region }: { initialType?: ScamType; initialContent?: string; initialScamUrl?: string; initialScamPhone?: string; initialScamEmail?: string; initialScamReplyTo?: string; initialAuth?: EmailAuth; /** Explicit check region (or null for auto). Decides the reporting advice; absent keeps the historical AU behaviour. */ region?: string | null } = {}) {
   const { t } = useLang();
   const { reportFailure } = useBugReport();
+  // Reporting advice follows the check region: a UK reporter told to contact
+  // Scamwatch is being sent to the wrong country.
+  const reporting = reportingFor(region);
+  const helpline = victimHelpline(region);
   const [type, setType] = useState<ScamType>(initialType ?? "url");
   const [content, setContent] = useState(initialContent ?? "");
   const [description, setDescription] = useState("");
@@ -318,21 +324,18 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
         </div>
         <div className="text-[13px] leading-relaxed text-[var(--faint)] pt-3 border-t border-[var(--rule)]">
           {t("report.success.official.pre")}{" "}
-          <a
-            href="https://www.scamwatch.gov.au"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--clear)] underline underline-offset-2 hover:no-underline"
-          >
-            Scamwatch (scamwatch.gov.au)<span className="sr-only"> ({t("a11y.newTab")})</span><span aria-hidden="true"> ↗</span>
-          </a>{" "}
-          {t("report.success.official.or")}{" "}
-          <a
-            href="tel:1800595160"
-            className="text-[var(--clear)] underline underline-offset-2 hover:no-underline"
-          >
-            {t("report.success.idcare")}
-          </a>
+          <ReportingLink link={reporting} />
+          {helpline && (
+            <>
+              {" "}{t("report.success.official.or")}{" "}
+              <a
+                href={`tel:${helpline.number}`}
+                className="text-[var(--clear)] underline underline-offset-2 hover:no-underline"
+              >
+                {helpline.label}
+              </a>
+            </>
+          )}
         </div>
       </div>
     );
@@ -364,7 +367,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
       <p className="rounded-lg border-l-2 border-l-[var(--caution)] bg-[var(--caution)]/[0.08] px-4 py-3 text-[13.5px] leading-relaxed text-[var(--text-dim)]">
         <strong className="font-semibold text-[var(--foreground)]">{t("report.urgent.heading")}</strong>
         {", "}
-        {t("report.urgent")}
+        {t("report.urgent", { body: reporting.body })}
       </p>
 
       {/* Required field note */}

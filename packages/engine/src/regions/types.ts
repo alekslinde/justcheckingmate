@@ -315,6 +315,17 @@ export interface RegionDefinition {
   /** Where to report a confirmed scam — the agency differs per jurisdiction. */
   reportingBody: string;
 
+  /**
+   * Report-a-scam URL for `reportingBody`, used by the UI's action steps and
+   * report-success footer. Optional: packs for jurisdictions without a single
+   * stable reporting URL omit it and the UI renders the body name as plain
+   * text rather than linking nowhere. Must be an https URL on a domain the
+   * pack already trusts (ideally one in `legitDomains`), never a URL
+   * shortener or a redirect — this link is the last line of a "this is almost
+   * certainly a scam" verdict, so it has to survive scrutiny.
+   */
+  reportingUrl?: string;
+
   /** National number-plan semantics. Omitted where we have none authored. */
   phonePlan?: PhonePlan;
 
@@ -379,6 +390,8 @@ export interface RegionPack {
   legitDomainDetails: string;
   senderIdFlag?: string;
   reportingBody: string;
+  /** Resolved report-a-scam URL; absent where the definition carries none. */
+  reportingUrl?: string;
   /** Always present on a resolved pack; an empty plan where none is authored. */
   phonePlan: PhonePlan;
 }

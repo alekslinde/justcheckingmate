@@ -4,8 +4,10 @@ import { CheckResult, PhoneIntel } from "@justcheckingmate/engine/scamDetector";
 import type { Signal } from "@justcheckingmate/engine/engineTypes";
 import { matchedTactics, TACTIC_IDS } from "@/lib/signalTactics";
 import { defangText } from "@justcheckingmate/engine/urlSanitizer";
+import { reportingFor, type ReportingLink as ReportingLinkData } from "@/lib/reportingResources";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";
+import ReportingLink from "./ReportingLink";
 
 // Verdict colour comes from the tokens, and only from them: red is the verdict
 // colour, amber is reserved for statements about our own coverage. "unknown"
@@ -81,16 +83,19 @@ function Evidence({ signals }: { signals: Signal[] }) {
 
 // ── Action steps shown for actionable verdicts ────────────────────────────────
 
-function ActionSteps({ verdict }: { verdict: "suspicious" | "likely_scam" }) {
+function ActionSteps({ verdict, reporting }: { verdict: "suspicious" | "likely_scam"; reporting: ReportingLinkData }) {
   const { t } = useLang();
   const heading = t(`verdict.${verdict}.nextSteps` as MessageKey);
-  const steps =
+  // The report step is a node, not a string: the body name links to its
+  // reporting URL where the pack carries one. Plain text elsewhere keeps the
+  // list homogeneous — every row is still "one thing to do".
+  const steps: React.ReactNode[] =
     verdict === "likely_scam"
       ? [
           t("verdict.likely_scam.step1"),
           t("verdict.likely_scam.step2"),
           t("verdict.likely_scam.step3"),
-          t("verdict.likely_scam.step4"),
+          (<>{t("verdict.likely_scam.step4.pre")} <ReportingLink link={reporting} /></>),
         ]
       : [
           t("verdict.suspicious.step1"),
@@ -150,7 +155,7 @@ const SPOOFING_RISK_STYLE: Record<PhoneIntel["spoofingRisk"], { labelKey: Messag
   very_high: { labelKey: "phone.risk.veryHigh", cls: "text-[var(--scam-text)]" },
 };
 
-function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
+function PhoneIntelPanel({ intel, reporting }: { intel: PhoneIntel; reporting: ReportingLinkData }) {
   const { t } = useLang();
   const lt   = LINE_TYPE_META[intel.lineType];
   const risk = SPOOFING_RISK_STYLE[intel.spoofingRisk];
@@ -200,14 +205,7 @@ function PhoneIntelPanel({ intel }: { intel: PhoneIntel }) {
         <p>{t("phone.spoof.body")}</p>
         <p>
           {t("phone.spoof.report.pre")}{" "}
-          <a
-            href="https://www.scamwatch.gov.au"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--clear)] underline underline-offset-2 hover:opacity-80"
-          >
-            Scamwatch (scamwatch.gov.au)<span className="sr-only"> ({t("a11y.newTab")})</span><span aria-hidden="true"> ↗</span>
-          </a>{" "}
+          <ReportingLink link={reporting} />{" "}
           {t("phone.spoof.report.post")}
         </p>
       </div>
@@ -444,9 +442,12 @@ export function Tactics({ signals }: { signals: Signal[] }) {
 export default function VerdictBadge({
   result,
   supporting,
+  region,
 }: {
   result: CheckResult;
   supporting?: React.ReactNode;
+  /** Explicit check region (or null for auto). Decides the reporting advice. */
+  region?: string | null;
 }) {
   const { t } = useLang();
   const v     = VERDICTS[result.verdict];
@@ -454,6 +455,9 @@ export default function VerdictBadge({
   const sub   = t(`verdict.${result.verdict}.sub`   as MessageKey);
 
   const signals = result.signals ?? [];
+  // Reporting advice follows the resolved check region, not the copy bundle:
+  // a UK user told to contact Scamwatch is being sent to the wrong country.
+  const reporting = reportingFor(region);
   // result.details is not rendered. Every one of its four values restates
   // something the sheet already says: the safe and suspicious lines repeat
   // verdict.*.sub under the headline, and the two scam lines repeat the action
@@ -495,14 +499,14 @@ export default function VerdictBadge({
 
       <RiskScore score={result.score} bar={v.bar} tone={v.text} signals={signals} />
 
-      {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} />}
+      {result.phoneIntel && <PhoneIntelPanel intel={result.phoneIntel} reporting={reporting} />}
 
       {supporting}
 
       {/* Last band before the footer: the steps are the sheet's closing
           instruction, so everything qualifying the verdict comes above them. */}
       {(result.verdict === "likely_scam" || result.verdict === "suspicious") && (
-        <ActionSteps verdict={result.verdict} />
+        <ActionSteps verdict={result.verdict} reporting={reporting} />
       )}
     </div>
   );

@@ -372,6 +372,9 @@ export const NZ: RegionDefinition = {
   // the field is absent.
 
   reportingBody: "CERT NZ",
+  // CERT NZ has merged into the NCSC; cert.govt.nz (already in legitDomains
+  // above) resolves to the successor body that now takes the reports.
+  reportingUrl: "https://www.cert.govt.nz",
 
   phonePlan: {
     // 0900 is the NZ premium-rate range. libphonenumber classifies it, but the
