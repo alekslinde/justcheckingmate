@@ -1351,16 +1351,28 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
         onDrop={handleDrop}
       >
-        {/* Names the surface and states the privacy claim at the point of input,
-            which is where the question is actually being asked. */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--paper-dim)]">
+        {/* Names the surface and carries the region choice: the header is where
+            the eye starts, and "Suspicious content … region [Auto]" reads as
+            one line. The privacy badge it displaces moves below the card, so
+            the claim is still stated at the point of input. */}
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--paper-dim)]">
           <span className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium tracking-[0.09em] uppercase text-[#5D6675]">
             {t("check.contentLabel")}
           </span>
-          <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-semibold tracking-[0.03em] text-[#00805B]">
-            <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--clear)] shrink-0" />
-            {t("check.onDevice")}
-          </span>
+          <CheckRegionPicker
+            id="check-region"
+            value={checkRegion}
+            onChange={(code) => {
+              setCheckRegion(code);
+              writeStoredCheckRegion(code);
+            }}
+            disabled={busy}
+            compact
+            small
+            onPaper
+            prefix={t("check.region.shortLabel")}
+            selectClassName="max-w-[150px]"
+          />
         </div>
 
         {/* The pasted text steps aside for the work being done on it, rather
@@ -1485,20 +1497,13 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         )}
       </div>
 
-      {/* Region for this check. Decides the first check's payload; saved on
-          this device. Sits outside the paper card because it is a setting for
-          the run, not content being checked. */}
-      <div className="px-0.5">
-        <CheckRegionPicker
-          id="check-region"
-          value={checkRegion}
-          onChange={(code) => {
-            setCheckRegion(code);
-            writeStoredCheckRegion(code);
-          }}
-          disabled={busy}
-        />
-      </div>
+      {/* The privacy claim at the point of input. It lived in the card header
+          until the region picker took that slot; it sits here now so the words
+          survive the move rather than being quietly dropped. */}
+      <p className="px-0.5 inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-semibold tracking-[0.03em] text-[var(--clear)]">
+        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--clear)] shrink-0" />
+        {t("check.onDevice")}
+      </p>
 
       {/* The image path's handover: we read it, now you check it.
           Suppressed while the panel is up so the closing tick and this don't
