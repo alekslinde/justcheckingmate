@@ -248,10 +248,33 @@ describe("coverage notice — our limits, in the colour reserved for them", () =
     expect(FLOW.indexOf("<CoverageNotice")).toBeGreaterThan(supporting);
   });
 
-  it("only draws its band when it has something to say", () => {
+  it("only draws the warning band when it has something to say", () => {
     // CoverageNotice returns null on full coverage, so an unconditional wrapper
     // drew a top rule and 16px of padding around nothing on every fully-covered
-    // check.
+    // check. The region picker is the exception: it renders unconditionally (a
+    // wrong geo guess most needs correcting exactly when coverage is full), so
+    // only the warning stays behind the coverage guard.
     expect(FLOW).toMatch(/overallCoverage\(results\) !== "full" && \(/);
+    const resultPicker = FLOW.indexOf('id="result-region"');
+    const warningGuard = FLOW.indexOf('overallCoverage(results) !== "full"');
+    expect(resultPicker).toBeGreaterThan(-1);
+    expect(warningGuard).toBeGreaterThan(-1);
+    expect(resultPicker).toBeLessThan(warningGuard);
+  });
+
+  it("lets the reader correct the region before the first check, not just after", () => {
+    // The geo guess used to be uncorrectable until a result existed — and only
+    // then when coverage was partial. The input step carries its own picker so
+    // the first check can run against the right pack.
+    expect(FLOW).toContain('id="check-region"');
+  });
+
+  it("sends the persisted choice on the first check", () => {
+    // Auto sends nothing (the server resolves from geo headers); an explicit
+    // choice travels as the region field. Asserted on the payload shape rather
+    // than prose, which is translated.
+    const run_ = FLOW.slice(FLOW.indexOf("async function runCheck"), FLOW.indexOf("async function shareResults"));
+    expect(run_).toMatch(/\.\.\.\(payloadRegion \? \{ region: payloadRegion \}/);
+    expect(run_).toMatch(/checkRegion \?\? undefined/);
   });
 });

@@ -35,7 +35,6 @@
   "verdict.likely_scam.status": "Scam alert",
   "verdict.unknown.status": "Couldn't work it out",
   "tracking.heading": "Sneaky tracking in this email",
-  "verdict.coverage.regionLabel": "Got your spot wrong? Pick your region:",
   "verdict.coverage.title": "We're a bit thin on the ground here",
   "verdict.coverage.body": "We haven't built out our full scam rules for your part of the world yet. We still ran the universal checks — links, shorteners, trackers, and anyone fishing for your personal details — but we can't be as thorough as we are on home turf.",
   "verdict.coverage.advice": "A quiet result here means \"not checked\", not \"all clear\".",
