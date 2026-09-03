@@ -1497,14 +1497,6 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         )}
       </div>
 
-      {/* The privacy claim at the point of input. It lived in the card header
-          until the region picker took that slot; it sits here now so the words
-          survive the move rather than being quietly dropped. */}
-      <p className="px-0.5 inline-flex items-center gap-1.5 font-[family-name:var(--font-mono-ui)] text-[11px] font-semibold tracking-[0.03em] text-[var(--clear)]">
-        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[var(--clear)] shrink-0" />
-        {t("check.onDevice")}
-      </p>
-
       {/* The image path's handover: we read it, now you check it.
           Suppressed while the panel is up so the closing tick and this don't
           both claim the moment — this takes over as the panel retires. */}

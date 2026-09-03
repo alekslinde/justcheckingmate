@@ -512,7 +512,6 @@
   "freshness.label": "Reviewed",
   "radar.freshness.note": "The newest sighting across the {n} entries below. Each entry carries its own first-seen and last-seen dates.",
   "calendar.freshness.note": "The newest review date across the {n} seasons below. Each season lists its own sources and when it was last checked.",
-  "check.onDevice": "Never stored, never opened",
   "verdict.evidence.heading": "Evidence",
   "verdict.evidence.caption": "What we found, and what each finding added to the score.",
   "verdict.evidence.source.link": "Link",

@@ -97,20 +97,19 @@ describe("privacy claim — image path", () => {
   });
 });
 
-describe("the card's standing privacy badge", () => {
-  // The badge sits at the top of the same card whose footer now says the
-  // content was sent to be scored. It read "Checked on your device", which the
-  // paste path — every paste path — contradicts: scoring happens on the server.
-  // The claim was invisible until the footer beneath it started telling the
-  // truth, and a card that contradicts itself teaches people to read neither
-  // line. What is true of every check is what the hero copy already says.
-  it("does not claim checks happen on the device", () => {
-    expect(translate(NORMAL, "check.onDevice")).not.toMatch(/on your device/i);
+describe("the retired standing privacy badge", () => {
+  // The badge sat in the card header until the region picker took that slot.
+  // Relocating it below the card duplicated what the hero copy already says,
+  // so it was removed outright: one standing claim, in one place.
+  it("is no longer rendered by the check flow", () => {
+    expect(SRC).not.toContain("check.onDevice");
   });
 
-  it("claims only what holds for every path", () => {
-    const badge = translate(NORMAL, "check.onDevice");
-    expect(badge).toMatch(/never/i);
+  it("has its key retired from the message bundle", () => {
+    expect(translate(NORMAL, "check.onDevice" as MessageKey)).toBe("check.onDevice");
+  });
+
+  it("leaves the promises with the hero copy, which still keeps both", () => {
     // The two promises the product actually keeps on every route.
     expect(translate(NORMAL, "home.subtitle")).toMatch(/isn't stored/i);
     expect(translate(NORMAL, "home.subtitle")).toMatch(/never open/i);
