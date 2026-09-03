@@ -1,6 +1,7 @@
 "use client";
 
 import { useLang } from "@/lib/lang";
+import type { CheckFeedback } from "@/lib/checkFeedback";
 import { REGION_OPTIONS } from "@justcheckingmate/engine/regions";
 
 /**
@@ -15,11 +16,7 @@ import { REGION_OPTIONS } from "@justcheckingmate/engine/regions";
  * coverage, so a re-check driven from this control used to run, and fail,
  * with nothing on screen when coverage was full.
  */
-export type RecheckState =
-  | { state: "idle" }
-  | { state: "loading"; region: string }
-  | { state: "done"; region: string }
-  | { state: "error"; kind: "rate_limited" | "server" };
+export type RecheckState = CheckFeedback["recheck"];
 
 export default function CheckRegionPicker({
   id,
@@ -45,7 +42,7 @@ export default function CheckRegionPicker({
       <div className="flex flex-wrap items-center gap-2">
         <label
           htmlFor={id}
-          className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.09em] text-[#5D6675]"
+          className="font-[family-name:var(--font-mono-ui)] text-[11px] font-medium uppercase tracking-[0.09em] text-[var(--faint)]"
         >
           {t("check.region.label")}
         </label>
@@ -54,7 +51,7 @@ export default function CheckRegionPicker({
           value={value ?? ""}
           disabled={busy}
           onChange={(e) => onChange(e.target.value ? e.target.value : null)}
-          className="rounded-lg border border-[#D9D5CC] bg-white px-2.5 py-2 text-[13.5px] text-[#3D4654] cursor-pointer disabled:opacity-60 disabled:cursor-progress"
+          className="rounded-lg border border-[var(--ink-3)] bg-[var(--ink)] px-2.5 py-2 text-[13.5px] text-[var(--foreground)] cursor-pointer disabled:opacity-60 disabled:cursor-progress"
         >
           <option value="">{t("check.region.auto")}</option>
           {REGION_OPTIONS.map((o) => (
@@ -64,7 +61,7 @@ export default function CheckRegionPicker({
           ))}
         </select>
       </div>
-      <p className="text-xs text-[#8A93A1]">{t("check.region.hint")}</p>
+      <p className="text-xs text-[var(--faint)]">{t("check.region.hint")}</p>
       {recheck && (
         <div role="status" aria-live="polite">
           {recheck.state === "loading" && (

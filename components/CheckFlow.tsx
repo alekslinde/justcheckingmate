@@ -778,7 +778,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     // re-check surface, so fall back to the region that ran rather than
     // sending feedback nowhere.
     const dispatchRegion = isRecheck ? (payloadRegion ?? region ?? undefined) : undefined;
-    dispatch({ type: "check-started", region: dispatchRegion ?? undefined });
+    dispatch({ type: "check-started", region: dispatchRegion });
     if (!isRecheck) {
       setPipelineDone(false);
       setPipeline("paste");

@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { normaliseCheckRegion, CHECK_REGION_STORAGE_KEY } from "@/lib/checkRegion";
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  normaliseCheckRegion,
+  readStoredCheckRegion,
+  writeStoredCheckRegion,
+  CHECK_REGION_STORAGE_KEY,
+} from "@/lib/checkRegion";
 import { supportedRegions } from "@justcheckingmate/engine/regions";
 
 describe("normaliseCheckRegion", () => {
@@ -22,5 +27,62 @@ describe("normaliseCheckRegion", () => {
 
   it("uses a storage key in the jcm_ namespace", () => {
     expect(CHECK_REGION_STORAGE_KEY.startsWith("jcm_")).toBe(true);
+  });
+});
+
+describe("stored check region — persistence round-trip", () => {
+  // Node environment has no window; install a minimal localStorage mock so the
+  // read/write paths (not just the pure normaliser) are exercised.
+  const hadWindow = "__JCM_HAD_WINDOW__";
+  let store: Map<string, string>;
+
+  function installMockStorage() {
+    store = new Map<string, string>();
+    (globalThis as Record<string, unknown>)[hadWindow] =
+      "window" in globalThis ? (globalThis as Record<string, unknown>).window : undefined;
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        localStorage: {
+          getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+          setItem: (k: string, v: string) => void store.set(k, v),
+          removeItem: (k: string) => void store.delete(k),
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  afterEach(() => {
+    const prev = (globalThis as Record<string, unknown>)[hadWindow];
+    if (prev === undefined) delete (globalThis as Record<string, unknown>).window;
+    else (globalThis as Record<string, unknown>).window = prev;
+    delete (globalThis as Record<string, unknown>)[hadWindow];
+  });
+
+  it("reads auto when nothing is stored", () => {
+    installMockStorage();
+    expect(readStoredCheckRegion()).toBeNull();
+  });
+
+  it("round-trips an explicit choice", () => {
+    installMockStorage();
+    writeStoredCheckRegion("gb");
+    expect(store.get(CHECK_REGION_STORAGE_KEY)).toBe("GB");
+    expect(readStoredCheckRegion()).toBe("GB");
+  });
+
+  it("removes the key when returning to auto", () => {
+    installMockStorage();
+    writeStoredCheckRegion("AU");
+    writeStoredCheckRegion(null);
+    expect(store.has(CHECK_REGION_STORAGE_KEY)).toBe(false);
+    expect(readStoredCheckRegion()).toBeNull();
+  });
+
+  it("degrades a stale stored code to auto rather than pinning it", () => {
+    installMockStorage();
+    store.set(CHECK_REGION_STORAGE_KEY, "XX");
+    expect(readStoredCheckRegion()).toBeNull();
   });
 });

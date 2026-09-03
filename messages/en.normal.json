@@ -80,7 +80,6 @@
   "verdict.suspicious.status": "Caution",
   "verdict.likely_scam.status": "Likely a scam",
   "verdict.unknown.status": "Unable to determine",
-  "verdict.coverage.regionLabel": "Not where you are? Pick your region:",
   "verdict.coverage.rechecking": "Re-checking against {region}…",
   "verdict.coverage.recheckDone": "Re-checked against {region}.",
   "verdict.coverage.recheckError": "Couldn't re-check against that region just now — the verdict below is still the one from before. Try again in a moment.",
