@@ -17,6 +17,8 @@ import { checkFeedback, INITIAL_FEEDBACK } from "@/lib/checkFeedback";
 import { useBugReport } from "./BugReportProvider";
 import VerdictBadge, { Tactics } from "./VerdictBadge";
 import CoverageNotice from "./CoverageNotice";
+import CheckRegionPicker from "./CheckRegionPicker";
+import { readStoredCheckRegion, writeStoredCheckRegion } from "@/lib/checkRegion";
 import ReportForm from "./ReportForm";
 
 /**
@@ -463,6 +465,11 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
   const [results, setResults] = useState<AnalyzedIdentifier[]>([]);
   // Region the server used for the last check. Null until a check has run.
   const [region, setRegion] = useState<string | null>(null);
+  // Explicit region choice for checks. Null = auto: nothing is sent and the
+  // server resolves from the geo header. Restored after hydration (like the
+  // check draft) so the first render matches the server and the saved choice
+  // lands immediately afterwards. Persisted on change.
+  const [checkRegion, setCheckRegion] = useState<string | null>(null);
   // Everything the reader is told about a run, in one place.
   //
   // These four moved out of scattered useState calls into lib/checkFeedback
@@ -554,6 +561,9 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     clearCheckDraft();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot restore of browser state after hydration; see the note above.
     if (draft && !initialContent) setContent(draft);
+    const stored = readStoredCheckRegion();
+    // One-shot restore alongside the draft above.
+    if (stored) setCheckRegion(stored);
     // Mount only: a later run would fight the reader for the textarea.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -750,17 +760,25 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
     else handleEmlUpload(file);
   }
 
-  // `overrideRegion` re-runs the same content against a region the user picked,
-  // correcting a wrong geo guess. Omitted on the first check so the server
-  // resolves from geo headers.
-  async function runCheck(overrideRegion?: string) {
+  // First checks use the persisted input choice; re-checks re-run the same
+  // content against the region just picked on the result step. `overrideRegion`
+  // is undefined only on the first-check path — every re-check passes an
+  // explicit code or null for auto. Null sends nothing (server auto-resolves)
+  // but still counts as a re-check for feedback routing, so the reducer's
+  // `region`-presence convention keeps working via dispatchRegion below.
+  async function runCheck(overrideRegion?: string | null) {
     if (!content.trim()) return;
     // A re-check is driven from the result step, where the pipeline panel and
     // the error block below the card are both off screen. It gets its own
-    // in-place state on the coverage notice instead; the panel would otherwise
+    // in-place state on the region picker instead; the panel would otherwise
     // spin on a step nobody is looking at.
-    const isRecheck = !!overrideRegion;
-    dispatch({ type: "check-started", region: overrideRegion });
+    const isRecheck = step === "result";
+    const payloadRegion = isRecheck ? (overrideRegion ?? undefined) : (checkRegion ?? undefined);
+    // Surface routing, not payload: a re-check to auto still reports on the
+    // re-check surface, so fall back to the region that ran rather than
+    // sending feedback nowhere.
+    const dispatchRegion = isRecheck ? (payloadRegion ?? region ?? undefined) : undefined;
+    dispatch({ type: "check-started", region: dispatchRegion ?? undefined });
     if (!isRecheck) {
       setPipelineDone(false);
       setPipeline("paste");
@@ -794,7 +812,7 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content,
-          ...(overrideRegion ? { region: overrideRegion } : {}),
+          ...(payloadRegion ? { region: payloadRegion } : {}),
           ...(surface !== "web" ? { surface } : {}),
         }),
       });
@@ -825,17 +843,17 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // No "Checked" hold on this path: the verdict *is* the completion, and
       // pausing on a tick before showing it would be padding the very wait the
       // panel exists to explain.
-      dispatch({ type: "check-succeeded", region: overrideRegion });
+      dispatch({ type: "check-succeeded", region: dispatchRegion ?? undefined });
       if (!isRecheck) goForward("result");
     } catch (err) {
       const limited = err instanceof CheckRequestError && err.kind === "rate_limited";
-      // The reducer routes this to whichever surface is on screen: the coverage
-      // notice for a re-check, the input step's block for a first check. A
+      // The reducer routes this to whichever surface is on screen: the region
+      // picker for a re-check, the input step's block for a first check. A
       // re-check failure must never be silent — silence there reads as "your
       // correction applied", which is the opposite of what happened.
       dispatch({
         type: "check-failed",
-        region: overrideRegion,
+        region: dispatchRegion ?? undefined,
         kind: limited ? "rate_limited" : "server",
       });
       // A rate limit is the service working as designed, not a fault to file.
@@ -1134,29 +1152,28 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
                   result={overall}
                   supporting={
                     <>
-                {/* Coverage honesty. It qualifies the verdict, so it belongs in
-                    the band below it rather than above it: as the first thing
-                    on the page it was the loudest element on screen — a caveat
-                    where the answer should be — and a reader who came here
-                    worried had to get past our limitations to reach their
-                    result. Still ahead of everything else in this slot, because
-                    it frames how every finding under it should be read. */}
-                {/* The band is conditional, not just its contents: CoverageNotice
-                    returns null on full coverage, and a wrapper carrying a top
-                    rule and 16px of padding around nothing drew an empty strip
-                    across the sheet on every fully-covered check. Asking the
-                    same question here that the notice asks internally keeps the
-                    rule attached to something. */}
-                {overallCoverage(results) !== "full" && (
-                  <div className="border-t border-[var(--rule)] px-5 py-4">
-                    <CoverageNotice
-                      coverage={overallCoverage(results)}
-                      region={region}
-                      onRegionChange={(code) => runCheck(code)}
-                      recheck={recheck}
-                    />
-                  </div>
-                )}
+                {/* Region correction + coverage honesty. The picker is always
+                    visible: geo-IP misfires for travellers and VPN users, and
+                    the old notice hid it on full coverage — exactly when a
+                    wrong guess most needed correcting. The warning band stays
+                    conditional (CoverageNotice returns null on full), so the
+                    top rule below only draws around something. */}
+                <div className="border-t border-[var(--rule)] px-5 py-4 space-y-3">
+                  <CheckRegionPicker
+                    id="result-region"
+                    value={checkRegion ?? region}
+                    onChange={(code) => {
+                      setCheckRegion(code);
+                      writeStoredCheckRegion(code);
+                      void runCheck(code);
+                    }}
+                    disabled={feedback.busy}
+                    recheck={recheck}
+                  />
+                  {overallCoverage(results) !== "full" && (
+                    <CoverageNotice coverage={overallCoverage(results)} />
+                  )}
+                </div>
 
                 {/* Neutral breakdown — every identifier as a quiet row with a
                     small status dot. No competing card colours.
@@ -1466,6 +1483,21 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
             {t("check.dropHere")}
           </div>
         )}
+      </div>
+
+      {/* Region for this check. Decides the first check's payload; saved on
+          this device. Sits outside the paper card because it is a setting for
+          the run, not content being checked. */}
+      <div className="px-0.5">
+        <CheckRegionPicker
+          id="check-region"
+          value={checkRegion}
+          onChange={(code) => {
+            setCheckRegion(code);
+            writeStoredCheckRegion(code);
+          }}
+          disabled={busy}
+        />
       </div>
 
       {/* The image path's handover: we read it, now you check it.
