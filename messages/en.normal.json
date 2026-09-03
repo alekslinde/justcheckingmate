@@ -133,7 +133,7 @@
   "report.headline": "Help others **recognise** it",
   "report.lede": "Reports build the public feed other people search before they click. Yours is scrubbed of personal details, then published.",
   "report.urgent.heading": "If you've lost money or shared bank details",
-  "report.urgent": "contact your bank first, then report it to {body} or the police. This form doesn't reach them, and nobody is monitoring it around the clock.",
+  "report.urgent": "contact your bank first, then report it to the police or {body}. This form doesn't reach them, and nobody is monitoring it around the clock.",
   "report.required.pre": "Fields marked",
   "report.required.srAsterisk": "with an asterisk",
   "report.required.post": "are required.",

@@ -37,7 +37,7 @@ export function reportingFor(region?: RegionInput): ReportingLink {
 
 /** Whether this region has a victim-support helpline we can name. Only AU:
  * IDCARE on 1800 595 160. Other regions get the reporting link alone —
-// inventing helplines would be worse than omitting one. */
+ * inventing helplines would be worse than omitting one. */
 export function victimHelpline(region?: RegionInput): { number: string; label: string } | null {
   const pack = resolveRegionPack(region);
   if (pack.code !== "AU") return null;
