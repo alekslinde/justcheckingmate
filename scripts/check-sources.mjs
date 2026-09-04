@@ -53,7 +53,7 @@ const FALLBACK_TIMEOUT_MS = 8_000;
 // Identifies the bot and points operators at the repo. Some WAFs reject unknown
 // agents outright, which is itself a checkable outcome (BLOCKED, not DEAD).
 const USER_AGENT =
-  "veriguard-source-check/1.0 (+https://github.com/alekslinde/justcheckingmate; abuse-reporting tool)";
+  "veriguard-source-check/1.0 (+https://github.com/alekslinde/veriguard; abuse-reporting tool)";
 
 // Several sites (acma.gov.au and cyber.gov.au among them) sit behind a WAF that
 // blackholes unrecognised agents — the connection hangs until it aborts rather

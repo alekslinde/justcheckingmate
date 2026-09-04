@@ -29,7 +29,7 @@ const CONCURRENCY = 6;
 const RETRIES = 1;
 
 const USER_AGENT =
-  "veriguard-calendar-check/1.0 (+https://github.com/alekslinde/justcheckingmate; abuse-reporting tool)";
+  "veriguard-calendar-check/1.0 (+https://github.com/alekslinde/veriguard; abuse-reporting tool)";
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
