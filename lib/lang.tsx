@@ -14,7 +14,15 @@ import {
 
 export type { LangMode, Locale, Tone, MessageKey } from "@/lib/i18n";
 
-const STORAGE_KEY = "jcm_lang";
+const STORAGE_KEY = "vg_lang";
+
+// The key this preference used before the rename. Read as a fallback so a
+// returning user keeps their language; setMode only ever writes STORAGE_KEY.
+//
+// No write-back, matching parseMode's invariant in lib/i18n.ts ("reads never
+// rewrite storage"): migrating the value forward would strand it if that user
+// is later served an older cached bundle that reads only the legacy key.
+const LEGACY_STORAGE_KEY = "jcm_lang";
 
 interface LangCtx {
   mode: LangMode;
@@ -55,8 +63,18 @@ function subscribe(cb: () => void): () => void {
 let cachedRaw: string | null = null;
 let cachedMode: LangMode = DEFAULT_MODE;
 
+function readRaw(): string | null {
+  const current = localStorage.getItem(STORAGE_KEY);
+  if (current !== null) return current;
+  return localStorage.getItem(LEGACY_STORAGE_KEY);
+}
+
 function getSnapshot(): LangMode {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  // The fallback is resolved inside the cached read, so the cache still keys off
+  // the raw string that was actually used. Comparing against the new key alone
+  // would rebuild the mode object on every call for a legacy user and spin
+  // useSyncExternalStore, which compares snapshots by identity.
+  const raw = readRaw();
   if (raw !== cachedRaw) {
     cachedRaw = raw;
     cachedMode = parseMode(raw);
