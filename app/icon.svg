@@ -1,3 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <text y=".9em" font-size="90">🦘</text>
+  <!-- Shield with the check knocked out as negative space.
+       scripts/generate-icons.mjs rasterises this, takes the ALPHA channel and
+       tints it, so the mark has to read as one solid silhouette: a stroked
+       check drawn over the shield would be tinted the same colour and vanish.
+       fill-rule="evenodd" makes the inner path a hole instead. -->
+  <path fill="#000" fill-rule="evenodd" d="
+    M50 6 L88 20 V48
+    C88 70 72 86 50 94
+    C28 86 12 70 12 48
+    V20 Z
+    M71 38 L64 31 L44 51 L36 43 L29 50 L44 65 Z
+  "/>
 </svg>
