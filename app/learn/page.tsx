@@ -20,6 +20,9 @@ export default async function LearnPage() {
   const today = regionToday(region);
 
   return (
-    <LearnContent activeSeasons={activeSeasons(region, today).map((s) => s.title)} />
+    <LearnContent
+      activeSeasons={activeSeasons(region, today).map((s) => s.title)}
+      region={region}
+    />
   );
 }

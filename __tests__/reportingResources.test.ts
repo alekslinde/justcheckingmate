@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { reportingFor, victimHelpline } from "@/lib/reportingResources";
+import enNormal from "@/messages/en.normal.json";
+import {
+  reportingFor,
+  victimHelpline,
+  reportingAgencies,
+  scamTextForwarding,
+} from "@/lib/reportingResources";
 
 describe("reportingFor", () => {
   it("links AU to Scamwatch with the host appended", () => {
@@ -42,5 +48,87 @@ describe("victimHelpline", () => {
     for (const code of ["GB", "US", "NZ", "CA", "IE", "ZZ"] as const) {
       expect(victimHelpline(code), code).toBeNull();
     }
+  });
+});
+
+describe("reportingAgencies", () => {
+  it("keeps the full Australian set for AU", () => {
+    // The four bodies the Learn page listed when the app was AU-only.
+    const names = reportingAgencies("AU").map((a) => a.name);
+    expect(names).toContain("Scamwatch (ACCC)");
+    expect(names).toContain("ReportCyber");
+    expect(names).toContain("IDCARE (ID theft)");
+    expect(names).toHaveLength(4);
+  });
+
+  it("gives every other covered region its own reporting body, not Australia's", () => {
+    // The bug this replaced: a reader in the UK was told to file with Scamwatch,
+    // which does not take their report.
+    for (const code of ["GB", "US", "NZ", "CA", "IE"] as const) {
+      const agencies = reportingAgencies(code);
+      expect(agencies, code).toHaveLength(1);
+      expect(agencies[0].href, code).toBe(reportingFor(code).url);
+      expect(JSON.stringify(agencies), code).not.toMatch(/scamwatch|ReportCyber|IDCARE/i);
+    }
+  });
+
+  it("derives the displayed host from the pack URL, without a www prefix", () => {
+    expect(reportingAgencies("NZ")[0].site).toBe("cert.govt.nz");
+  });
+
+  it("returns nothing for rest-of-world, which has no URL to link", () => {
+    // The section falls back to naming the body as plain text; an empty grid
+    // would leave a gap under the heading.
+    expect(reportingAgencies("ZZ")).toEqual([]);
+  });
+});
+
+describe("scamTextForwarding", () => {
+  it("is AU-only — the 0429 shortcode exists nowhere else", () => {
+    expect(scamTextForwarding("AU")).toBe(true);
+    for (const code of ["GB", "US", "NZ", "CA", "IE", "ZZ"] as const) {
+      expect(scamTextForwarding(code), code).toBe(false);
+    }
+  });
+
+  it("is a separate fact from the victim helpline", () => {
+    // Both are AU-only today. Gating one on the other would show Australia's
+    // shortcode to the first region that gained a helpline of its own.
+    expect(scamTextForwarding("AU")).toBe(victimHelpline("AU") !== null);
+  });
+});
+
+describe("learn-page reporting copy", () => {
+  // The Learn page hardcoded Australian bodies while the app shipped six region
+  // packs, so a UK reader was told to file with Scamwatch. These guard the fix:
+  // shared strings must interpolate the reader's own body, and the AU-only
+  // facts must live in keys that are rendered only for AU.
+  const msg = enNormal as Record<string, string>;
+
+  it("interpolates the reporting body rather than naming one", () => {
+    for (const key of [
+      "learn.caught.outro",
+      "learn.block.email.any.body",
+      "learn.block.phone.authorities.body",
+    ]) {
+      expect(msg[key], key).toContain("{body}");
+      expect(msg[key], key).not.toMatch(/scamwatch|ReportCyber|IDCARE/i);
+    }
+  });
+
+  it("names no country in the shared reporting copy", () => {
+    for (const key of [
+      "learn.caught.outro",
+      "learn.block.email.any.body",
+      "learn.block.phone.authorities.body",
+    ]) {
+      expect(msg[key], key).not.toMatch(/\bAustralian?\b|\bTelstra\b|\bOptus\b/i);
+    }
+  });
+
+  it("keeps the AU-only facts in their own gated keys", () => {
+    // Not deleted — correct advice for AU readers, just not shown to everyone.
+    expect(msg["learn.block.phone.authorities.au"]).toContain("0429 999 888");
+    expect(msg["learn.caught.outro.helpline"]).toContain("{helpline}");
   });
 });
