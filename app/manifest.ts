@@ -10,7 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Veriguard",
     short_name: "Veriguard",
-    description: "Australia's scam detector. Check links, texts, emails and calls before you act.",
+    description: "Free, open-source scam checker for links, texts, emails and phone numbers. Check before you act.",
     start_url: "/",
     display: "standalone",
     // Puts the app in the Android/iOS share sheet: share a suspicious message

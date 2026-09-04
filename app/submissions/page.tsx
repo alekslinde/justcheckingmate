@@ -4,7 +4,7 @@ import SubmissionsBrowser from "@/components/SubmissionsBrowser";
 
 export const metadata: Metadata = {
   title: "Community Submissions — Veriguard",
-  description: "Scams reported by Australians — browse and search community-submitted scam reports.",
+  description: "Scams reported by the community — browse and search submitted scam reports.",
 };
 
 // All filter/search/page state lives in the URL (shareable, survives refresh,
