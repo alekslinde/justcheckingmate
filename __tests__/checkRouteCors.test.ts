@@ -16,7 +16,7 @@ import { NextRequest } from "next/server";
 // route without OPTIONS would 405 before the real request was ever sent.
 
 const EXT = "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef";
-const SITE = "https://justcheckingmate.com";
+const SITE = "https://veriguard.app";
 const ORIGINAL = { ...process.env };
 
 let ipCounter = 0;

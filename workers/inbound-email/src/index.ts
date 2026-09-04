@@ -17,7 +17,7 @@ import { buildReplyMime } from "./reply";
 export interface Env {
   // Set via `wrangler secret put` — must match the Next app's INBOUND_SECRET.
   INBOUND_SECRET: string;
-  // Full URL of the Next webhook, e.g. https://justcheckingmate.com/api/inbound
+  // Full URL of the Next webhook, e.g. https://veriguard.app/api/inbound
   INBOUND_WEBHOOK_URL: string;
 }
 

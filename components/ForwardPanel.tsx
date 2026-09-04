@@ -5,7 +5,7 @@ import { useLang } from "@/lib/lang";
 import { bold } from "@/lib/richText";
 
 const INBOUND_ENABLED = process.env.NEXT_PUBLIC_INBOUND_ENABLED === "true";
-const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS ?? "check@justcheckingmate.com";
+const INBOUND_ADDRESS = process.env.NEXT_PUBLIC_INBOUND_ADDRESS ?? "check@veriguard.app";
 
 function ForwardIcon() {
   return (
