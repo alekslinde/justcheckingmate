@@ -1,8 +1,10 @@
 // Generates the PWA/home-screen icon set from app/icon.svg.
 //
-// librsvg (sharp's SVG rasteriser) renders the kangaroo emoji as a black
-// silhouette with a clean alpha channel, so we use that alpha as a mask and
-// tint it the brand emerald on the dark page background:
+// The source mark is a solid path with the check knocked out via
+// fill-rule="evenodd", so it rasterises to a clean alpha channel. We use that
+// alpha as a mask and tint it the brand emerald on the dark page background —
+// which is why the mark must read as one filled silhouette: a stroked check
+// laid over the shield would be tinted the same colour and disappear.
 //   public/icon-192.png           — manifest icon (any)
 //   public/icon-512.png           — manifest icon (any)
 //   public/icon-maskable-512.png  — manifest icon (maskable, 80% safe zone)
