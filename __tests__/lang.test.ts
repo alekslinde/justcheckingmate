@@ -7,6 +7,11 @@ import {
   type LangMode,
   type MessageKey,
 } from "@/lib/i18n";
+import {
+  readStoredLangRaw,
+  LANG_STORAGE_KEY,
+  LEGACY_LANG_STORAGE_KEY,
+} from "@/lib/lang";
 import enNormal from "@/messages/en.normal.json";
 import enRegional from "@/messages/en.regional.json";
 
@@ -128,5 +133,68 @@ describe("parseMode", () => {
     for (const mode of [NORMAL, REGIONAL]) {
       expect(parseMode(serialiseMode(mode))).toEqual(mode);
     }
+  });
+});
+
+describe("stored language — legacy jcm_ migration", () => {
+  // Mirrors the checkRegion migration suite. readStoredLangRaw takes the storage
+  // it reads, so these exercise the real fallback without a DOM: the provider is
+  // a client component and this suite runs under `environment: "node"`.
+  function fakeStorage(entries: Record<string, string> = {}) {
+    const map = new Map(Object.entries(entries));
+    return {
+      map,
+      getItem: (k: string) => (map.has(k) ? map.get(k)! : null),
+    };
+  }
+
+  it("uses a storage key in the vg_ namespace", () => {
+    expect(LANG_STORAGE_KEY.startsWith("vg_")).toBe(true);
+  });
+
+  it("keeps the pre-rename key in the jcm_ namespace for legacy reads", () => {
+    expect(LEGACY_LANG_STORAGE_KEY.startsWith("jcm_")).toBe(true);
+    expect(LEGACY_LANG_STORAGE_KEY).not.toBe(LANG_STORAGE_KEY);
+  });
+
+  it("reads the new key when it is present", () => {
+    const s = fakeStorage({ [LANG_STORAGE_KEY]: "en:regional" });
+    expect(readStoredLangRaw(s)).toBe("en:regional");
+  });
+
+  it("falls back to the legacy key when the new one is absent", () => {
+    const s = fakeStorage({ [LEGACY_LANG_STORAGE_KEY]: "en:regional" });
+    expect(readStoredLangRaw(s)).toBe("en:regional");
+  });
+
+  it("does not write the value forward — the legacy key survives a read", () => {
+    const s = fakeStorage({ [LEGACY_LANG_STORAGE_KEY]: "en:regional" });
+
+    readStoredLangRaw(s);
+
+    // The no-write-back guarantee: an older cached bundle that only knows
+    // jcm_lang must still find the preference where it left it.
+    expect(s.map.get(LEGACY_LANG_STORAGE_KEY)).toBe("en:regional");
+    expect(s.map.has(LANG_STORAGE_KEY)).toBe(false);
+  });
+
+  it("prefers the new key when both are present", () => {
+    const s = fakeStorage({
+      [LANG_STORAGE_KEY]: "en:normal",
+      [LEGACY_LANG_STORAGE_KEY]: "en:regional",
+    });
+    expect(readStoredLangRaw(s)).toBe("en:normal");
+  });
+
+  it("reads null when neither key is set", () => {
+    expect(readStoredLangRaw(fakeStorage())).toBeNull();
+  });
+
+  it("hands the pre-split legacy value through to parseMode unchanged", () => {
+    // The two migrations compose: an old key holding an older-still value.
+    // "aussie" predates the locale/tone split, so a user who set it before both
+    // renames still lands on regional English.
+    const s = fakeStorage({ [LEGACY_LANG_STORAGE_KEY]: "aussie" });
+    expect(parseMode(readStoredLangRaw(s))).toEqual({ locale: "en", tone: "regional" });
   });
 });

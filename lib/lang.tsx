@@ -14,15 +14,15 @@ import {
 
 export type { LangMode, Locale, Tone, MessageKey } from "@/lib/i18n";
 
-const STORAGE_KEY = "vg_lang";
+export const LANG_STORAGE_KEY = "vg_lang";
 
 // The key this preference used before the rename. Read as a fallback so a
-// returning user keeps their language; setMode only ever writes STORAGE_KEY.
+// returning user keeps their language; setMode only ever writes LANG_STORAGE_KEY.
 //
 // No write-back, matching parseMode's invariant in lib/i18n.ts ("reads never
 // rewrite storage"): migrating the value forward would strand it if that user
 // is later served an older cached bundle that reads only the legacy key.
-const LEGACY_STORAGE_KEY = "jcm_lang";
+export const LEGACY_LANG_STORAGE_KEY = "jcm_lang";
 
 interface LangCtx {
   mode: LangMode;
@@ -63,10 +63,18 @@ function subscribe(cb: () => void): () => void {
 let cachedRaw: string | null = null;
 let cachedMode: LangMode = DEFAULT_MODE;
 
-function readRaw(): string | null {
-  const current = localStorage.getItem(STORAGE_KEY);
+/**
+ * The stored language string, new key first, legacy key as a fallback.
+ *
+ * Exported so the migration is testable directly. The provider is a client
+ * component and the suite runs under `environment: "node"`, so rendering it is
+ * not an option — without a seam here the fallback that every page's copy
+ * depends on would ship with no coverage at all.
+ */
+export function readStoredLangRaw(storage: Pick<Storage, "getItem"> = localStorage): string | null {
+  const current = storage.getItem(LANG_STORAGE_KEY);
   if (current !== null) return current;
-  return localStorage.getItem(LEGACY_STORAGE_KEY);
+  return storage.getItem(LEGACY_LANG_STORAGE_KEY);
 }
 
 function getSnapshot(): LangMode {
@@ -74,7 +82,7 @@ function getSnapshot(): LangMode {
   // the raw string that was actually used. Comparing against the new key alone
   // would rebuild the mode object on every call for a legacy user and spin
   // useSyncExternalStore, which compares snapshots by identity.
-  const raw = readRaw();
+  const raw = readStoredLangRaw();
   if (raw !== cachedRaw) {
     cachedRaw = raw;
     cachedMode = parseMode(raw);
@@ -87,7 +95,7 @@ function getServerSnapshot(): LangMode {
 }
 
 function setMode(next: LangMode): void {
-  localStorage.setItem(STORAGE_KEY, serialiseMode(next));
+  localStorage.setItem(LANG_STORAGE_KEY, serialiseMode(next));
   listeners.forEach((l) => l());
 }
 
