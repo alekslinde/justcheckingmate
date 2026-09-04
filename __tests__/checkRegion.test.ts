@@ -5,7 +5,7 @@ import {
   writeStoredCheckRegion,
   CHECK_REGION_STORAGE_KEY,
 } from "@/lib/checkRegion";
-import { supportedRegions } from "@justcheckingmate/engine/regions";
+import { supportedRegions } from "@veriguard/engine/regions";
 
 describe("normaliseCheckRegion", () => {
   it("accepts every supported region code, case-insensitively", () => {

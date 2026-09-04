@@ -88,7 +88,7 @@ committed values that name a particular one are `name` and
 
 6. **Bind the address.** Email Routing (Compute → Email Service, as in step 1) →
    Routing rules → add a custom address `check@<your-domain>` → action
-   **Send to a Worker → `jcm-inbound-email`** (the `name` in `wrangler.toml` —
+   **Send to a Worker → `veriguard-inbound-email`** (the `name` in `wrangler.toml` —
    rename it there first if you want your own).
 
 7. **Verify end-to-end.** Forward a known scam email to `check@<domain>` from a

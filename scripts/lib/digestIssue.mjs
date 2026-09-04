@@ -33,7 +33,7 @@ const GH_API = "https://api.github.com";
  * message, which callers pattern-match (e.g. dependabot-triage's 401/403
  * access-denied detection), so keep the `-> <status>` shape.
  */
-export async function ghFetch(path, token, init = {}, userAgent = "justcheckingmate-digest") {
+export async function ghFetch(path, token, init = {}, userAgent = "veriguard-digest") {
   const res = await fetch(`${GH_API}${path}`, {
     ...init,
     headers: {

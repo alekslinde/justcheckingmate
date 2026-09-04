@@ -9,7 +9,7 @@
 // value from a region we no longer support degrades to auto rather than
 // pinning the user to a dead option.
 
-import { supportedRegions } from "@justcheckingmate/engine/regions";
+import { supportedRegions } from "@veriguard/engine/regions";
 
 export const CHECK_REGION_STORAGE_KEY = "jcm_region";
 

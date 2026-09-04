@@ -10,7 +10,7 @@ import {
   composeVerdictWithEvidence,
   VERDICT_RANK,
 } from "@/lib/verdictSummary";
-import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
+import { AnalyzedIdentifier, CheckResult } from "@veriguard/engine/scamDetector";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 
 // Minimal builders — these mirror the shapes the real analysers emit, kept

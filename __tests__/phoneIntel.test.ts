@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { analysePhone } from "@justcheckingmate/engine/phoneIntel";
-import { checkPhone } from "@justcheckingmate/engine/scamDetector";
-import { FALLBACK_REGION } from "@justcheckingmate/engine/regions";
+import { analysePhone } from "@veriguard/engine/phoneIntel";
+import { checkPhone } from "@veriguard/engine/scamDetector";
+import { FALLBACK_REGION } from "@veriguard/engine/regions";
 
 // Phase 4 — phone number generalisation.
 //

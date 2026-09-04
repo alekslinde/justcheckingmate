@@ -49,7 +49,7 @@ function parseHostnames(csv: string): Set<string> {
 const fetchBlocklist = unstable_cache(
   async (): Promise<string[]> => {
     const res = await fetch(URLHAUS_CSV, {
-      headers: { "User-Agent": "justcheckingmate/1.0 (abuse-reporting tool)" },
+      headers: { "User-Agent": "veriguard/1.0 (abuse-reporting tool)" },
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) throw new Error(`URLhaus fetch failed: ${res.status}`);

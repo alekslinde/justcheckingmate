@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { matchedTactics, TACTIC_IDS } from "@/lib/signalTactics";
-import { checkSms, checkUrl } from "@justcheckingmate/engine/scamDetector";
-import type { Signal } from "@justcheckingmate/engine/engineTypes";
+import { checkSms, checkUrl } from "@veriguard/engine/scamDetector";
+import type { Signal } from "@veriguard/engine/engineTypes";
 
 const sig = (text: string, source: Signal["source"] = "message"): Signal => ({ text, points: 10, source });
 

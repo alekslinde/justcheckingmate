@@ -32,7 +32,7 @@ import {
   type RadarChannel,
   type ChannelFilterValue,
 } from "@/lib/threatRadar";
-import { resolveRegionPack, type RegionCode } from "@justcheckingmate/engine/regions";
+import { resolveRegionPack, type RegionCode } from "@veriguard/engine/regions";
 import FreshnessStamp from "./FreshnessStamp";
 import PageHeader from "./PageHeader";
 import RegionBar from "./RegionBar";

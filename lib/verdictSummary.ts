@@ -8,12 +8,12 @@
 //
 // Pure module: no React, no I/O. Safe to unit test and to import from a route.
 
-import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
-import type { RegionCoverage } from "@justcheckingmate/engine/regions";
-import type { Signal } from "@justcheckingmate/engine/engineTypes";
+import { AnalyzedIdentifier, CheckResult } from "@veriguard/engine/scamDetector";
+import type { RegionCoverage } from "@veriguard/engine/regions";
+import type { Signal } from "@veriguard/engine/engineTypes";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 import { TrackingFinding } from "@/lib/emailTracking";
-import { defang, defangEmail, defangPhone, defangText } from "@justcheckingmate/engine/urlSanitizer";
+import { defang, defangEmail, defangPhone, defangText } from "@veriguard/engine/urlSanitizer";
 import { buildReportQuery, ReportPrefill } from "@/lib/reportPrefill";
 
 export type Verdict = CheckResult["verdict"];

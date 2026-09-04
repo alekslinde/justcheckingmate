@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { checkSms, checkUrl, mentions } from "@justcheckingmate/engine/scamDetector";
-import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@justcheckingmate/engine/regions";
-import { BASE_SIGNALS, CHINESE_AUTHORITY_MENTIONS } from "@justcheckingmate/engine/regions/base";
-import { AU } from "@justcheckingmate/engine/regions/au";
+import { checkSms, checkUrl, mentions } from "@veriguard/engine/scamDetector";
+import { resolveRegionPack, supportedRegions, DEFAULT_REGION, FALLBACK_REGION } from "@veriguard/engine/regions";
+import { BASE_SIGNALS, CHINESE_AUTHORITY_MENTIONS } from "@veriguard/engine/regions/base";
+import { AU } from "@veriguard/engine/regions/au";
 
 describe("resolveRegionPack", () => {
   it("resolves a known region", () => {

@@ -15,7 +15,7 @@
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { activeThreats } from "@/lib/threatRadar";
-import type { RegionCode } from "@justcheckingmate/engine/regions";
+import type { RegionCode } from "@veriguard/engine/regions";
 
 /**
  * How many titles to name before falling back to a count.

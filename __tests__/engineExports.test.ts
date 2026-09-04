@@ -8,7 +8,7 @@ import { createRequire } from "module";
 // nothing consults is documentation, not encapsulation.
 //
 // The extraction originally shipped that way: a tsconfig `paths` entry and a
-// vitest alias both resolved @justcheckingmate/engine by file path, so an
+// vitest alias both resolved @veriguard/engine by file path, so an
 // unexported subpath imported cleanly under test and under tsc while failing
 // for anyone importing the package for real. Both overrides are gone; the
 // package now resolves through the workspace symlink like any dependency.
@@ -55,7 +55,7 @@ describe("engine package exports map", () => {
   });
 
   it("exposes the checking API through the barrel", async () => {
-    const engine = await import("@justcheckingmate/engine");
+    const engine = await import("@veriguard/engine");
     for (const fn of ["checkUrl", "checkSms", "checkEmail", "checkPhone", "checkCustom", "analyzeContent"]) {
       expect(typeof engine[fn as keyof typeof engine], `${fn} missing from the barrel`).toBe("function");
     }

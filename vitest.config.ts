@@ -10,7 +10,7 @@ export default defineConfig({
   resolve: {
     // Only the app's own "@/" alias is declared here.
     //
-    // @justcheckingmate/engine is deliberately NOT aliased: it resolves through
+    // @veriguard/engine is deliberately NOT aliased: it resolves through
     // the workspace symlink in node_modules, which means Vite consults the
     // package's own `exports` map. Aliasing it by file path would resolve
     // around that map, so a subpath the package does not export — or one it

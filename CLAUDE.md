@@ -29,7 +29,7 @@ app/            ← Routes (App Router): page.tsx, about/, learn/, radar/,
 components/     ← UI components (check here first) — CheckFlow, ReportForm,
                   VerdictBadge, SubmissionsBrowser, etc.
 packages/engine ← The detection engine, as its own workspace package
-                  (@justcheckingmate/engine). src/: scamDetector.ts,
+                  (@veriguard/engine). src/: scamDetector.ts,
                   phoneIntel.ts, urlSanitizer.ts, urlExpander.ts,
                   detectType.ts, emailHeaders.ts, engineTypes.ts,
                   regions/ (au, gb, us, ca, ie, nz, rest-of-world).
@@ -49,7 +49,7 @@ workers/        ← inbound-email worker
 ```
 
 **Import detection from the package, not `lib/`:**
-`import { analyzeContent } from "@justcheckingmate/engine/scamDetector"`.
+`import { analyzeContent } from "@veriguard/engine/scamDetector"`.
 Top-level entry points are `checkUrl`, `checkSms`, `checkEmail`, `checkPhone`,
 `checkCustom` and `analyzeContent` — the last returns an **array**, one result
 per identifier found in the input.
