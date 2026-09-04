@@ -13,8 +13,17 @@ export const metadata: Metadata = {
 // be prerendered at build time without eventually naming the wrong ones.
 export const dynamic = "force-dynamic";
 
-export default async function LearnPage() {
-  const region = resolveRegion(await headers());
+export default async function LearnPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ region?: string }>;
+}) {
+  // ?region= is the reader correcting the geo guess (see RegionBar), exactly as
+  // the radar and calendar do. It matters more here than on either of those:
+  // this page's regional content is where to report a crime, so an uncorrectable
+  // wrong guess sends someone to an agency that will not take their report.
+  const { region: requested } = await searchParams;
+  const region = resolveRegion(await headers(), requested);
   // Resolved server-side: the browser clock reflects the device's timezone
   // rather than the user's region.
   const today = regionToday(region);

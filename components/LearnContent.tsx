@@ -16,7 +16,8 @@ import {
   scamTextForwarding,
 } from "@/lib/reportingResources";
 import ReportingLink from "@/components/ReportingLink";
-import type { RegionInput } from "@veriguard/engine/regions";
+import type { RegionCode } from "@veriguard/engine/regions";
+import RegionBar from "@/components/RegionBar";
 
 // Type icons mirror the input/report type pickers used across the app, so they
 // stay as a consistent scanning aid. The tactic/source/flag lists used purely
@@ -107,8 +108,9 @@ export default function LearnContent({
   /** Titles of the seasons active today, resolved server-side. */
   activeSeasons?: string[];
   /** Resolved server-side, so the reporting advice names bodies that actually
-   *  take reports where the reader is. */
-  region?: RegionInput;
+   *  take reports where the reader is. RegionCode rather than the looser
+   *  RegionInput: this drives a RegionBar, which renders the current choice. */
+  region: RegionCode;
 }) {
   const { t } = useLang();
   const agencies = reportingAgencies(region);
@@ -118,7 +120,13 @@ export default function LearnContent({
   // The reporting body is interpolated into the block/report copy so the advice
   // names a body that actually takes reports where the reader is, rather than
   // the Australian one this page hardcoded when the app was AU-only.
-  const bodyVar = { body: reporting.label };
+  //
+  // `body`, not `label`: label appends the host for bodies that don't name it,
+  // which reads as a link target rather than prose, and for IE the appending
+  // guard misses ("FraudSMART" vs "fraudsmart.ie") giving "An Garda Síochána
+  // (or FraudSMART) (fraudsmart.ie)" in bold mid-sentence. ReportForm passes
+  // `body` for this same placeholder; the linked form belongs to ReportingLink.
+  const bodyVar = { body: reporting.body };
 
   // Reveal collapsed content when its anchor is navigated to. A jump link to a
   // closed <details> would otherwise scroll to a bare header and hide the content
@@ -496,6 +504,12 @@ export default function LearnContent({
         <div className="space-y-3 text-sm">
           <h2 className={H2}>{t("learn.report.heading")}</h2>
           <p className="text-[var(--text-dim)] max-w-[62ch] leading-relaxed">{bold(t("learn.report.body"))}</p>
+          {/* The agencies below are whichever region resolved, and that started
+              as a geo-IP guess. Naming the guess is what makes it correctable —
+              the same reasoning as the radar and calendar, but load-bearing
+              here, because acting on the wrong country's advice means reporting
+              a crime to a body that will not take it. */}
+          <RegionBar region={region} />
           {/* Rest-of-world packs carry no reporting URL, so there is nothing to
               link to and an empty grid would just leave a gap under the heading.
               Name the body as plain text instead — the same fallback

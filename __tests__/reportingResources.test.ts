@@ -132,3 +132,29 @@ describe("learn-page reporting copy", () => {
     expect(msg["learn.caught.outro.helpline"]).toContain("{helpline}");
   });
 });
+
+describe("reporting body in prose", () => {
+  // The Learn page interpolates {body} into sentences. `label` is the linked
+  // form (body + host where the body omits it) and belongs to ReportingLink;
+  // using it in prose double-prints the host for any body whose name does not
+  // literally contain it.
+  it("never double-prints a host for any covered region", () => {
+    for (const code of ["AU", "GB", "US", "NZ", "CA", "IE", "ZZ"] as const) {
+      const { body } = reportingFor(code);
+      const hosts = body.match(/\b[a-z0-9-]+(?:\.[a-z]{2,})+\b/gi) ?? [];
+      for (const h of hosts) {
+        const occurrences = body.split(h).length - 1;
+        expect(occurrences, `${code}: "${body}" repeats ${h}`).toBe(1);
+      }
+    }
+  });
+
+  it("keeps IE readable — the case label gets wrong", () => {
+    // reportingFor's includes(host) guard misses here: the body says
+    // "FraudSMART", the host is "fraudsmart.ie", so label appends anyway.
+    const r = reportingFor("IE");
+    expect(r.body).toBe("An Garda Síochána (or FraudSMART)");
+    expect(r.label).toContain("(fraudsmart.ie)");
+    expect(r.body).not.toContain("fraudsmart.ie");
+  });
+});
