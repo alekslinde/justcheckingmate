@@ -49,7 +49,7 @@ interface LintMessage {
  * nothing is ever written inside the repo.
  */
 function lint(source: string, filename: string): LintMessage[] {
-  const dir = mkdtempSync(path.join(tmpdir(), "jcm-eslint-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "veriguard-eslint-"));
   try {
     const probe = path.join(dir, filename);
     writeFileSync(probe, source);

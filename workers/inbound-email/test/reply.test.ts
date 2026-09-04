@@ -8,12 +8,12 @@ import { buildReplyMime } from "../src/reply.ts";
 
 const REPLY = {
   subject: "Scam alert: the email you forwarded",
-  text: "🚨 This looks like a scam.\n\n— Just Checking, Mate",
+  text: "🚨 This looks like a scam.\n\n— Veriguard",
   html: '<p style="font-weight:bold">🚨 This looks like a scam.</p>',
 };
 
 const OPTS = {
-  from: "check@justcheckingmate.com",
+  from: "check@veriguard.app",
   to: "victim@gmail.com",
   messageId: "<orig-123@gmail.com>",
   references: "<thread-1@gmail.com>",
@@ -23,7 +23,7 @@ test("addresses the reply from the receiving address to the original sender", ()
   const mime = buildReplyMime(REPLY, OPTS);
   // Addresses are literal; the display name and subject are RFC 2047
   // encoded-words because they carry non-ASCII (mimetext default).
-  assert.match(mime, /^From:.*<check@justcheckingmate\.com>/m);
+  assert.match(mime, /^From:.*<check@veriguard\.app>/m);
   assert.match(mime, /^To:.*<victim@gmail\.com>/m);
   assert.match(mime, /^Subject: =\?utf-8\?B\?/m);
   // The subject decodes back to the original text.
@@ -58,6 +58,6 @@ test("omits threading headers when there is no Message-ID", () => {
 
 test("still produces a valid message body when given empty threading refs", () => {
   const mime = buildReplyMime(REPLY, { from: OPTS.from, to: OPTS.to, messageId: null, references: null });
-  assert.match(mime, /^From:.*check@justcheckingmate\.com/m);
+  assert.match(mime, /^From:.*check@veriguard\.app/m);
   assert.doesNotMatch(mime, /^References:/m);
 });

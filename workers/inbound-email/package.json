@@ -1,5 +1,5 @@
 {
-  "name": "jcm-inbound-email",
+  "name": "veriguard-inbound-email",
   "private": true,
   "type": "module",
   "scripts": {

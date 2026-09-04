@@ -1,6 +1,6 @@
 # Threat Intelligence Roadmaps
 
-Periodic research briefs for Just Checking, Mate. Each roadmap surveys new and
+Periodic research briefs for Veriguard. Each roadmap surveys new and
 evolving scam tactics targeting Australians, then proposes concrete detection
 changes to `lib/`.
 

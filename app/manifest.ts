@@ -8,9 +8,9 @@ import type { MetadataRoute } from "next";
 // standalone window, and the share-sheet entry below.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Just Checking, Mate",
-    short_name: "JCM",
-    description: "Australia's scam detector. Check links, texts, emails and calls before you act.",
+    name: "Veriguard",
+    short_name: "Veriguard",
+    description: "Free, open-source scam checker for links, texts, emails and phone numbers. Check before you act.",
     start_url: "/",
     display: "standalone",
     // Puts the app in the Android/iOS share sheet: share a suspicious message

@@ -9,7 +9,7 @@ import { saveCheckDraft, readCheckDraft, clearCheckDraft } from "@/lib/checkDraf
 // address, or an amount they were about to pay — so its lifetime is part of the
 // contract, not an implementation detail.
 
-const KEY = "jcm:check-draft";
+const KEY = "vg:check-draft";
 
 /** A minimal Storage, so these tests exercise the real module against real calls. */
 function fakeStorage(): Storage & { map: Map<string, string> } {

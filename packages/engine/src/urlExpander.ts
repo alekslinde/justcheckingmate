@@ -92,7 +92,7 @@ async function followRedirects(
       method: "HEAD",
       redirect: "manual",
       signal: AbortSignal.timeout(EXPAND_TIMEOUT_MS),
-      headers: { "User-Agent": "justcheckingmate/1.0 (scam-detection tool)" },
+      headers: { "User-Agent": "veriguard/1.0 (scam-detection tool)" },
     });
 
     const location = res.headers.get("location");

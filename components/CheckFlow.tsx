@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
-import { AnalyzedIdentifier, ScamType } from "@justcheckingmate/engine/scamDetector";
-import { detectType } from "@justcheckingmate/engine/detectType";
-import { extractIdentifiers, defangEmail } from "@justcheckingmate/engine/urlSanitizer";
-import { parseEmailHeaders, summariseAuth } from "@justcheckingmate/engine/emailHeaders";
+import { AnalyzedIdentifier, ScamType } from "@veriguard/engine/scamDetector";
+import { detectType } from "@veriguard/engine/detectType";
+import { extractIdentifiers, defangEmail } from "@veriguard/engine/urlSanitizer";
+import { parseEmailHeaders, summariseAuth } from "@veriguard/engine/emailHeaders";
 import { analyseEmailSource, EmailSourceAnalysis } from "@/lib/emailSource";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { VERDICT_RANK, defangValue, defangFlag, composeVerdictWithEvidence, isClean, overallCoverage, pooledSignals } from "@/lib/verdictSummary";

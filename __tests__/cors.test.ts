@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 // "refuses" case, and the module-reload helper exists so the env-driven
 // allowlist can be exercised at more than one configuration.
 
-const SITE = "https://justcheckingmate.com";
+const SITE = "https://veriguard.app";
 
 /**
  * Load lib/cors with a specific environment.
@@ -112,11 +112,11 @@ describe("origin matching is exact", () => {
   });
 
   it.each([
-    ["a prefix", "https://justcheckingmate.com.evil.example"],
-    ["a suffix", "https://evil.example/justcheckingmate.com"],
-    ["a subdomain", "https://api.justcheckingmate.com"],
-    ["a scheme downgrade", "http://justcheckingmate.com"],
-    ["a port", "https://justcheckingmate.com:8443"],
+    ["a prefix", "https://veriguard.app.evil.example"],
+    ["a suffix", "https://evil.example/veriguard.app"],
+    ["a subdomain", "https://api.veriguard.app"],
+    ["a scheme downgrade", "http://veriguard.app"],
+    ["a port", "https://veriguard.app:8443"],
   ])("refuses %s of an allowed origin", async (_label, origin) => {
     const { isAllowedOrigin } = await loadCors({});
     expect(isAllowedOrigin(origin)).toBe(false);

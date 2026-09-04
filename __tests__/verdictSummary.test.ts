@@ -10,7 +10,7 @@ import {
   composeVerdictWithEvidence,
   VERDICT_RANK,
 } from "@/lib/verdictSummary";
-import { AnalyzedIdentifier, CheckResult } from "@justcheckingmate/engine/scamDetector";
+import { AnalyzedIdentifier, CheckResult } from "@veriguard/engine/scamDetector";
 import { TrackingPixelReport } from "@/lib/trackingPixel";
 
 // Minimal builders — these mirror the shapes the real analysers emit, kept
@@ -150,11 +150,11 @@ describe("formatVerdictEmail", () => {
       results: [ident("email", "likely_scam", "scammer@evil.tk"), ident("url", "likely_scam", "https://evil.tk/login")],
       emailFlags: [],
       pixelReport: null,
-      siteUrl: "https://justcheckingmate.com",
+      siteUrl: "https://veriguard.app",
       senderAddress: "scammer@evil.tk",
       replyToAddress: "reply@other.tk",
     });
-    const match = email.text.match(/https:\/\/justcheckingmate\.com\/report\?\S+/);
+    const match = email.text.match(/https:\/\/veriguard\.app\/report\?\S+/);
     expect(match).not.toBeNull();
     const params = new URL(match![0]).searchParams;
     expect(params.get("type")).toBe("email");
@@ -173,9 +173,9 @@ describe("formatVerdictEmail", () => {
       results: [ident("message", "likely_scam", secret, 90, ["Urgency pressure"])],
       emailFlags: [],
       pixelReport: null,
-      siteUrl: "https://justcheckingmate.com",
+      siteUrl: "https://veriguard.app",
     });
-    const link = email.text.match(/https:\/\/justcheckingmate\.com\/report\S*/)?.[0] ?? "";
+    const link = email.text.match(/https:\/\/veriguard\.app\/report\S*/)?.[0] ?? "";
     expect(link).not.toContain(secret);
     expect(link).not.toContain(encodeURIComponent(secret));
   });
@@ -187,7 +187,7 @@ describe("formatVerdictEmail", () => {
       results: [ident("url", "safe", "https://example.com")],
       emailFlags: [],
       pixelReport: null,
-      siteUrl: "https://justcheckingmate.com",
+      siteUrl: "https://veriguard.app",
     });
     expect(email.text).not.toContain("/report");
     expect(email.html).not.toContain("/report");
@@ -208,9 +208,9 @@ describe("formatVerdictEmail", () => {
       results: [ident("url", "likely_scam", "https://evil.tk")],
       emailFlags: [],
       pixelReport: null,
-      siteUrl: "https://justcheckingmate.com/",
+      siteUrl: "https://veriguard.app/",
     });
-    expect(email.text).toContain("https://justcheckingmate.com/report");
+    expect(email.text).toContain("https://veriguard.app/report");
     expect(email.text).not.toContain("com//report");
   });
 

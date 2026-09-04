@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { unwrapForwarded } from "@/lib/forwardedEmail";
-import { parseEmailHeaders } from "@justcheckingmate/engine/emailHeaders";
+import { parseEmailHeaders } from "@veriguard/engine/emailHeaders";
 
 // The victim's own forward wrapper — every fixture is wrapped in headers that
 // look like THIS, and the whole point is that we must NOT report these.
@@ -9,7 +9,7 @@ const FORWARDER = "victim@gmail.com";
 // ── Apple Mail "Forward as Attachment" → message/rfc822 part ──
 const APPLE_ATTACHMENT = [
   `From: ${FORWARDER}`,
-  "To: check@justcheckingmate.com",
+  "To: check@veriguard.app",
   "Subject: Fwd: Your account",
   'Content-Type: multipart/mixed; boundary="APPLE-BOUND"',
   "",
@@ -33,7 +33,7 @@ const APPLE_ATTACHMENT = [
 // ── Gmail inline forward ──
 const GMAIL_INLINE = [
   `From: ${FORWARDER}`,
-  "To: check@justcheckingmate.com",
+  "To: check@veriguard.app",
   "Subject: Fwd: Refund waiting",
   "",
   "Is this real??",

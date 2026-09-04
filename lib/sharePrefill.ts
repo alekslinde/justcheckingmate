@@ -1,6 +1,6 @@
 // Share-target payload → check-box content.
 //
-// The PWA manifest registers a `share_target`, so "Just Checking, Mate" appears
+// The PWA manifest registers a `share_target`, so "Veriguard" appears
 // in the Android/iOS share sheet from Messages, WhatsApp, Mail, a browser — any
 // app that can share text. The platform hands us the shared item as query
 // params on a GET navigation, and this turns that into the string the check box

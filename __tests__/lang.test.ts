@@ -7,34 +7,30 @@ import {
   type LangMode,
   type MessageKey,
 } from "@/lib/i18n";
+import {
+  readStoredLangRaw,
+  LANG_STORAGE_KEY,
+  LEGACY_LANG_STORAGE_KEY,
+} from "@/lib/lang";
 import enNormal from "@/messages/en.normal.json";
-import enRegional from "@/messages/en.regional.json";
 
 const NORMAL: LangMode = { locale: "en", tone: "normal" };
-const REGIONAL: LangMode = { locale: "en", tone: "regional" };
 
 describe("translate", () => {
   it("returns the base-tone string", () => {
     expect(translate(NORMAL, "check.report")).toBe("Report this scam");
   });
 
-  it("returns the regional-tone string for the same key", () => {
-    expect(translate(REGIONAL, "check.report")).toBe("Report this mongrel");
+  it("resolves every key from the base bundle", () => {
+    // The regional register is retired, so the base bundle is the only dictionary
+    // and must answer every key on its own. Asserted against the bundle rather
+    // than copy literals: the claim is about lookup, not wording.
+    expect(translate(NORMAL, "check.uploadImage")).toBe(enNormal["check.uploadImage"]);
   });
 
-  it("falls back to the base tone when a key is missing from the regional bundle", () => {
-    // "check.uploadImage" has no regional override, so it resolves to the base
-    // string. Asserted against the base bundle rather than a copy literal: the
-    // claim under test is the fallback, and pinning the wording here made an
-    // ordinary copy edit fail a test about lookup.
-    expect(enRegional).not.toHaveProperty("check.uploadImage");
-    expect(translate(REGIONAL, "check.uploadImage")).toBe(enNormal["check.uploadImage"]);
-  });
-
-  it("falls back to the raw key when it exists in neither dictionary", () => {
+  it("falls back to the raw key when it exists in no dictionary", () => {
     const missing = "totally.unknown.key" as MessageKey;
     expect(translate(NORMAL, missing)).toBe("totally.unknown.key");
-    expect(translate(REGIONAL, missing)).toBe("totally.unknown.key");
   });
 
   it("interpolates {placeholder} tokens from vars", () => {
@@ -53,35 +49,23 @@ describe("translate", () => {
   });
 
   it("resolves an unknown tone via the base tone rather than the raw key", () => {
+    // Still load-bearing after the retirement: a returning user can hold
+    // "en:regional" in storage, and a stale cached bundle can ask for a tone
+    // this build no longer ships. Either must land on real copy, not a raw key.
     const odd = { locale: "en", tone: "shouty" } as unknown as LangMode;
     expect(translate(odd, "check.report")).toBe("Report this scam");
-  });
-
-  it("every regional key exists in the base bundle", () => {
-    // Guards against a regional-only key that could never resolve a fallback.
-    const baseKeys = new Set(Object.keys(enNormal));
-    const orphans = Object.keys(enRegional).filter((k) => !baseKeys.has(k));
-    expect(orphans).toEqual([]);
-  });
-
-  it("carries no regional override identical to its base string", () => {
-    // A regional bundle is partial by design, so an override that matches base
-    // buys nothing: it resolves the same either way, and only survives to drift
-    // out of sync when the base string is later edited. Editing base copy
-    // should not silently leave a stale duplicate behind in the other tone.
-    const base = enNormal as Record<string, string>;
-    const dupes = Object.entries(enRegional as Record<string, string>)
-      .filter(([k, v]) => base[k] === v)
-      .map(([k]) => k);
-    expect(dupes).toEqual([]);
+    const retired = { locale: "en", tone: "regional" } as unknown as LangMode;
+    expect(translate(retired, "check.report")).toBe("Report this scam");
   });
 });
 
 describe("parseMode", () => {
-  it("migrates the legacy 'aussie' value to en + regional", () => {
+  it("resolves the legacy 'aussie' value to the one shipped tone", () => {
     // Returning users have this literal string in localStorage from before the
-    // locale/tone split; it must not silently reset their preference.
-    expect(parseMode("aussie")).toEqual(REGIONAL);
+    // locale/tone split. The register it selected is retired, so it resolves to
+    // the default rather than to a tone that no longer exists — a read, not a
+    // rewrite, so the stored string itself is left alone.
+    expect(parseMode("aussie")).toEqual(DEFAULT_MODE);
   });
 
   it("migrates the legacy 'normal' value to the default mode", () => {
@@ -89,7 +73,7 @@ describe("parseMode", () => {
   });
 
   it("parses the serialised locale:tone form", () => {
-    expect(parseMode("en:regional")).toEqual(REGIONAL);
+    expect(parseMode("en:normal")).toEqual(NORMAL);
     expect(parseMode("en:normal")).toEqual(NORMAL);
   });
 
@@ -124,9 +108,75 @@ describe("parseMode", () => {
     expect(stored).toBe("fr:regional");
   });
 
-  it("round-trips every mode through serialise → parse", () => {
-    for (const mode of [NORMAL, REGIONAL]) {
+  it("round-trips every shipped mode through serialise → parse", () => {
+    for (const mode of [NORMAL]) {
       expect(parseMode(serialiseMode(mode))).toEqual(mode);
     }
+  });
+});
+
+describe("stored language — legacy jcm_ migration", () => {
+  // Mirrors the checkRegion migration suite. readStoredLangRaw takes the storage
+  // it reads, so these exercise the real fallback without a DOM: the provider is
+  // a client component and this suite runs under `environment: "node"`.
+  function fakeStorage(entries: Record<string, string> = {}) {
+    const map = new Map(Object.entries(entries));
+    return {
+      map,
+      getItem: (k: string) => (map.has(k) ? map.get(k)! : null),
+    };
+  }
+
+  it("uses a storage key in the vg_ namespace", () => {
+    expect(LANG_STORAGE_KEY.startsWith("vg_")).toBe(true);
+  });
+
+  it("keeps the pre-rename key in the jcm_ namespace for legacy reads", () => {
+    expect(LEGACY_LANG_STORAGE_KEY.startsWith("jcm_")).toBe(true);
+    expect(LEGACY_LANG_STORAGE_KEY).not.toBe(LANG_STORAGE_KEY);
+  });
+
+  it("reads the new key when it is present", () => {
+    const s = fakeStorage({ [LANG_STORAGE_KEY]: "en:regional" });
+    expect(readStoredLangRaw(s)).toBe("en:regional");
+  });
+
+  it("falls back to the legacy key when the new one is absent", () => {
+    const s = fakeStorage({ [LEGACY_LANG_STORAGE_KEY]: "en:regional" });
+    expect(readStoredLangRaw(s)).toBe("en:regional");
+  });
+
+  it("does not write the value forward — the legacy key survives a read", () => {
+    const s = fakeStorage({ [LEGACY_LANG_STORAGE_KEY]: "en:regional" });
+
+    readStoredLangRaw(s);
+
+    // The no-write-back guarantee: an older cached bundle that only knows
+    // jcm_lang must still find the preference where it left it.
+    expect(s.map.get(LEGACY_LANG_STORAGE_KEY)).toBe("en:regional");
+    expect(s.map.has(LANG_STORAGE_KEY)).toBe(false);
+  });
+
+  it("prefers the new key when both are present", () => {
+    const s = fakeStorage({
+      [LANG_STORAGE_KEY]: "en:normal",
+      [LEGACY_LANG_STORAGE_KEY]: "en:regional",
+    });
+    expect(readStoredLangRaw(s)).toBe("en:normal");
+  });
+
+  it("reads null when neither key is set", () => {
+    expect(readStoredLangRaw(fakeStorage())).toBeNull();
+  });
+
+  it("hands the pre-split legacy value through to parseMode", () => {
+    // The two migrations compose: an old key holding an older-still value.
+    // "aussie" predates the locale/tone split and selected a register that has
+    // since been retired, so a user who set it before any of this lands on the
+    // one shipped tone — with real copy, not a raw key.
+    const s = fakeStorage({ [LEGACY_LANG_STORAGE_KEY]: "aussie" });
+    const mode = parseMode(readStoredLangRaw(s));
+    expect(mode).toEqual(DEFAULT_MODE);
+    expect(translate(mode, "check.report")).toBe("Report this scam");
   });
 });

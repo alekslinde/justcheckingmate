@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectType } from "@justcheckingmate/engine/detectType";
+import { detectType } from "@veriguard/engine/detectType";
 
 describe("detectType — URLs", () => {
   it("classifies http/https URLs as url", () => {

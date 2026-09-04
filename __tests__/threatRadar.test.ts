@@ -15,9 +15,8 @@ import {
   channelCounts,
   type ThreatEntry,
 } from "@/lib/threatRadar";
-import { supportedRegions } from "@justcheckingmate/engine/regions";
+import { supportedRegions } from "@veriguard/engine/regions";
 import enNormal from "@/messages/en.normal.json";
-import enRegional from "@/messages/en.regional.json";
 
 const AU = radarForRegion("AU");
 
@@ -116,13 +115,11 @@ describe("authoring invariants", () => {
 });
 
 describe("i18n", () => {
-  it("translates the coverage badges as a complete set in the regional tone", () => {
-    // These four render side by side in one list. Overriding some and not others
-    // put two registers in the same row of badges — the regional bundle said
-    // "We catch this one" next to the base "Partly caught".
-    //
-    // Partial override is legitimate for prose (a paragraph reads fine in the
-    // base register); it is not for a set of labels that appear together.
+  it("defines the coverage badges as a complete set", () => {
+    // These four render side by side in one list, so a missing one would leave
+    // a gap in a row of labels that are read together. The regional register
+    // that could once split this set across two voices is retired; the set
+    // itself still has to be whole.
     const keys = [
       "radar.coverage.covered",
       "radar.coverage.partial",
@@ -130,21 +127,14 @@ describe("i18n", () => {
       "radar.coverage.na",
     ] as const;
 
-    const overridden = keys.filter((k) => k in enRegional);
-    expect(overridden.length === 0 || overridden.length === keys.length, overridden.join(", ")).toBe(true);
+    const missing = keys.filter((k) => !(k in enNormal));
+    expect(missing, missing.join(", ")).toEqual([]);
   });
 
-  it("keeps the {region} placeholder in every radar.intro translation", () => {
+  it("keeps the {region} placeholder in radar.intro", () => {
     // The interpolation is what stops the intro hardcoding one country. A
-    // bundle that drops the token silently reintroduces the bug for that tone.
-    for (const [name, bundle] of [
-      ["normal", enNormal],
-      ["regional", enRegional],
-    ] as const) {
-      const intro = (bundle as Record<string, string>)["radar.intro"];
-      if (intro === undefined) continue;
-      expect(intro, name).toContain("{region}");
-    }
+    // bundle that drops the token silently reintroduces that bug.
+    expect((enNormal as Record<string, string>)["radar.intro"]).toContain("{region}");
   });
 });
 
@@ -340,7 +330,7 @@ describe("coverage claims match the shipped detector", () => {
   ];
 
   it("covers every sampled entry with a live signal", async () => {
-    const { checkEmail } = await import("@justcheckingmate/engine/scamDetector");
+    const { checkEmail } = await import("@veriguard/engine/scamDetector");
     for (const { id, text, flag } of SAMPLES) {
       const entry = AU.find((t) => t.id === id);
       expect(entry, `${id} missing from the radar`).toBeDefined();
@@ -357,7 +347,7 @@ describe("coverage claims match the shipped detector", () => {
     // is a failing test if it ever changes rather than a comment nobody reads.
     // If one of these starts scoring, the rule shipped and the badge should be
     // upgraded — that is a pass-worthy change, so the assertion is the prompt.
-    const { checkSms } = await import("@justcheckingmate/engine/scamDetector");
+    const { checkSms } = await import("@veriguard/engine/scamDetector");
 
     // "Hi Mum" opener: base.ts covers the money stage, not the first contact.
     expect(checkSms("Hi Mum, this is my new number, my phone broke").score).toBe(0);
@@ -372,7 +362,7 @@ describe("coverage claims match the shipped detector", () => {
   it("keeps n/a entries genuinely undetectable in text", async () => {
     // The other direction: an `n/a` entry that started scoring would mean the
     // badge is now understating us, which is how the quishing entry went wrong.
-    const { checkEmail } = await import("@justcheckingmate/engine/scamDetector");
+    const { checkEmail } = await import("@veriguard/engine/scamDetector");
     const samples: Record<string, string> = {
       "sim-swap": "We have received a request to port your number to another carrier",
     };

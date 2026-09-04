@@ -1,4 +1,4 @@
-# Just Checking, Mate — Claude Config
+# Veriguard — Claude Config
 
 > Inherits global values from ~/.claude/CLAUDE.md
 
@@ -29,7 +29,7 @@ app/            ← Routes (App Router): page.tsx, about/, learn/, radar/,
 components/     ← UI components (check here first) — CheckFlow, ReportForm,
                   VerdictBadge, SubmissionsBrowser, etc.
 packages/engine ← The detection engine, as its own workspace package
-                  (@justcheckingmate/engine). src/: scamDetector.ts,
+                  (@veriguard/engine). src/: scamDetector.ts,
                   phoneIntel.ts, urlSanitizer.ts, urlExpander.ts,
                   detectType.ts, emailHeaders.ts, engineTypes.ts,
                   regions/ (au, gb, us, ca, ie, nz, rest-of-world).
@@ -42,14 +42,14 @@ lib/            ← App-side logic — everything that is NOT scoring.
                   reportStore.ts, bugStore.ts. Safety: piiScrubber.ts,
                   submissionGuard.ts. Region/i18n: regionResolver.ts, geo.ts,
                   i18n.ts, lang.tsx. Blocklist: urlhausBlocklist.ts.
-messages/       ← i18n string bundles (en.normal.json, en.regional.json)
+messages/       ← i18n string bundles (en.normal.json)
 __tests__/      ← Vitest tests (engine + lib)
 scripts/        ← seed-db.ts, generate-icons.mjs
 workers/        ← inbound-email worker
 ```
 
 **Import detection from the package, not `lib/`:**
-`import { analyzeContent } from "@justcheckingmate/engine/scamDetector"`.
+`import { analyzeContent } from "@veriguard/engine/scamDetector"`.
 Top-level entry points are `checkUrl`, `checkSms`, `checkEmail`, `checkPhone`,
 `checkCustom` and `analyzeContent` — the last returns an **array**, one result
 per identifier found in the input.

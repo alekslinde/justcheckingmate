@@ -247,7 +247,7 @@ export function formatDigest(rows, { generatedAt = new Date().toISOString() } = 
 // Shared helper, bound to this script's User-Agent. Its thrown-error shape
 // ("... -> <status> ...") is what isAlertsAccessDenied() below matches on.
 const ghFetch = (path, token, init = {}) =>
-  sharedGhFetch(path, token, init, "justcheckingmate-dependabot-triage");
+  sharedGhFetch(path, token, init, "veriguard-dependabot-triage");
 
 /**
  * True when a Dependabot-alerts fetch failed because the token can't read the

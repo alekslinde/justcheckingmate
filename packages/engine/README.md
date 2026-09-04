@@ -1,4 +1,4 @@
-# `@justcheckingmate/engine`
+# `@veriguard/engine`
 
 The rule-based scam detection engine, extracted so it can be bundled into
 clients that are not the Next.js app — the WebExtension first (roadmap Phase

@@ -34,15 +34,21 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-const TITLE = "Just Checking, Mate — Aussie Scam Detector";
+const TITLE = "Veriguard — Check Before You Act";
+// One constant, three indexed outputs: description, openGraph.description and
+// twitter.description. The category term ("scam checker") leads so the search
+// intent the old "Aussie Scam Detector" title carried survives the rename,
+// while the title itself carries the positioning. The limit is stated rather
+// than the ambition: no verdict is certain, and saying so is what makes the
+// rest credible.
 const DESCRIPTION =
-  "Australia's no-nonsense scam detector. Check links, texts, emails and calls before you act.";
+  "Free, open-source scam checker for links, texts, emails and phone numbers. Checking takes seconds; getting it wrong can cost you everything. Nothing you paste is stored.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: TITLE,
   description: DESCRIPTION,
-  applicationName: "Just Checking, Mate",
+  applicationName: "Veriguard",
   alternates: {
     canonical: "/",
   },
@@ -50,8 +56,8 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     url: "/",
-    siteName: "Just Checking, Mate",
-    locale: "en_AU",
+    siteName: "Veriguard",
+    locale: "en",
     type: "website",
   },
   twitter: {

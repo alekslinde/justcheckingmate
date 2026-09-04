@@ -26,7 +26,10 @@
 //   · never sent anywhere. Nothing in this module touches the network.
 // It is not a convenience store for drafts, and it should not grow into one.
 
-const KEY = "jcm:check-draft";
+// No legacy fallback, unlike the vg_* preference keys: this is transient
+// sessionStorage state that lives for one Back navigation, so an orphaned
+// jcm:check-draft entry dies with the tab it was written in.
+const KEY = "vg:check-draft";
 
 /**
  * Every access is wrapped: storage throws outright in Safari's private mode and

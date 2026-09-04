@@ -1,9 +1,9 @@
 "use client";
 
-import { CheckResult, PhoneIntel } from "@justcheckingmate/engine/scamDetector";
-import type { Signal } from "@justcheckingmate/engine/engineTypes";
+import { CheckResult, PhoneIntel } from "@veriguard/engine/scamDetector";
+import type { Signal } from "@veriguard/engine/engineTypes";
 import { matchedTactics, TACTIC_IDS } from "@/lib/signalTactics";
-import { defangText } from "@justcheckingmate/engine/urlSanitizer";
+import { defangText } from "@veriguard/engine/urlSanitizer";
 import { reportingFor, type ReportingLink as ReportingLinkData } from "@/lib/reportingResources";
 import { useLang, MessageKey } from "@/lib/lang";
 import { bold } from "@/lib/richText";

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardSubmission } from "@/lib/submissionGuard";
 import { generateReportId, storeReport, getStats } from "@/lib/reportStore";
-import { stripTrackingParams } from "@justcheckingmate/engine/urlSanitizer";
-import { summariseAuth } from "@justcheckingmate/engine/emailHeaders";
+import { stripTrackingParams } from "@veriguard/engine/urlSanitizer";
+import { summariseAuth } from "@veriguard/engine/emailHeaders";
 import { scrubPii } from "@/lib/piiScrubber";
 import { distillEmailContent } from "@/lib/emailDistiller";
 import { clientIpFromHeaders, locationFromHeaders } from "@/lib/geo";

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ScamType } from "@justcheckingmate/engine/scamDetector";
-import { summariseAuth } from "@justcheckingmate/engine/emailHeaders";
+import { ScamType } from "@veriguard/engine/scamDetector";
+import { summariseAuth } from "@veriguard/engine/emailHeaders";
 import { EmailTrackingReport } from "@/lib/emailTracking";
 import { analyseEmailSource } from "@/lib/emailSource";
 import { useLang, MessageKey } from "@/lib/lang";
@@ -541,7 +541,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               type="email"
               value={scamEmail}
               onChange={(e) => setScamEmail(e.target.value)}
-              placeholder="scammer@dodgy-domain.com"
+              placeholder="scammer@suspicious-domain.com"
               maxLength={200}
               className={INPUT_MONO}
             />

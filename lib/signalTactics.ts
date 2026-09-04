@@ -1,4 +1,4 @@
-import type { Signal } from "@justcheckingmate/engine/engineTypes";
+import type { Signal } from "@veriguard/engine/engineTypes";
 
 // Maps detection signals onto the six tactics the Learn page teaches.
 //

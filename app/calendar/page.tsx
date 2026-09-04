@@ -5,7 +5,7 @@ import { resolveRegion } from "@/lib/regionResolver";
 import { regionToday } from "@/lib/scamCalendar";
 
 export const metadata: Metadata = {
-  title: "Scam calendar — Just Checking, Mate",
+  title: "Scam calendar — Veriguard",
   description:
     "When scams peak through the year — tax season, Black Friday, the Christmas parcel rush — and the lures to expect in each window, for your region.",
 };

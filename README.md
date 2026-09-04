@@ -1,8 +1,8 @@
-# Just Checking, Mate 🦘
+# Veriguard
 
-Australia's no-nonsense scam detector. Paste a dodgy link, suspicious text message, phishing email, or scam phone number and get an instant verdict — no account required, nothing kept, no data sold.
+A no-nonsense scam detector. Paste a suspicious link, text message, phishing email, or scam phone number and get an instant verdict — no account required, nothing kept, no data sold.
 
-Built specifically for Australians, with knowledge of local government domains, banks, phone number formats, and the scams that are actually doing the rounds here — and now with national coverage for the UK, US, New Zealand and Ireland too.
+Detection is region-aware: local government domains, banks, phone number formats, and the scams actually in circulation, with full coverage for Australia, the UK, US, New Zealand and Ireland.
 
 ---
 
@@ -54,10 +54,8 @@ Seen something dodgy? Lodge a report so others can be warned. Submissions are pr
 ### Learn
 A [`/learn`](app/learn/page.tsx) guide covering how to spot scams, how email authentication (SPF/DKIM/DMARC) works, common tactics, what to do if you've been caught, and where to report.
 
-### English or Aussie
-A toggle switches the whole interface between plain **English** and full-noise **Aussie** — same detection, different voice.
-
-Internally this is two independent axes: **locale** (the language — `en` today) and **tone** (the register — `normal` or `regional`). "Aussie" was never a language, it's English in a regional voice, so splitting the axes means a future non-English locale doesn't have to choose between being a language or being a voice. Strings live in [`messages/`](messages/) as `en.normal.json` (the complete base bundle) and `en.regional.json` (overrides only, falling through to base).
+### Interface language
+The interface ships one neutral English voice. Internally this is two independent axes: **locale** (the language — `en` today) and **tone** (the register — one value today). The "Aussie" register was retired with the rebrand; the axis is kept because "Aussie" was never a language, it was English in a regional voice, and splitting the axes means a future non-English locale doesn't have to choose between being a language or being a voice. Strings live in [`messages/`](messages/) as `en.normal.json`, the complete base bundle.
 
 ---
 

@@ -29,7 +29,7 @@ export function buildReplyMime(
   createMime: typeof createMimeMessage = createMimeMessage,
 ): string {
   const msg = createMime();
-  msg.setSender({ name: "Just Checking, Mate", addr: opts.from });
+  msg.setSender({ name: "Veriguard", addr: opts.from });
   msg.setRecipient(opts.to);
   msg.setSubject(reply.subject);
   if (opts.messageId) msg.setHeader("In-Reply-To", opts.messageId);

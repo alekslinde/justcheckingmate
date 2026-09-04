@@ -9,6 +9,15 @@ import PageHeader from "@/components/PageHeader";
 import EmailExportGuide from "@/components/EmailExportGuide";
 import Collapsible from "@/components/Collapsible";
 import { activeSectionId } from "@/lib/toc";
+import {
+  reportingAgencies,
+  reportingFor,
+  victimHelpline,
+  scamTextForwarding,
+} from "@/lib/reportingResources";
+import ReportingLink from "@/components/ReportingLink";
+import type { RegionCode } from "@veriguard/engine/regions";
+import RegionBar from "@/components/RegionBar";
 
 // Type icons mirror the input/report type pickers used across the app, so they
 // stay as a consistent scanning aid. The tactic/source/flag lists used purely
@@ -17,13 +26,6 @@ const SCAM_TYPE_ICONS = ["🔗", "📱", "📧", "📞", "📷"];
 const TACTIC_COUNT = 6;
 const SOURCE_COUNT = 6;
 const FLAG_COUNT = 8;
-
-const AGENCIES = [
-  { name: "Scamwatch (ACCC)", abbr: null, site: "scamwatch.gov.au", href: "https://www.scamwatch.gov.au" },
-  { name: "ReportCyber", abbr: "Australian Signals Directorate", site: "cyber.gov.au/report", href: "https://www.cyber.gov.au/report" },
-  { name: "IDCARE (ID theft)", abbr: null, site: "idcare.org", href: "https://www.idcare.org" },
-  { name: "ACSC", abbr: "Australian Cyber Security Centre", site: "cyber.gov.au", href: "https://www.cyber.gov.au" },
-];
 
 // The explanatory content is now a sequence of <Collapsible> cards, each grouped
 // by how it's read: orientation (what scams look like, where they come from),
@@ -101,11 +103,30 @@ function subscribeWide(cb: () => void) {
 
 export default function LearnContent({
   activeSeasons = [],
+  region,
 }: {
   /** Titles of the seasons active today, resolved server-side. */
   activeSeasons?: string[];
+  /** Resolved server-side, so the reporting advice names bodies that actually
+   *  take reports where the reader is. RegionCode rather than the looser
+   *  RegionInput: this drives a RegionBar, which renders the current choice. */
+  region: RegionCode;
 }) {
   const { t } = useLang();
+  const agencies = reportingAgencies(region);
+  const reporting = reportingFor(region);
+  const helpline = victimHelpline(region);
+  const smsForwarding = scamTextForwarding(region);
+  // The reporting body is interpolated into the block/report copy so the advice
+  // names a body that actually takes reports where the reader is, rather than
+  // the Australian one this page hardcoded when the app was AU-only.
+  //
+  // `body`, not `label`: label appends the host for bodies that don't name it,
+  // which reads as a link target rather than prose, and for IE the appending
+  // guard misses ("FraudSMART" vs "fraudsmart.ie") giving "An Garda Síochána
+  // (or FraudSMART) (fraudsmart.ie)" in bold mid-sentence. ReportForm passes
+  // `body` for this same placeholder; the linked form belongs to ReportingLink.
+  const bodyVar = { body: reporting.body };
 
   // Reveal collapsed content when its anchor is navigated to. A jump link to a
   // closed <details> would otherwise scroll to a bare header and hide the content
@@ -307,11 +328,21 @@ export default function LearnContent({
           {[1, 2, 3, 4].map((i) => (
             <li key={i} className="bg-[var(--ink-2)] px-4 py-3">
               <p className="text-sm font-semibold text-[var(--foreground)]">{t(key(`learn.caught.${i}.situation`))}</p>
-              <p className="text-[13.5px] text-[var(--text-dim)] mt-0.5 leading-relaxed">{bold(t(key(`learn.caught.${i}.action`)))}</p>
+              <p className="text-[13.5px] text-[var(--text-dim)] mt-0.5 leading-relaxed">
+                {bold(t(key(`learn.caught.${i}.action`), bodyVar))}
+                {/* The ID-theft step is the one with a named support service.
+                    IDCARE is AU-only, so it is appended only where it operates. */}
+                {i === 3 && helpline && (
+                  <> {bold(t("learn.caught.3.action.helpline", { helpline: helpline.label }))}</>
+                )}
+              </p>
             </li>
           ))}
         </ul>
-        <p className="text-sm text-[var(--faint)] leading-relaxed">{bold(t("learn.caught.outro"))}</p>
+        <p className="text-sm text-[var(--faint)] leading-relaxed">
+          {bold(t("learn.caught.outro", bodyVar))}
+          {helpline && <> {bold(t("learn.caught.outro.helpline", { helpline: helpline.label }))}</>}
+        </p>
       </section>
 
       {/* ── Part 1: Spotting scams ─────────────────────────────────────────── */}
@@ -473,8 +504,23 @@ export default function LearnContent({
         <div className="space-y-3 text-sm">
           <h2 className={H2}>{t("learn.report.heading")}</h2>
           <p className="text-[var(--text-dim)] max-w-[62ch] leading-relaxed">{bold(t("learn.report.body"))}</p>
+          {/* The agencies below are whichever region resolved, and that started
+              as a geo-IP guess. Naming the guess is what makes it correctable —
+              the same reasoning as the radar and calendar, but load-bearing
+              here, because acting on the wrong country's advice means reporting
+              a crime to a body that will not take it. */}
+          <RegionBar region={region} />
+          {/* Rest-of-world packs carry no reporting URL, so there is nothing to
+              link to and an empty grid would just leave a gap under the heading.
+              Name the body as plain text instead — the same fallback
+              ReportingLink makes on the verdict screens. */}
+          {agencies.length === 0 ? (
+            <p className="text-[var(--text-dim)] max-w-[62ch] leading-relaxed">
+              <ReportingLink link={reporting} />
+            </p>
+          ) : (
           <div className="grid sm:grid-cols-2 gap-2 pt-1">
-            {AGENCIES.map(({ name, abbr: abbrTitle, site, href }) => (
+            {agencies.map(({ name, abbr: abbrTitle, site, href }) => (
               <a key={site} href={href} target="_blank" rel="noopener noreferrer"
                 className="rounded-lg border border-[var(--rule)] bg-[var(--ink-2)] px-3.5 py-2.5 hover:border-[var(--clear)]/50 transition-colors block">
                 <div className="text-sm text-[var(--foreground)] font-semibold">
@@ -485,6 +531,7 @@ export default function LearnContent({
               </a>
             ))}
           </div>
+          )}
         </div>
       </section>
 
@@ -500,7 +547,7 @@ export default function LearnContent({
             {BLOCK_EMAIL.map((slug) => (
               <div key={slug} className="space-y-1">
                 <h3 className="font-semibold text-[var(--foreground)] text-sm">{t(key(`learn.block.email.${slug}.title`))}</h3>
-                <p className="text-sm text-[var(--text-dim)] leading-relaxed">{bold(t(key(`learn.block.email.${slug}.body`)))}</p>
+                <p className="text-sm text-[var(--text-dim)] leading-relaxed">{bold(t(key(`learn.block.email.${slug}.body`), bodyVar))}</p>
               </div>
             ))}
           </div>
@@ -514,7 +561,15 @@ export default function LearnContent({
             {BLOCK_PHONE.map((slug) => (
               <div key={slug} className="space-y-1">
                 <h3 className="font-semibold text-[var(--foreground)] text-sm">{t(key(`learn.block.phone.${slug}.title`))}</h3>
-                <p className="text-sm text-[var(--text-dim)] leading-relaxed">{bold(t(key(`learn.block.phone.${slug}.body`)))}</p>
+                <p className="text-sm text-[var(--text-dim)] leading-relaxed">
+                  {bold(t(key(`learn.block.phone.${slug}.body`), bodyVar))}
+                  {/* The free 0429 forwarding shortcode is an AU service; there is
+                      no equivalent to substitute elsewhere, so it is named only
+                      where it works. */}
+                  {slug === "authorities" && smsForwarding && (
+                    <> {bold(t("learn.block.phone.authorities.au"))}</>
+                  )}
+                </p>
               </div>
             ))}
           </div>

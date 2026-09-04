@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { normaliseUnicode, hasConfusables } from "@justcheckingmate/engine/urlSanitizer";
-import { analyzeContent } from "@justcheckingmate/engine/scamDetector";
+import { normaliseUnicode, hasConfusables } from "@veriguard/engine/urlSanitizer";
+import { analyzeContent } from "@veriguard/engine/scamDetector";
 
 // Unicode confusables let a hostname render identically to the victim while
 // extracting as a different string. Found by the metamorphic eval, which
