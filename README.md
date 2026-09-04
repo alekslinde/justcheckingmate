@@ -9,24 +9,24 @@ Detection is region-aware: local government domains, banks, phone number formats
 ## What it does
 
 ### Scam Checker
-Paste in whatever looks sus — a link, a text, a whole email, a phone number, or a screenshot — and get back a verdict (safe / suspicious / likely scam) with a plain-English breakdown of every red flag found.
+Paste in anything that looks off — a link, a text, a whole email, a phone number, or a screenshot — and get back a verdict (safe / suspicious / likely scam) with a plain-English breakdown of every red flag found.
 
 There's no input-type picker to fuss with. **The app works out what you gave it** and runs the right checks, tagging each thing it finds as a link 🔗, email 📧, phone 📞, or message 💬. Paste a blob with several of these in it and it'll analyse each one.
 
 Under the hood it runs:
 
 - **Links** — checks URLs against a live malware/phishing blocklist ([URLhaus](https://urlhaus.abuse.ch), from abuse.ch), URL-shortener expansion, suspicious TLDs, IP-address hosting, typosquatted AU brands, and phishing keywords. Defanged links (`hxxp://evil[.]tk`) and schemeless ones (`evil.tk/login`) are recognised too, so sharing a link safely doesn't cost you the check.
-- **Text messages** — urgency language, reward bait, requests for sensitive info, embedded dodgy links, and government-agency impersonation.
+- **Text messages** — urgency language, reward bait, requests for sensitive info, embedded suspicious links, and government-agency impersonation.
 - **Emails** — all the message checks plus sender-domain analysis, generic greetings, and **email authentication** (SPF / DKIM / DMARC) parsed straight from the raw headers. Forwarded emails are unwrapped back to the original scam, and **tracking pixels** are detected and flagged.
 - **Phone numbers** — line-type detection (mobile / fixed / VoIP / premium / free-call), AU premium-rate ranges, wangiri (one-ring) and premium-rate country risk, and spoofing-risk notes.
 
 **Screenshots and QR codes:** drop or upload an image and it'll try to decode a QR code first (client-side via jsQR), then fall back to OCR (Tesseract.js) to pull out the text — then run all the checks above on whatever it finds. **Both run on your own device** — the image never leaves it. A server-side OCR fallback exists only for browsers that can't run the WASM engine.
 
-**Forward it in:** on your phone? Forward a dodgy email to the app's inbox and it emails you back a straight-up verdict — including *why*, signal by signal, so you know what to look for next time. It's read on arrival and no copy is kept.
+**Forward it in:** on your phone? Forward a suspicious email to the app's inbox and it emails you back a plain verdict — including *why*, signal by signal, so you know what to look for next time. It's read on arrival and no copy is kept.
 
 ### Region-aware detection
 
-Detection is country-aware. A **region pack** ([`lib/regions/`](lib/regions/)) layers national signals — agencies, banks and brands, number-plan semantics, legitimate-domain allowlists, local campaigns — on top of a universal base set (generic urgency, "Hi Mum" voice-clone lures, URL shorteners, abused TLDs, phishing hosting).
+Detection is country-aware. A **region pack** ([`packages/engine/src/regions/`](packages/engine/src/regions/)) layers national signals — agencies, banks and brands, number-plan semantics, legitimate-domain allowlists, local campaigns — on top of a universal base set (generic urgency, "Hi Mum" voice-clone lures, URL shorteners, abused TLDs, phishing hosting).
 
 | Region | Coverage |
 | --- | --- |
@@ -49,7 +49,7 @@ A region pack is **data, not logic** — the scoring engine is shared, only the 
 Both the radar and the calendar are **strictly educational — neither touches scoring**. Seasonality raises a campaign's base rate, which is useful for a person to know and dangerous for a scorer to assume: a tax scam in March is still a scam, and a legitimate ATO email in July is still legitimate.
 
 ### Report a Scam
-Seen something dodgy? Lodge a report so others can be warned. Submissions are protected against bots with rate limiting, a honeypot field, timing checks, and duplicate detection. Reports that score too low on our own detector (i.e. the content looks legit) are flagged for review rather than published.
+Seen something suspicious? Lodge a report so others can be warned. Submissions are protected against bots with rate limiting, a honeypot field, timing checks, and duplicate detection. Reports that score too low on our own detector (i.e. the content looks legit) are flagged for review rather than published.
 
 ### Learn
 A [`/learn`](app/learn/page.tsx) guide covering how to spot scams, how email authentication (SPF/DKIM/DMARC) works, common tactics, what to do if you've been caught, and where to report.
