@@ -8,7 +8,6 @@ import {
   DEFAULT_MODE,
   type LangMode,
   type Locale,
-  type Tone,
   type MessageKey,
 } from "@/lib/i18n";
 
@@ -24,20 +23,20 @@ export const LANG_STORAGE_KEY = "vg_lang";
 // is later served an older cached bundle that reads only the legacy key.
 export const LEGACY_LANG_STORAGE_KEY = "jcm_lang";
 
+// No tone mutators: the regional register was retired with the rebrand, so tone
+// has a single value and nothing can switch it. setLocale stays — the locale
+// axis is the one that grows, and it is what the retired toggle will become
+// when a second language ships.
 interface LangCtx {
   mode: LangMode;
-  toggle: () => void;
   select: (mode: LangMode) => void;
   setLocale: (locale: Locale) => void;
-  setTone: (tone: Tone) => void;
 }
 
 const NOOP_CTX: LangCtx = {
   mode: DEFAULT_MODE,
-  toggle: () => {},
   select: () => {},
   setLocale: () => {},
-  setTone: () => {},
 };
 
 const LangContext = createContext<LangCtx>(NOOP_CTX);
@@ -104,19 +103,8 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
 
   const select = useCallback((next: LangMode) => setMode(next), []);
 
-  // Flips tone only — the historical toggle behaviour, now honestly named as
-  // the tone axis rather than a language switch.
-  const toggle = useCallback(() => {
-    const current = getSnapshot();
-    setMode({ ...current, tone: current.tone === "normal" ? "regional" : "normal" });
-  }, []);
-
   const setLocale = useCallback((locale: Locale) => {
     setMode({ ...getSnapshot(), locale });
-  }, []);
-
-  const setTone = useCallback((tone: Tone) => {
-    setMode({ ...getSnapshot(), tone });
   }, []);
 
   // Every callback above is useCallback'd with an empty dep array, so this is
@@ -126,18 +114,18 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   // silently keeps a stale callback. Listing them costs nothing now and makes
   // that failure impossible later.
   const value = useMemo(
-    () => ({ mode, toggle, select, setLocale, setTone }),
-    [mode, toggle, select, setLocale, setTone],
+    () => ({ mode, select, setLocale }),
+    [mode, select, setLocale],
   );
 
   return <LangContext.Provider value={value}>{children}</LangContext.Provider>;
 }
 
 export function useLang() {
-  const { mode, toggle, select, setLocale, setTone } = useContext(LangContext);
+  const { mode, select, setLocale } = useContext(LangContext);
   const t = useCallback(
     (key: MessageKey, vars?: Record<string, string | number>) => translate(mode, key, vars),
     [mode],
   );
-  return { mode, toggle, select, setLocale, setTone, t };
+  return { mode, select, setLocale, t };
 }

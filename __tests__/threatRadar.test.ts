@@ -17,7 +17,6 @@ import {
 } from "@/lib/threatRadar";
 import { supportedRegions } from "@veriguard/engine/regions";
 import enNormal from "@/messages/en.normal.json";
-import enRegional from "@/messages/en.regional.json";
 
 const AU = radarForRegion("AU");
 
@@ -116,13 +115,11 @@ describe("authoring invariants", () => {
 });
 
 describe("i18n", () => {
-  it("translates the coverage badges as a complete set in the regional tone", () => {
-    // These four render side by side in one list. Overriding some and not others
-    // put two registers in the same row of badges — the regional bundle said
-    // "We catch this one" next to the base "Partly caught".
-    //
-    // Partial override is legitimate for prose (a paragraph reads fine in the
-    // base register); it is not for a set of labels that appear together.
+  it("defines the coverage badges as a complete set", () => {
+    // These four render side by side in one list, so a missing one would leave
+    // a gap in a row of labels that are read together. The regional register
+    // that could once split this set across two voices is retired; the set
+    // itself still has to be whole.
     const keys = [
       "radar.coverage.covered",
       "radar.coverage.partial",
@@ -130,21 +127,14 @@ describe("i18n", () => {
       "radar.coverage.na",
     ] as const;
 
-    const overridden = keys.filter((k) => k in enRegional);
-    expect(overridden.length === 0 || overridden.length === keys.length, overridden.join(", ")).toBe(true);
+    const missing = keys.filter((k) => !(k in enNormal));
+    expect(missing, missing.join(", ")).toEqual([]);
   });
 
-  it("keeps the {region} placeholder in every radar.intro translation", () => {
+  it("keeps the {region} placeholder in radar.intro", () => {
     // The interpolation is what stops the intro hardcoding one country. A
-    // bundle that drops the token silently reintroduces the bug for that tone.
-    for (const [name, bundle] of [
-      ["normal", enNormal],
-      ["regional", enRegional],
-    ] as const) {
-      const intro = (bundle as Record<string, string>)["radar.intro"];
-      if (intro === undefined) continue;
-      expect(intro, name).toContain("{region}");
-    }
+    // bundle that drops the token silently reintroduces that bug.
+    expect((enNormal as Record<string, string>)["radar.intro"]).toContain("{region}");
   });
 });
 

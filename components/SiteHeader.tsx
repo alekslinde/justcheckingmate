@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useLang } from "@/lib/lang";
-import LangToggle from "./LangToggle";
 
 // Every destination, in one list. The old header progressively hid Calendar
 // (below sm) and Radar (below md) because six items wouldn't fit, which meant
@@ -104,7 +103,6 @@ export default function SiteHeader() {
               {t(l.key)}
             </Link>
           ))}
-          <LangToggle />
         </nav>
 
         {/* Mobile: one control, and everything behind it. */}
@@ -176,9 +174,6 @@ export default function SiteHeader() {
             )}
           </Link>
         ))}
-        <div className="pt-2 mt-1 border-t border-[var(--rule)]">
-          <LangToggle />
-        </div>
       </nav>
     </header>
   );

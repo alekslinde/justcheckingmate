@@ -541,7 +541,7 @@ export default function ReportForm({ initialType, initialContent, initialScamUrl
               type="email"
               value={scamEmail}
               onChange={(e) => setScamEmail(e.target.value)}
-              placeholder="scammer@dodgy-domain.com"
+              placeholder="scammer@suspicious-domain.com"
               maxLength={200}
               className={INPUT_MONO}
             />

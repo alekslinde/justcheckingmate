@@ -3,16 +3,24 @@
 //
 // Two independent axes, deliberately kept apart:
 //   locale — the language ("en", later "fr", ...). Decides which words.
-//   tone   — the register ("normal" | "regional"). Decides how they're said.
+//   tone   — the register. Decides how they're said.
 // "aussie" used to be modelled as a locale, which it never was: it is English
 // in a regional register. Splitting the axes means a future non-English locale
 // doesn't have to choose between being a language or being a voice.
+//
+// The tone axis currently has exactly one value. The regional ("Aussie")
+// register was retired with the rebrand: the product speaks one neutral voice,
+// so there is no second register to select. The axis itself is kept rather than
+// collapsed away, because it is the thing that stops a future locale from
+// having to model its own register as a separate language — the mistake
+// "aussie" made. A one-value enum is the cheap half of that trade; removing it
+// and re-deriving it for the first locale that needs a register is the
+// expensive half.
 
 import enNormalMessages from "@/messages/en.normal.json";
-import enRegionalMessages from "@/messages/en.regional.json";
 
 export type Locale = "en";
-export type Tone = "normal" | "regional";
+export type Tone = "normal";
 
 export interface LangMode {
   locale: Locale;
@@ -23,29 +31,18 @@ export const BASE_LOCALE: Locale = "en";
 export const BASE_TONE: Tone = "normal";
 export const DEFAULT_MODE: LangMode = { locale: BASE_LOCALE, tone: BASE_TONE };
 
-// en.normal.json is the base bundle; every key must exist there.
-//
-// en.regional.json is deliberately partial, and the line is about surface, not
-// budget. The register belongs where the app speaks to the reader about their
-// own situation: verdicts, the check flow, errors, encouragement. It stays out
-// of three places. Mechanism explanations (auth, tracking, how we source the
-// radar) trade precision for colour and lose. Safety instructions -- what to do
-// right now -- are the wrong place to spend character. And ordered scales
-// (phone.risk.*, radar.coverage.*) read as a different claim rather than a
-// different voice when reworded, so they only ever exist once.
-//
-// Overrides identical to their base string are dead weight: delete them rather
-// than leave them to drift.
+// en.normal.json is the base bundle; every key must exist there. With the
+// regional register retired it is currently the only bundle, so every lookup
+// resolves here.
 export type MessageKey = keyof typeof enNormalMessages;
 
 type Dict = Partial<Record<MessageKey, string>>;
 
-// Indexed locale-first, then tone. A locale that ships no regional register
-// simply omits the entry and falls through to its own normal tone.
+// Indexed locale-first, then tone. A locale that ships no additional register
+// simply omits the entry and falls through to its own base tone.
 const DICTS: Record<Locale, Partial<Record<Tone, Dict>>> = {
   en: {
     normal: enNormalMessages,
-    regional: enRegionalMessages,
   },
 };
 
@@ -54,7 +51,7 @@ function lookup(mode: LangMode, key: MessageKey): string | undefined {
   return (
     // exact locale + tone
     byLocale?.[mode.tone]?.[key] ??
-    // same locale, base tone — a regional bundle only overrides some keys
+    // same locale, base tone — a non-base register only overrides some keys
     byLocale?.[BASE_TONE]?.[key] ??
     // base locale, base tone — the guaranteed-complete bundle
     DICTS[BASE_LOCALE][BASE_TONE]?.[key]
@@ -78,7 +75,7 @@ export function translate(
 }
 
 const LOCALES: readonly Locale[] = ["en"];
-const TONES: readonly Tone[] = ["normal", "regional"];
+const TONES: readonly Tone[] = ["normal"];
 
 function isLocale(v: unknown): v is Locale {
   return typeof v === "string" && (LOCALES as readonly string[]).includes(v);
@@ -100,8 +97,10 @@ export function serialiseMode(mode: LangMode): string {
 export function parseMode(raw: string | null | undefined): LangMode {
   if (!raw) return DEFAULT_MODE;
 
-  // Legacy single-axis values written before the locale/tone split.
-  if (raw === "aussie") return { locale: "en", tone: "regional" };
+  // Legacy single-axis values written before the locale/tone split. "aussie"
+  // selected the retired regional register, so it now resolves to the one
+  // remaining tone rather than to a register that no longer exists.
+  if (raw === "aussie") return DEFAULT_MODE;
   if (raw === "normal") return DEFAULT_MODE;
 
   const [locale, tone] = raw.split(":");

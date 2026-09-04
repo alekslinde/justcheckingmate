@@ -42,7 +42,7 @@ lib/            ← App-side logic — everything that is NOT scoring.
                   reportStore.ts, bugStore.ts. Safety: piiScrubber.ts,
                   submissionGuard.ts. Region/i18n: regionResolver.ts, geo.ts,
                   i18n.ts, lang.tsx. Blocklist: urlhausBlocklist.ts.
-messages/       ← i18n string bundles (en.normal.json, en.regional.json)
+messages/       ← i18n string bundles (en.normal.json)
 __tests__/      ← Vitest tests (engine + lib)
 scripts/        ← seed-db.ts, generate-icons.mjs
 workers/        ← inbound-email worker

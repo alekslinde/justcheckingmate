@@ -28,7 +28,11 @@ import {
 // the reducer catches those; matching source text cannot.
 
 const NORMAL: LangMode = { locale: "en", tone: "normal" };
-const REGIONAL: LangMode = { locale: "en", tone: "regional" };
+// Every tone the app ships. The regional register was retired with the rebrand,
+// so this is a single entry today — kept as a list because these assertions are
+// about a claim holding in every register, and that is what would need
+// re-checking if a second one ever ships.
+const TONES: LangMode[] = [NORMAL];
 const say = (m: LangMode, k: MessageKey, v?: Record<string, string | number>) => translate(m, k, v);
 
 /** Run a sequence of events from the initial state, as the flow would. */
@@ -143,12 +147,12 @@ describe("image path — reading is not checking", () => {
 // ── Copy ──────────────────────────────────────────────────────────────────────
 //
 // The strings carry the claims, so they are asserted through translate() in
-// both tones rather than by reading the JSON.
+// every shipped tone rather than by reading the JSON.
 
 describe("what the reader is told", () => {
   it("says the verdict on screen is still the old one", () => {
     // The sentence that stops a failure reading as success.
-    for (const mode of [NORMAL, REGIONAL]) {
+    for (const mode of TONES) {
       for (const k of ["verdict.coverage.recheckError", "verdict.coverage.recheckRateLimited"] as const) {
         expect(say(mode, k), `${k}`).toMatch(/still (the one from before|the old verdict)/i);
       }
@@ -157,7 +161,7 @@ describe("what the reader is told", () => {
 
   it("tells a rate-limited reader to wait rather than to retry", () => {
     // "Try again" against a rate limit walks them back into the same wall.
-    for (const mode of [NORMAL, REGIONAL]) {
+    for (const mode of TONES) {
       expect(say(mode, "check.rateLimited")).toMatch(/minute|give it|steady on/i);
       expect(say(mode, "verdict.coverage.recheckRateLimited")).toMatch(/minute|give it|steady on/i);
     }
@@ -170,7 +174,7 @@ describe("what the reader is told", () => {
   });
 
   it("asks for the check in words, in both tones", () => {
-    for (const mode of [NORMAL, REGIONAL]) {
+    for (const mode of TONES) {
       for (const k of ["check.ocr.readTitle", "check.qr.readTitle"] as const) {
         expect(say(mode, k), k).toMatch(/check it/i);
       }
@@ -178,21 +182,21 @@ describe("what the reader is told", () => {
   });
 
   it("warns that a decoded QR is an address, not a destination", () => {
-    for (const mode of [NORMAL, REGIONAL]) {
+    for (const mode of TONES) {
       expect(say(mode, "check.qr.readBody")).toMatch(/opened|near it/i);
     }
   });
 
   it("points at the box rather than a direction the banner isn't in", () => {
     // It said "the address below" while rendering beneath the box.
-    for (const mode of [NORMAL, REGIONAL]) {
+    for (const mode of TONES) {
       expect(say(mode, "check.qr.readBody")).not.toMatch(/below/i);
     }
   });
 
   it("says what was missing and what to try, instead of refusing", () => {
     // "Nothing to analyse." read as a rejection and gave nowhere to go.
-    for (const mode of [NORMAL, REGIONAL]) {
+    for (const mode of TONES) {
       const s = say(mode, "check.nothing");
       expect(s).toMatch(/link|phone number|email address/i);
       expect(s).toMatch(/paste/i);
