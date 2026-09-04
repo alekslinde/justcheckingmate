@@ -151,7 +151,7 @@ export interface ThreatEntry {
  * link on any deploy that isn't the canonical one.
  */
 const ROADMAP_BASE =
-  "https://github.com/alekslinde/justcheckingmate/blob/main/docs/threat-intel";
+  "https://github.com/alekslinde/veriguard/blob/main/docs/threat-intel";
 
 /**
  * Public URL for the sweep an entry was promoted from.

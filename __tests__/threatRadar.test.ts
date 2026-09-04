@@ -76,7 +76,7 @@ describe("authoring invariants", () => {
     // exists, this proves the URL points at that same filename.
     for (const threat of AU) {
       expect(roadmapUrl(threat)).toBe(
-        `https://github.com/alekslinde/justcheckingmate/blob/main/docs/threat-intel/${threat.roadmap}-threat-roadmap.md`,
+        `https://github.com/alekslinde/veriguard/blob/main/docs/threat-intel/${threat.roadmap}-threat-roadmap.md`,
       );
     }
   });

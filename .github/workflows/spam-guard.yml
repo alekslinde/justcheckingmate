@@ -76,7 +76,7 @@ jobs:
               if (re.test(text)) { contentScore += 2; contentReasons.push(why); }
             }
             // Links to a repo/site that ISN'T this repo, combined with promo, is a tell.
-            const selfLink = /github\.com\/(?!alekslinde\/justcheckingmate)[\w.-]+\/[\w.-]+/.test(body)
+            const selfLink = /github\.com\/(?!alekslinde\/veriguard)[\w.-]+\/[\w.-]+/.test(body)
                           || /https?:\/\/[\w.-]+\.(ai|io|app)\b/.test(body);
             if (selfLink && contentScore > 0) { contentScore += 1; contentReasons.push("links to an external product/repo"); }
 
