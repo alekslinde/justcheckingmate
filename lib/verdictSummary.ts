@@ -304,7 +304,7 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     ...(reportUrl ? [ctaLine, reportUrl, ""] : []),
     footer,
     "",
-    "— Just Checking, Mate",
+    "— Veriguard",
   ];
   const text = textParts.join("\n");
 
@@ -358,7 +358,7 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
       : "",
     `<p style="margin:16px 0 0;padding-top:14px;border-top:1px solid #e5e5e5;` +
       `color:#555;font-size:13px">${escapeHtml(footer)}</p>`,
-    `<p style="margin:10px 0 0;color:#888;font-size:13px">— Just Checking, Mate</p>`,
+    `<p style="margin:10px 0 0;color:#888;font-size:13px">— Veriguard</p>`,
     `</div>`,
   ];
   const html = htmlParts.filter(Boolean).join("\n");

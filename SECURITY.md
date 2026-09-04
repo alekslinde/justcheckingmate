@@ -2,7 +2,7 @@
 
 ## Why this project is open source (and why that's safe)
 
-Just Checking, Mate is a scam-detection tool, so a fair question is: *doesn't
+Veriguard is a scam-detection tool, so a fair question is: *doesn't
 publishing the detection logic just teach scammers how to evade it?*
 
 It doesn't, and here's the reasoning:

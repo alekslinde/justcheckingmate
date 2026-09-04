@@ -4,7 +4,7 @@ import ReportPrefillForm from "@/components/ReportPrefillForm";
 import ReportPageHeader from "@/components/ReportPageHeader";
 
 export const metadata: Metadata = {
-  title: "Report a scam — Just Checking, Mate",
+  title: "Report a scam — Veriguard",
   description: "Lodge a scam in the public database so other people can look it up.",
   // A form target reached from a link we emailed, not a content page — keep it
   // out of search results (and out of the sitemap for the same reason).

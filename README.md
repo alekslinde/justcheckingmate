@@ -1,4 +1,4 @@
-# Just Checking, Mate 🦘
+# Veriguard 🦘
 
 Australia's no-nonsense scam detector. Paste a dodgy link, suspicious text message, phishing email, or scam phone number and get an instant verdict — no account required, nothing kept, no data sold.
 

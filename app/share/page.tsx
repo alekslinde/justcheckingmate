@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import ShareTargetSeed from "@/components/ShareTargetSeed";
 
 export const metadata: Metadata = {
-  title: "Check a shared message — Just Checking, Mate",
+  title: "Check a shared message — Veriguard",
   description: "Check a link, text or email you've shared from another app.",
   // A share-sheet landing target, not a content page. Keep it out of search
   // results and out of the sitemap, for the same reason /report is excluded.
@@ -30,7 +30,7 @@ export default function SharePage() {
     <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-5">
       <div>
         <h1 className="text-2xl font-black text-emerald-400 tracking-tight mb-1">
-          Shared with Just Checking, Mate
+          Shared with Veriguard
         </h1>
         <p className="text-sm text-gray-400">
           Here&apos;s what you shared — have a look it&apos;s all there, then

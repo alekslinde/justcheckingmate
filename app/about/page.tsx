@@ -3,9 +3,9 @@ import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
 
 export const metadata: Metadata = {
-  title: "About & Privacy — Just Checking, Mate",
+  title: "About & Privacy — Veriguard",
   description:
-    "What Just Checking, Mate stores, what it never stores (your IP, your uploads), how the checker works, and which countries it covers. Step-by-step guides for blocking and reporting spam live on the Learn page.",
+    "What Veriguard stores, what it never stores (your IP, your uploads), how the checker works, and which countries it covers. Step-by-step guides for blocking and reporting spam live on the Learn page.",
 };
 
 // This page is the canonical record of the project's privacy behaviour, so it
@@ -100,7 +100,7 @@ export default function AboutPage() {
         <section className={SECTION}>
           <h2 className={H2}>What this is</h2>
           <p className={P}>
-            Just Checking, Mate is a free scam checker built for Australians, with local coverage
+            Veriguard is a free scam checker built for Australians, with local coverage
             for the UK, US, New Zealand and Ireland as well. Paste a suspicious link, text, email
             or phone number and get an instant best-effort verdict — no account, no tracking, no
             data sold. It&apos;s an independent project by{" "}

@@ -4,7 +4,7 @@ import ThreatRadar from "@/components/ThreatRadar";
 import { resolveRegion } from "@/lib/regionResolver";
 
 export const metadata: Metadata = {
-  title: "Threat radar — Just Checking, Mate",
+  title: "Threat radar — Veriguard",
   description:
     "Scam campaigns circulating in Australia right now — the texts, emails and calls doing the rounds, what they look like, and whether we catch them yet.",
 };

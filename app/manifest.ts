@@ -8,8 +8,8 @@ import type { MetadataRoute } from "next";
 // standalone window, and the share-sheet entry below.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Just Checking, Mate",
-    short_name: "JCM",
+    name: "Veriguard",
+    short_name: "Veriguard",
     description: "Australia's scam detector. Check links, texts, emails and calls before you act.",
     start_url: "/",
     display: "standalone",

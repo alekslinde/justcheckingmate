@@ -8,7 +8,7 @@ import { buildReplyMime } from "../src/reply.ts";
 
 const REPLY = {
   subject: "Scam alert: the email you forwarded",
-  text: "🚨 This looks like a scam.\n\n— Just Checking, Mate",
+  text: "🚨 This looks like a scam.\n\n— Veriguard",
   html: '<p style="font-weight:bold">🚨 This looks like a scam.</p>',
 };
 

@@ -85,7 +85,7 @@ export default function SiteHeader() {
               strokeLinejoin="round"
             />
           </svg>
-          <span className="truncate">Just Checking, Mate</span>
+          <span className="truncate">Veriguard</span>
         </Link>
 
         {/* Desktop: the links sit inline. */}

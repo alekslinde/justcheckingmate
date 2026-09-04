@@ -1,4 +1,4 @@
-# Just Checking, Mate — Claude Config
+# Veriguard — Claude Config
 
 > Inherits global values from ~/.claude/CLAUDE.md
 
