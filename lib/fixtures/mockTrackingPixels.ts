@@ -5,8 +5,3 @@ export const MOCK_EMAILS_WITH_PIXELS = mockData.emailsWithTrackingPixels as Reco
   string,
   { description: string; content: string }
 >;
-
-export const MOCK_REPORT_EMAILS_WITH_PIXELS = mockData.reportEmailsWithPixels as Record<
-  string,
-  { description: string; content: string }
->;

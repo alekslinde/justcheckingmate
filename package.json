@@ -25,8 +25,8 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
+    "@veriguard/engine": "*",
     "jsqr": "^1.4.0",
-    "libphonenumber-js": "^1.13.11",
     "next": "^16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
