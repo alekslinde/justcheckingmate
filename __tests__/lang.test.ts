@@ -13,6 +13,7 @@ import {
   LEGACY_LANG_STORAGE_KEY,
 } from "@/lib/lang";
 import enNormal from "@/messages/en.normal.json";
+import { checkUrl } from "@veriguard/engine/scamDetector";
 
 const NORMAL: LangMode = { locale: "en", tone: "normal" };
 
@@ -178,5 +179,50 @@ describe("stored language — legacy jcm_ migration", () => {
     const mode = parseMode(readStoredLangRaw(s));
     expect(mode).toEqual(DEFAULT_MODE);
     expect(translate(mode, "check.report")).toBe("Report this scam");
+  });
+});
+
+// ── The retired register must not survive outside the message bundles ────────
+//
+// The locale/tone split (e5ee74b) retired the regional register and deleted
+// en.regional.json, but four strings in the engine's scoreToResult still read
+// "Crikey", "scam vibes" and "keep your wits about ya" — they went unnoticed
+// because CheckResult.details is deliberately not rendered by VerdictBadge,
+// so the copy was live in the engine's public output and invisible on screen.
+//
+// lang.test.ts already guards the bundles; nothing guarded copy the engine
+// emits directly, which is precisely why that was the place it survived.
+describe("retired regional register", () => {
+  const RETIRED = [
+    /\bcrikey\b/i,
+    /\bmate\b/i,
+    /\bdodgy\b/i,
+    /\bsus\b/i,
+    /scam vibes/i,
+    /wits about ya/i,
+    /she'?s apples/i,
+    /\bsquiz\b/i,
+  ];
+
+  // Every band of scoreToResult, reached through the public entrypoints.
+  const cases: Array<[string, () => { details: string }]> = [
+    ["safe", () => checkUrl("https://www.commbank.com.au")],
+    ["suspicious", () => checkUrl("https://bit.ly/safe")],
+    ["likely_scam", () => checkUrl("https://commbank-phish.net")],
+    ["high", () => checkUrl("http://commbank-secure-login.tk/verify")],
+  ];
+
+  it.each(cases)("%s verdict details carry no regional slang", (_band, run) => {
+    const { details } = run();
+    for (const pattern of RETIRED) {
+      expect(details).not.toMatch(pattern);
+    }
+  });
+
+  it("the shipped message bundle carries none either", () => {
+    const bundle = JSON.stringify(enNormal);
+    for (const pattern of RETIRED) {
+      expect(bundle).not.toMatch(pattern);
+    }
   });
 });

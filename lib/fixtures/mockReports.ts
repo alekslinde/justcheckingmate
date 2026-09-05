@@ -16,9 +16,6 @@ function getSubmittedAt(item: {
   return NOW;
 }
 
-// Build MOCK_EMAIL_HEADERS from JSON
-export const MOCK_EMAIL_HEADERS = mockData.emailHeaders as Record<string, string>;
-
 // Build MOCK_REPORTS from JSON + computed locations
 const RAW_MOCKS = mockData.reportMocks.map((item) => ({
   id: item.id,
@@ -40,8 +37,6 @@ export const MOCK_REPORTS: PublicReport[] = RAW_MOCKS.map((r, i) => ({
   ...r,
   location: MOCK_LOCATIONS[i % MOCK_LOCATIONS.length],
 }));
-
-export const MOCK_TOTAL = MOCK_REPORTS.length;
 
 // ── Mock feed stats ───────────────────────────────────────────────────────────
 

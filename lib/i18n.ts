@@ -27,8 +27,8 @@ export interface LangMode {
   tone: Tone;
 }
 
-export const BASE_LOCALE: Locale = "en";
-export const BASE_TONE: Tone = "normal";
+const BASE_LOCALE: Locale = "en";
+const BASE_TONE: Tone = "normal";
 export const DEFAULT_MODE: LangMode = { locale: BASE_LOCALE, tone: BASE_TONE };
 
 // en.normal.json is the base bundle; every key must exist there. With the

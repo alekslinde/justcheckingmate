@@ -998,7 +998,7 @@ export interface CivilDate {
 }
 
 /** Reads a Date's local-time fields as a CivilDate. */
-export function toCivilDate(date: Date): CivilDate {
+function toCivilDate(date: Date): CivilDate {
   return { month: date.getMonth() + 1, day: date.getDate() };
 }
 
