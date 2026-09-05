@@ -10,6 +10,7 @@
     "./emailHeaders": "./src/emailHeaders.ts",
     "./engineTypes": "./src/engineTypes.ts",
     "./phoneIntel": "./src/phoneIntel.ts",
+    "./publicSuffix": "./src/publicSuffix.ts",
     "./regions": "./src/regions/index.ts",
     "./regions/*": "./src/regions/*.ts",
     "./scamDetector": "./src/scamDetector.ts",

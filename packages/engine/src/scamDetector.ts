@@ -1,9 +1,10 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "./emailHeaders";
 import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged, normaliseUnicode, hasMixedScriptHost, displayedHyphenCount } from "./urlSanitizer";
+import { registrableLabel, publicSuffix } from "./publicSuffix";
 import { detectType } from "./detectType";
 import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
-import { resolveRegionPack, DEFAULT_REGION, type RegionInput, type RegionCoverage, type RegionPack } from "./regions";
+import { resolveRegionPack, supportedRegions, DEFAULT_REGION, type RegionInput, type RegionCoverage, type RegionPack } from "./regions";
 import { KEYS_BY_POST_PHRASES, FAMILY_RELATION_TERMS, NEW_NUMBER_PRETEXT_PHRASES } from "./regions/base";
 import type { CheckResult, Signal, SignalSource } from "./engineTypes";
 
@@ -381,36 +382,21 @@ function mentionsCount(text: string, entries: string[]): number {
 }
 
 /**
- * Genuine two-part public suffixes, for working out a hostname's registrable
- * label (see checkUrl's typosquat block).
+ * Every suffix on which a covered region's brands legitimately register.
  *
- * Enumerated rather than derived from a marker label. The rule this replaced
- * asked only "is the penultimate label one of co/com/gov/org/…?", which is true
- * for `chase.gov.co` and `kiwibank.co.io` — but `.co` and `.io` are ordinary
- * gTLDs, so there the last two labels are the registrable domain, not a suffix.
- * Reading them as a suffix made the brand own the registrable label, which
- * silently exempted it from typosquat scoring in every region at once.
+ * The union across packs rather than a per-region lookup, because brands are
+ * not confined to one country — `bankofireland.co.uk` is genuine, and `paypal`
+ * is in all six full packs. What the union still excludes is the case this
+ * exists for: an open-registration foreign suffix like `.gov.co` or `.co.io`,
+ * where a covered brand owning the label is evidence of a squat rather than of
+ * ownership.
  *
- * Scoped to the ccTLDs the packs actually cover. A miss degrades safely: the
- * hostname is simply treated as `<label>.<tld>`, which at worst flags a genuine
- * site under an unlisted two-part suffix — the conservative direction for a
- * scam detector, and the same trade-off the legitDomains allowlist already makes.
+ * Computed once. The packs are immutable, so this cannot go stale, and it keeps
+ * the typosquat loop from rebuilding a set per URL.
  */
-const TWO_PART_SUFFIXES = new Set([
-  // United Kingdom
-  "co.uk", "org.uk", "ac.uk", "gov.uk", "nhs.uk", "police.uk", "mod.uk",
-  "sch.uk", "me.uk", "ltd.uk", "plc.uk", "net.uk",
-  // Australia
-  "com.au", "net.au", "org.au", "gov.au", "edu.au", "asn.au", "id.au",
-  // New Zealand
-  "co.nz", "net.nz", "org.nz", "govt.nz", "ac.nz", "mil.nz", "school.nz",
-  // Ireland
-  "gov.ie", "co.ie",
-  // Canada
-  "gc.ca",
-  // United States — state and municipal government convention
-  "gov.us", "state.us",
-]);
+const BRAND_SUFFIXES: ReadonlySet<string> = new Set(
+  supportedRegions().flatMap((code) => resolveRegionPack(code).brandSuffixes),
+);
 
 // ────────────────────────────────────────────────────────────────────────────
 // URL checker
@@ -552,32 +538,49 @@ export function checkUrl(
     // The registrable label: the name the brand would own, ignoring subdomains
     // and the public suffix. "www.barclays.co.uk" → "barclays";
     // "barclays-secure.co.uk" → "barclays-secure"; "login.barclays.com.evil.top"
-    // → "evil". Two-part suffixes (.co.uk, .com.au) are handled by dropping a
-    // second label when the penultimate one is a known second-level marker.
+    // → "evil".
     //
-    // The suffix must be a *real* two-part public suffix, matched as a whole —
-    // not "any known marker label followed by any TLD". That distinction is
-    // load-bearing rather than tidiness.
+    // Resolved against the Public Suffix List rather than a hand-kept set of
+    // two-part suffixes. That set was explicitly scoped to "the ccTLDs the packs
+    // actually cover", which is a rule that expires: with SG live at `minimal`,
+    // "barclays.com.sg" computed its registrable label as "com", missed the
+    // brand-owns-the-label exemption and scored 55/likely_scam — a false
+    // positive on a real bank's own site.
     //
-    // The original rule treated the penultimate label alone as the signal, so
-    // `.gov.co`, `.com.co` and `.co.io` were read as two-part suffixes even
-    // though `.co` and `.io` are ordinary gTLDs where the last two labels *are*
-    // the registrable domain. `chase.gov.co` therefore computed its registrable
-    // label as "chase", which tripped the "the brand owns the label, so it's the
-    // real site" exemption and suppressed brand scoring entirely.
+    // The PSL also keeps the defect the hand-written list was built to fix.
+    // `.gov.co`, `.com.co` and `.co.io` are genuine public suffixes and are in
+    // the list, so `chase.gov.co` still resolves to "chase.gov.co" rather than
+    // letting the brand own the label and silently exempting itself.
+    const registrable = registrableLabel(hostname);
+
+    // The brand-owns-the-label exemption applies only on a suffix this region's
+    // brands actually use.
     //
-    // One open-registration domain then defeated the typosquat rule in every
-    // pack at once: `commbank.gov.co` (AU), `barclays.gov.co` (GB),
-    // `chase.com.co` (US), `kiwibank.co.io` (NZ), `scotiabank.gov.io` (CA) and
-    // `anpost.gov.co` (IE) all came back with no brand flag. Listing the
-    // suffixes in full closes that while leaving genuine sites untouched.
-    const labels = hostname.split(".");
-    const lastTwo = labels.slice(-2).join(".");
-    let registrableIndex = labels.length - 2;
-    if (labels.length >= 3 && TWO_PART_SUFFIXES.has(lastTwo)) {
-      registrableIndex = labels.length - 3;
-    }
-    const registrable = labels[registrableIndex] ?? "";
+    // This is the half of the old hand-written suffix list that the PSL does
+    // NOT replace, and dropping it silently reopened a real gap. `gov.co` is a
+    // genuine public suffix, so the PSL correctly makes "barclays" the
+    // registrable label of "barclays.gov.co" — at which point the brand owns
+    // the label and the squat exempts itself. The old list only avoided that by
+    // omitting `.gov.co` entirely, i.e. by being wrong about structure in a way
+    // that happened to be right about intent.
+    //
+    // Separating the two questions keeps both answers: the PSL says where the
+    // registration boundary is, and `brandSuffixes` says whether a UK bank
+    // would be registering in Colombia's government namespace. It would not.
+    // The set is the union across every covered region, not just this pack's.
+    // Brands are not confined to one country: `paypal`, `amazon`, `netflix` and
+    // `binance` appear in all six full packs, `westpac` trades in AU and NZ, and
+    // `bankofireland.co.uk` is Bank of Ireland's genuine UK site. Gating on the
+    // *checking* region's suffixes alone flagged all of those as squats — six
+    // real sites in the existing suite, which is the false-positive direction
+    // this project treats as the more costly one.
+    //
+    // Excluded by construction is the case that motivated the field:
+    // `barclays.gov.co` and `kiwibank.co.io` sit on suffixes no covered brand
+    // registers under, so they stay flagged.
+    const suffix = publicSuffix(hostname);
+    const onBrandSuffix = BRAND_SUFFIXES.has(suffix);
+    const brandOwnsLabel = (brand: string) => onBrandSuffix && registrable === brand;
 
     // Separator-delimited words within the registrable label, so "agl-billing"
     // yields ["agl","billing"] — that's how a short brand is matched without
@@ -591,12 +594,12 @@ export function checkUrl(
     // than the registrable label, which is exactly what the check tests.
     for (const brand of TYPOSQUAT_BRANDS.substring) {
       // The brand owning the whole label is the real site, not a squat.
-      if (hostname.includes(brand) && registrable !== brand) {
+      if (hostname.includes(brand) && !brandOwnsLabel(brand)) {
         sig.add("link", `Impersonates "${brand}" in the domain name — classic phishing move`, 45);
       }
     }
     for (const brand of TYPOSQUAT_BRANDS.word) {
-      if (labelWords.includes(brand) && registrable !== brand) {
+      if (labelWords.includes(brand) && !brandOwnsLabel(brand)) {
         sig.add("link", `Impersonates "${brand}" in the domain name — classic phishing move`, 45);
       }
     }

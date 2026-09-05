@@ -90,6 +90,7 @@ function buildPack(region: RegionDefinition): RegionPack {
 
     typosquatBrands: region.typosquatBrands,
     trustedHostSuffixes: region.trustedHostSuffixes,
+    brandSuffixes: region.brandSuffixes,
     authorityOwnDomains: region.authorityOwnDomains ?? [],
     brandMentions: region.brandMentions,
     officialSenderNames: region.officialSenderNames,

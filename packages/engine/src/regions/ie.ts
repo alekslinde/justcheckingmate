@@ -386,6 +386,11 @@ export const IE: RegionDefinition = {
   // one, and the rule has to follow the registry's actual policy rather than the
   // pattern of the AU pack.
   trustedHostSuffixes: [".gov.ie"],
+  // `co.ie` is deliberately absent: it is NOT a public suffix. The hand-written
+  // list this replaced carried it anyway, where it silently matched nothing —
+  // the PSL surfacing that is the kind of latent error an authoritative list
+  // catches and a maintained-by-hand one hides.
+  brandSuffixes: ["ie", "gov.ie", "com", "net", "org"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

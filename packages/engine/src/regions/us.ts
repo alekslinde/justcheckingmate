@@ -362,6 +362,9 @@ export const US: RegionDefinition = {
   // on `.com` are handled by the registrable-label rule in checkUrl and by
   // legitDomains, not by a blanket suffix exemption.
   trustedHostSuffixes: [".gov", ".mil"],
+  // The US has no second-level convention for commerce — brands are on the
+  // gTLDs directly. `.gov` and `.mil` are single-label suffixes.
+  brandSuffixes: ["com", "net", "org", "gov", "mil", "us", "co", "io", "me"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

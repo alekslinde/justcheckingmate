@@ -400,6 +400,11 @@ export const GB: RegionDefinition = {
   // `barclays-secure-verify.co.uk` would score no brand signal at all. Genuine
   // brands there are covered by legitDomains, an explicit allowlist.
   trustedHostSuffixes: [".gov.uk", ".nhs.uk"],
+  // UK brands sit on .co.uk and .uk as much as on .com. `.gov.uk` and `.nhs.uk`
+  // are here too: they are also in trustedHostSuffixes, which is a stronger
+  // statement, but listing them keeps this field readable as "where UK
+  // organisations are" rather than "the leftovers".
+  brandSuffixes: ["co.uk", "org.uk", "ac.uk", "gov.uk", "nhs.uk", "police.uk", "me.uk", "ltd.uk", "plc.uk", "net.uk", "uk", "com", "net", "org"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

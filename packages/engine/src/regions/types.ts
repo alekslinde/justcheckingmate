@@ -280,6 +280,38 @@ export interface RegionDefinition {
   trustedHostSuffixes: string[];
 
   /**
+   * Public suffixes on which this region's brands legitimately register.
+   *
+   * Gates the "the brand owns the registrable label, so it is the real site"
+   * exemption in the typosquat rule. `barclays.co.uk` is Barclays; the label is
+   * the brand and the suffix is one a UK brand actually uses, so no flag.
+   * `barclays.gov.co` also has "barclays" as its registrable label — `gov.co`
+   * is a genuine public suffix — but Colombia's government namespace is not
+   * somewhere a UK bank registers, so the exemption must not apply and the
+   * squat must still score.
+   *
+   * **This is a different question from the Public Suffix List, and the
+   * distinction is the whole reason this field exists.** The PSL answers "where
+   * is the registration boundary" — a structural fact, and it correctly says
+   * `gov.co` is a suffix. This answers "would this region's brands be here at
+   * all", which is a judgement about impersonation and cannot be derived from
+   * structure. Before the PSL, a hand-kept suffix list conflated the two by
+   * simply omitting `.gov.co`, `.com.co` and `.co.io`; that worked only because
+   * the list was also wrong about structure, and it broke the moment a region
+   * shipped on a suffix nobody had listed.
+   *
+   * Also distinct from `trustedHostSuffixes`, which is narrower again: that
+   * asks "is registration eligibility-restricted" (`.gov.uk` yes, `.co.uk` no)
+   * and suppresses brand scoring entirely. This one only decides whether owning
+   * the label counts as proof of authenticity.
+   *
+   * An open suffix belongs here — `.co.uk` is sold to anyone, and Barclays is
+   * still on it. Omitting a region's real suffixes causes false positives on
+   * genuine sites; adding a foreign one reopens the squat gap.
+   */
+  brandSuffixes: string[];
+
+  /**
    * Non-government brands impersonated in *message bodies* — delivery apps,
    * telcos, energy retailers, exchanges. Scored lower than an authority mention
    * and with separate copy, since "verify via official channels" reads wrong for
@@ -389,6 +421,8 @@ export interface RegionPack {
 
   typosquatBrands: BrandSet;
   trustedHostSuffixes: string[];
+  /** Suffixes this region's brands legitimately register on. */
+  brandSuffixes: string[];
   brandMentions: BrandSet;
   officialSenderNames: string[];
 

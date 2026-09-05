@@ -337,6 +337,9 @@ export const CA: RegionDefinition = {
   // `cra-refund-secure.ca` would score no brand signal at all. Residency is not
   // the same eligibility bar as government status.
   trustedHostSuffixes: [".gc.ca", ".canada.ca"],
+  // `.ca` is open to any Canadian registrant; `.gc.ca` is the federal
+  // government. Canadian brands use `.com` at least as often as `.ca`.
+  brandSuffixes: ["ca", "gc.ca", "com", "net", "org"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

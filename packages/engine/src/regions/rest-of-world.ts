@@ -61,6 +61,9 @@ export const REST_OF_WORLD: RegionDefinition = {
   // suspicious TLDs, shorteners) that need no brand knowledge.
   typosquatBrands: { substring: [], word: [] },
   trustedHostSuffixes: [],
+  // No national layer, so no suffix is "this region's own". The brand lists are
+  // empty anyway, so the exemption this gates is never reached.
+  brandSuffixes: [],
   brandMentions: { substring: [], word: [] },
   officialSenderNames: [],
 
