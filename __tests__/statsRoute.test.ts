@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/reportStore", () => ({
   getStats: vi.fn(),
   getCheckEvents: vi.fn(),
+  // The breakdown path is rate-limited; the default path is not. Allowing by
+  // default keeps these tests about the response shape rather than the budget,
+  // which apiCostControls.test.ts covers.
+  checkAndRecordRateLimit: vi.fn(() => true),
+  FEED_RATE_LIMIT: 60,
 }));
 
 import { GET } from "@/app/api/stats/route";

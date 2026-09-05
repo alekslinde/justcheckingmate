@@ -43,6 +43,20 @@ const RATE_LIMIT = 4;
  */
 export const CHECK_RATE_LIMIT = 30;
 
+/**
+ * Read budget for the public feed and the stats counters.
+ *
+ * Higher than the check budget because these are cheap, idempotent reads that a
+ * single page visit makes several of — paging the submissions browser, changing
+ * a filter, loading the hero counters. Set to bound a script rather than to
+ * inconvenience a person: browsing the feed hard for a minute stays under it,
+ * while a loop pulling pages does not.
+ *
+ * The real saving is the edge cache on those routes; this is the floor under it
+ * for requests that miss the cache or vary their query string to defeat it.
+ */
+export const FEED_RATE_LIMIT = 60;
+
 const rateLimiter = new Map<string, number[]>();
 
 function cleanRateLimiter() {

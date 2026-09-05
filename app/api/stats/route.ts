@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getStats, getCheckEvents, type CheckSurface, type CheckOutcome } from "@/lib/reportStore";
+import { getStats, getCheckEvents, checkAndRecordRateLimit, FEED_RATE_LIMIT, type CheckSurface, type CheckOutcome } from "@/lib/reportStore";
+import { clientIpFromHeaders } from "@/lib/geo";
 
 // Days of history the breakdown covers when `?days=` is omitted. Four weeks is
 // enough to read a weekly rate and see a trend.
@@ -42,11 +43,29 @@ interface SurfaceSummary {
  * meaningful and isn't.
  */
 export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const wantsBreakdown = url.searchParams.get("breakdown") === "1";
+
+  // The breakdown scans check_events over a window; the default path reads two
+  // counter rows. Only the expensive one is throttled — rate-limiting the hero
+  // counters would punish ordinary visitors for the site's own page loads,
+  // which the cache below already collapses into one query per window.
+  if (wantsBreakdown && !checkAndRecordRateLimit(`stats:${clientIpFromHeaders(request.headers)}`, FEED_RATE_LIMIT)) {
+    return NextResponse.json(
+      { error: "Too many requests — give it a minute.", code: "rate_limited" },
+      { status: 429 },
+    );
+  }
+
   const stats = await getStats();
 
-  const url = new URL(request.url);
-  if (url.searchParams.get("breakdown") !== "1") {
-    return NextResponse.json(stats);
+  if (!wantsBreakdown) {
+    // Cached at the edge. These are two integers that change slowly, and they
+    // are read on every homepage load — uncached, the site's own traffic is the
+    // main consumer of the free-tier row-read budget.
+    return NextResponse.json(stats, {
+      headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" },
+    });
   }
 
   const rawDays = url.searchParams.get("days");
@@ -104,5 +123,10 @@ export async function GET(request: Request) {
       daily,
       truncated: rows.length > daily.length,
     },
+  }, {
+    // Shorter than the default path: the breakdown is an operational view, so
+    // staleness is more noticeable, but it is also the expensive query and the
+    // one worth not repeating per request.
+    headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
   });
 }
