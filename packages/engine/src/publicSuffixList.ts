@@ -2,7 +2,7 @@
 //
 // Regenerate with `npm run psl`. Source: https://publicsuffix.org/list/public_suffix_list.dat
 // Generated from the ICANN section only, multi-label rules only.
-// Rules: 5484 normal, 9 wildcard, 8 exception.
+// Rules: 5484 normal, 16 wildcard, 8 exception.
 //
 // Why this is committed rather than fetched at runtime: the engine has no
 // ambient network access by design — that is the property the WebExtension and
@@ -5503,11 +5503,18 @@ export const PSL_RULES: ReadonlySet<string> = new Set([
  * "ck" and means "any single label under ck is itself a public suffix".
  */
 export const PSL_WILDCARDS: ReadonlySet<string> = new Set([
+  "ck",
+  "er",
+  "fk",
+  "jm",
   "kawasaki.jp",
   "kitakyushu.jp",
   "kobe.jp",
+  "mm",
   "nagoya.jp",
   "nom.br",
+  "np",
+  "pg",
   "sapporo.jp",
   "sch.uk",
   "sendai.jp",

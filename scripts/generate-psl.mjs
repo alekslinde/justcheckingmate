@@ -59,8 +59,14 @@ const rules = text
   .split("\n")
   .map((l) => l.trim())
   .filter((l) => l && !l.startsWith("//"))
-  // Multi-label only — see the header.
-  .filter((l) => l.replace(/^[!*]\./, "").includes("."));
+  // Multi-label only — see the header. Wildcard and exception rules are ALWAYS
+  // kept, whatever their label count: "*.np" is a single-label rule in form but
+  // multi-label in effect, because it makes "com.np" a public suffix. Stripping
+  // the "*." before counting dropped 7 ccTLD wildcards (ck er fk jm mm np pg)
+  // and reintroduced the exact bug this list was adopted to fix —
+  // "paypal.com.np" resolved its registrable label to "com". It also orphaned
+  // the "!www.ck" exception, whose wildcard parent had been removed.
+  .filter((l) => l.startsWith("*") || l.startsWith("!") || l.includes("."));
 
 if (rules.length < 4000) {
   console.error(`Only ${rules.length} rules parsed — refusing to write a truncated list.`);

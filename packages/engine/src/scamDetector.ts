@@ -382,12 +382,17 @@ function mentionsCount(text: string, entries: string[]): number {
 }
 
 /**
- * Every suffix on which a covered region's brands legitimately register.
+ * The MULTI-label suffixes on which a covered region's brands legitimately
+ * register — `co.uk`, `com.au`, `co.nz`, `com.sg`.
+ *
+ * Consulted only for multi-label suffixes; single-label TLDs are exempt by
+ * default, since that is where brands register worldwide and no list could
+ * enumerate them (see the call site).
  *
  * The union across packs rather than a per-region lookup, because brands are
  * not confined to one country — `bankofireland.co.uk` is genuine, and `paypal`
- * is in all six full packs. What the union still excludes is the case this
- * exists for: an open-registration foreign suffix like `.gov.co` or `.co.io`,
+ * is in all six full packs. What the union excludes is the case this exists
+ * for: an open-registration foreign namespace like `.gov.co` or `.co.io`,
  * where a covered brand owning the label is evidence of a squat rather than of
  * ownership.
  *
@@ -567,19 +572,25 @@ export function checkUrl(
     // Separating the two questions keeps both answers: the PSL says where the
     // registration boundary is, and `brandSuffixes` says whether a UK bank
     // would be registering in Colombia's government namespace. It would not.
-    // The set is the union across every covered region, not just this pack's.
-    // Brands are not confined to one country: `paypal`, `amazon`, `netflix` and
-    // `binance` appear in all six full packs, `westpac` trades in AU and NZ, and
-    // `bankofireland.co.uk` is Bank of Ireland's genuine UK site. Gating on the
-    // *checking* region's suffixes alone flagged all of those as squats — six
-    // real sites in the existing suite, which is the false-positive direction
-    // this project treats as the more costly one.
+    // Whether owning the label proves ownership depends on the SHAPE of the
+    // suffix, and the rule has to be a denylist rather than an allowlist.
     //
-    // Excluded by construction is the case that motivated the field:
-    // `barclays.gov.co` and `kiwibank.co.io` sit on suffixes no covered brand
-    // registers under, so they stay flagged.
+    // A single-label suffix — `.com`, `.de`, `.fr`, `.tv`, `.info` — is where
+    // brands register worldwide. `amazon.de` is Amazon's real German site, and
+    // there are far more such TLDs than any list could enumerate, so the
+    // exemption applies by default. An earlier version gated on a 45-entry
+    // union of the packs' own suffixes, which inverted this: every TLD outside
+    // the list lost the exemption, and a sweep of US-pack brands across
+    // ordinary TLDs flagged 216 of 216 real sites. That is the
+    // false-positive-on-a-real-brand direction, and the costlier one.
+    //
+    // A MULTI-label suffix is a national namespace, and there the country
+    // matters: `barclays.co.uk` is Barclays, while `barclays.gov.co` is a squat
+    // under Colombia's government namespace, which is sold openly and is not
+    // somewhere a UK bank registers. So for those, the suffix must be one a
+    // covered region actually uses.
     const suffix = publicSuffix(hostname);
-    const onBrandSuffix = BRAND_SUFFIXES.has(suffix);
+    const onBrandSuffix = !suffix.includes(".") || BRAND_SUFFIXES.has(suffix);
     const brandOwnsLabel = (brand: string) => onBrandSuffix && registrable === brand;
 
     // Separator-delimited words within the registrable label, so "agl-billing"

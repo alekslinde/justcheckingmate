@@ -33,6 +33,29 @@ describe("public suffix lookup", () => {
     expect(publicSuffix("foo.bar.kawasaki.jp")).toBe("bar.kawasaki.jp");
   });
 
+  it("keeps single-label wildcard rules", () => {
+    // The generator's multi-label filter originally ran AFTER stripping "*.",
+    // which silently dropped 7 ccTLD wildcards (ck er fk jm mm np pg). "*.np"
+    // is single-label in form but multi-label in effect — it makes "com.np" a
+    // suffix — so dropping it reintroduced the exact defect the PSL was adopted
+    // to fix: "paypal.com.np" resolved its registrable label to "com".
+    //
+    // The kawasaki case above cannot catch this, because that rule survives the
+    // filter. These are the ones that did not.
+    expect(publicSuffix("paypal.com.np")).toBe("com.np");
+    expect(registrableLabel("paypal.com.np")).toBe("paypal");
+    expect(publicSuffix("a.b.jm")).toBe("b.jm");
+  });
+
+  it("keeps an exception's wildcard parent", () => {
+    // "!www.ck" is meaningless without "*.ck": dropping the parent left the
+    // exception orphaned, and "foo.ck" became a registrable domain owned by
+    // "foo" — handing any <brand>.ck the ownership exemption.
+    expect(publicSuffix("foo.ck")).toBe("foo.ck");
+    expect(publicSuffix("www.ck")).toBe("ck");
+    expect(registrableDomain("www.ck")).toBe("www.ck");
+  });
+
   it("lets an exception rule override a wildcard", () => {
     // "!city.kawasaki.jp" — city.kawasaki.jp is registrable despite the wildcard.
     expect(publicSuffix("city.kawasaki.jp")).toBe("kawasaki.jp");
@@ -98,9 +121,41 @@ describe("brand-owns-the-label exemption", () => {
     }
   });
 
+  it("does not flag a brand on an ordinary single-label TLD", () => {
+    // The regression an allowlist-shaped gate introduced: every TLD outside a
+    // 45-entry union lost the exemption, so amazon.de — Amazon's real German
+    // site — scored 45 as impersonation. A sweep of US-pack brands across
+    // ordinary TLDs flagged 216 of 216. Single-label suffixes are where brands
+    // register worldwide, so they are exempt by default.
+    for (const host of ["amazon.de", "amazon.fr", "paypal.info", "netflix.tv"]) {
+      expect(
+        checkUrl(`https://${host}/`, undefined, "GB").flags.join(" "),
+        host,
+      ).not.toContain("Impersonates");
+    }
+  });
+
+  it("still flags a squat under a foreign wildcard namespace", () => {
+    // com.np exists only via the "*.np" wildcard — the rule class that was
+    // being dropped.
+    expect(checkUrl("http://paypal.com.np/login", undefined, "US").flags.join(" "))
+      .toContain("Impersonates");
+  });
+
   it("still flags a squat on the region's own suffix", () => {
     expect(checkUrl("https://barclays-secure.co.uk/login", undefined, "GB").flags.join(" "))
       .toContain("Impersonates");
+  });
+});
+
+describe("the generated list is complete", () => {
+  it("carries the ccTLD wildcards, not just the deep ones", () => {
+    // A count check would be brittle against upstream edits; these specific
+    // rules are the ones a stripping-then-filtering generator drops, and each
+    // makes a whole ccTLD's second level a suffix.
+    for (const tld of ["ck", "er", "fk", "jm", "mm", "np", "pg"]) {
+      expect(publicSuffix(`example.anything.${tld}`), tld).toBe(`anything.${tld}`);
+    }
   });
 });
 
