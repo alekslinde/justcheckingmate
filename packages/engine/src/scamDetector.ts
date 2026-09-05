@@ -2032,6 +2032,12 @@ export function checkCustom(text: string, blocklist?: Set<string>, region?: Regi
 // detection: base signals (shorteners, abused TLDs, credential asks) fire
 // everywhere, so anything they caught is reported as found, regardless of
 // coverage.
+//
+// The test is "not full" rather than a list of the tiers that downgrade, which
+// is why adding `minimal` needed no change here. That is deliberate and worth
+// keeping: a new tier must opt *in* to asserting safety by being `full`, never
+// inherit it by being absent from an enumeration someone forgot to update.
+// Defaulting a new tier to the honest behaviour is the whole point.
 function downgradeForCoverage(result: CheckResult, coverage: RegionCoverage): CheckResult {
   if (coverage === "full" || result.verdict !== "safe") return result;
   return {

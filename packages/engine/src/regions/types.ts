@@ -15,7 +15,7 @@
 // in base so a new region inherits it for free.
 
 /** ISO 3166-1 alpha-2, uppercase. */
-export type RegionCode = "AU" | "GB" | "US" | "NZ" | "CA" | "IE" | "ZZ";
+export type RegionCode = "AU" | "GB" | "US" | "NZ" | "CA" | "IE" | "SG" | "ZZ";
 
 /**
  * How much detection coverage a region actually has.
@@ -26,9 +26,28 @@ export type RegionCode = "AU" | "GB" | "US" | "NZ" | "CA" | "IE" | "ZZ";
  *
  *   full    — maintained keyword sets, agency list and domain allowlist
  *   partial — base signals plus a thin region layer; gaps expected
+ *   minimal — agencies and reporting body only; no brands, keywords, allowlist
  *   none    — base signals only; no national coverage
+ *
+ * **This type is a promise about what a `safe` verdict means, not a
+ * description of effort spent.** Only `full` earns the right to assert "we
+ * looked with local rules and found nothing"; every other tier downgrades a
+ * clean result to `unknown` (see downgradeForCoverage in scamDetector.ts).
+ *
+ * `minimal` exists to make breadth affordable. A `full` pack is ~400 lines of
+ * researched judgement and has historically shipped about one defect apiece,
+ * which does not scale to the whole world. A `minimal` pack is roughly 30
+ * lines sourced from public registries — who the tax office is, where to
+ * report, which suffixes the registry gates — and is reviewable by someone who
+ * does not speak the language.
+ *
+ * **It is emphatically not a weaker `partial`.** It ranks *below* `partial` in
+ * overallCoverage: CA ships `partial` with brands, agencies and a number plan
+ * and lacks only French keywords, whereas a `minimal` pack has no brand
+ * knowledge at all. The value it adds is a *positive* one — naming the local
+ * authority and telling the user where to report — never a cleaner pass.
  */
-export type RegionCoverage = "full" | "partial" | "none";
+export type RegionCoverage = "full" | "partial" | "minimal" | "none";
 
 /**
  * Urgency signals grouped by campaign so each can be tuned or removed

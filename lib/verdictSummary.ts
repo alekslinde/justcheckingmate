@@ -117,8 +117,15 @@ export function isClean(
 // report for the check as a whole, since one uncovered identifier means the
 // overall picture is incomplete. Absent coverage is treated as "full" so
 // results predating the field (and non-region paths) read as they always did.
+//
+// `minimal` ranks BELOW `partial`, which is the opposite of what the names
+// suggest and is the one thing to get right here. A `partial` pack (CA) has
+// brands, agencies and a number plan and is missing only a language's
+// keywords; a `minimal` pack has agencies and a reporting body and no brand
+// knowledge whatsoever. Ranking them the other way round would report the
+// stronger pack as the weakest link. Pinned by test in coverage.test.ts.
 export function overallCoverage(results: AnalyzedIdentifier[]): RegionCoverage {
-  const RANK: Record<RegionCoverage, number> = { full: 0, partial: 1, none: 2 };
+  const RANK: Record<RegionCoverage, number> = { full: 0, partial: 1, minimal: 2, none: 3 };
   return results.reduce<RegionCoverage>((worst, r) => {
     const c = r.result.coverage ?? "full";
     return RANK[c] > RANK[worst] ? c : worst;

@@ -66,11 +66,12 @@ export interface EvalCase {
 /**
  * Three outcomes, not two.
  *
- * `abstain` is what the coverage gate produces: under partial or no regional
- * coverage the engine correctly declines to assert anything, and scoring that
+ * `abstain` is what the coverage gate produces: under any coverage short of
+ * `full` the engine correctly declines to assert anything, and scoring that
  * as a miss would make an honest pack look broken. CA ships coverage:"partial"
- * by design, so its cases abstain in bulk — that belongs in a coverage metric,
- * never in recall.
+ * by design and `minimal` packs ship with no brand knowledge at all, so their
+ * clean cases abstain in bulk — that belongs in a coverage metric, never in
+ * recall.
  */
 export type Prediction = "flagged" | "clean" | "abstain";
 
@@ -94,7 +95,10 @@ export function toPrediction(
   result: CheckResult,
   suspiciousAs: SuspiciousPolicy = "flagged",
 ): Prediction {
-  if (result.coverage === "none" || result.coverage === "partial") return "abstain";
+  // Inverted to "anything but full" so a tier added later abstains by default
+  // rather than being silently scored as a confident prediction. Absent
+  // coverage still reads as full, for results predating the field.
+  if (result.coverage !== undefined && result.coverage !== "full") return "abstain";
   if (result.verdict === "unknown") return "abstain";
   if (result.verdict === "suspicious") return suspiciousAs;
   return result.verdict === "safe" ? "clean" : "flagged";
