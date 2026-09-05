@@ -159,15 +159,30 @@ export const SG: RegionDefinition = {
   reportingUrl: "https://www.scamshield.gov.sg",
 
   phonePlan: {
-    // 1900 is Singapore's premium-rate range (IMDA numbering plan).
-    premiumPrefixes: ["1900"],
+    // 1900 is Singapore's premium-rate range (IMDA numbering plan), authored
+    // WITH the trunk 0 because analysePhone matches against "0" + the national
+    // number libphonenumber returns. Without it the prefix is compared against
+    // "01900…" and never matches, which silently made premiumFlag unreachable
+    // and skipped the very_high risk bump entirely.
+    //
+    // US and CA get away with a bare "900" only because libphonenumber
+    // independently classifies NANP premium numbers as PREMIUM_RATE; it does
+    // not do that for SG, so the prefix rule is the only thing that fires here.
+    premiumPrefixes: ["01900"],
     premiumFlag:
       "Premium rate number — Singapore 1900 numbers bill the caller at a premium rate, and a message pushing you to call one is charging you for the privilege",
     // 999 (police) and 995 (fire/ambulance) are already in the universal
-    // EMERGENCY_NUMBERS set in phoneIntel. 1800 is the local non-emergency
-    // police hotline prefix and 1799 the ScamShield helpline.
+    // EMERGENCY_NUMBERS set in phoneIntel. 1799 is the ScamShield helpline.
+    //
+    // Matched by exact equality, not as a prefix — so this lists whole numbers
+    // only. 1800 is deliberately absent: it is the toll-free RANGE, covered by
+    // tollFreeFlag below, and listing it here would neither work (equality) nor
+    // be correct (it is not an emergency number).
     emergencyNumbers: ["1799"],
+    // Singapore's toll-free range is 1800, not the NANP 800. Naming the wrong
+    // range told a user checking a genuine 1800 line about "800 numbers" —
+    // exactly the unverified regional claim this tier's header forbids.
     tollFreeFlag:
-      "Toll-free 800 numbers are trivially spoofed and are commonly faked by scammers posing as banks or government agencies — always verify by calling the number printed on your card or on the organisation's official website",
+      "Free-call 1800 numbers are commonly faked by scammers posing as banks or government agencies — always verify by calling the number printed on your card or on the organisation's official website",
   },
 };

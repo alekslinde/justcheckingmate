@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { TRANSFORMS } from "@/eval/metamorphic";
 import { formatSummary, type MetamorphicResult, type Violation } from "@/eval/metamorphicRunner";
-import { REGION_NEUTRAL, OPEN_SUFFIX_PROBES, COVERAGE_RANK } from "@/eval/regionRelations";
+import { REGION_NEUTRAL, OPEN_SUFFIX_PROBES } from "@/eval/regionRelations";
+import { overallCoverage } from "@/lib/verdictSummary";
 import type { EvalCase } from "@/eval/schema";
 
 // The metamorphic suite gates detection changes, so it needs its own coverage
@@ -205,10 +206,16 @@ describe("region relation fixtures", () => {
   });
 
   it("ranks coverage with minimal below partial", () => {
-    // Mirrors overallCoverage. Pinned in both places because the two rankings
-    // are written out separately and would drift silently.
-    expect(COVERAGE_RANK.full).toBeLessThan(COVERAGE_RANK.partial);
-    expect(COVERAGE_RANK.partial).toBeLessThan(COVERAGE_RANK.minimal);
-    expect(COVERAGE_RANK.minimal).toBeLessThan(COVERAGE_RANK.none);
+    // Asserted against overallCoverage itself, not a copy of its ranking. An
+    // earlier version compared a local constant that mirrored it, which could
+    // not detect the drift its own comment claimed to guard against — the real
+    // ranking could be reordered and this stayed green.
+    const at = (coverage: string) =>
+      [{ result: { verdict: "safe", score: 0, flags: [], details: "", category: "SMS", coverage } }] as never;
+    const weakest = (a: string, b: string) => overallCoverage([...at(a), ...at(b)] as never);
+
+    expect(weakest("full", "partial")).toBe("partial");
+    expect(weakest("partial", "minimal")).toBe("minimal");
+    expect(weakest("minimal", "none")).toBe("none");
   });
 });

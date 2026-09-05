@@ -29,15 +29,6 @@ import { supportedRegions, resolveRegionPack, type RegionCode } from "@veriguard
 /** Verdict severity, ordered. Same scale the content runner compares on. */
 const RANK: Record<string, number> = { safe: 0, unknown: 1, suspicious: 2, likely_scam: 3 };
 
-/** Coverage strength, strongest first. Mirrors overallCoverage's ranking. */
-const COVERAGE_RANK: Record<string, number> = {
-  full: 0,
-  partial: 1,
-  minimal: 2,
-  none: 3,
-  unknown: 4,
-};
-
 export type RegionRelationId = "region-invariance" | "coverage-monotonicity";
 
 export interface RegionViolation {
@@ -358,4 +349,4 @@ export function formatRegionViolations(r: RegionRelationResult): string {
 }
 
 /** Exported for the harness test, so the fixtures cannot silently empty out. */
-export { REGION_NEUTRAL, OPEN_SUFFIX_PROBES, COVERAGE_RANK };
+export { REGION_NEUTRAL, OPEN_SUFFIX_PROBES };

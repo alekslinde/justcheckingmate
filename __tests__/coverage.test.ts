@@ -3,6 +3,7 @@ import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent
 import { overallCoverage, isClean, formatVerdictEmail } from "@/lib/verdictSummary";
 import { FALLBACK_REGION, resolveRegionPack, supportedRegions, type RegionCoverage } from "@veriguard/engine/regions";
 import { toPrediction } from "@/eval/schema";
+import { analysePhone } from "@veriguard/engine/phoneIntel";
 
 // The Phase 3 guarantee: a "safe" verdict asserts we looked and found nothing.
 // Where we have no rules to look with, that assertion isn't available — a clean
@@ -241,6 +242,48 @@ describe("minimal coverage tier", () => {
     // A minimal pack's clean cases must land in a coverage metric, never in
     // recall — the same treatment CA's partial cases get.
     expect(toPrediction({ verdict: "safe", score: 0, flags: [], details: "", category: "SMS", coverage: "minimal" } as never)).toBe("abstain");
+  });
+});
+
+describe("minimal pack phone plans", () => {
+  // The phone plan was the one part of the SG pack nothing exercised, and all
+  // three of its fields were wrong: premiumPrefixes missing the trunk 0 (so the
+  // rule never fired), tollFreeFlag naming the NANP 800 range instead of
+  // Singapore's 1800, and a comment claiming 1800 sat in emergencyNumbers,
+  // which matches on exact equality rather than as a prefix.
+  //
+  // These are pinned per-region rather than generically because the numbering
+  // plan is the whole point: a generic "some prefix fires" assertion would have
+  // passed against every one of those bugs.
+
+  it("fires the premium-rate rule on a Singapore 1900 number", () => {
+    // The regression that made premiumFlag unreachable. analysePhone matches
+    // against "0" + the national number, so a prefix authored without the trunk
+    // 0 is compared against "01900…" and never matches.
+    const r = analysePhone("1900 112 233", "SG");
+    expect(r.lineType).toBe("premium");
+    expect(r.spoofingNotes.join(" ")).toContain("1900");
+  });
+
+  it("fires it on the same number in +65 form", () => {
+    expect(analysePhone("+65 1900 112 233", "SG").lineType).toBe("premium");
+  });
+
+  it("names Singapore's own toll-free range, not the NANP one", () => {
+    // A genuine 1800 line was being described as an "800 number" — the exact
+    // unverified regional claim this tier's rules forbid.
+    const notes = analysePhone("1800 255 0000", "SG").spoofingNotes.join(" ");
+    expect(notes).toContain("1800");
+    expect(notes).not.toMatch(/\b800 numbers\b/);
+  });
+
+  it("recognises the ScamShield helpline as an emergency number", () => {
+    expect(analysePhone("1799", "SG").lineType).toBe("emergency");
+  });
+
+  it("leaves ordinary mobiles alone", () => {
+    // Guards the premium fix against over-reaching onto normal numbers.
+    expect(analysePhone("+65 9123 4567", "SG").lineType).toBe("mobile");
   });
 });
 
