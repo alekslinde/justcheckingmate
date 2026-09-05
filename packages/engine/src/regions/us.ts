@@ -362,6 +362,15 @@ export const US: RegionDefinition = {
   // on `.com` are handled by the registrable-label rule in checkUrl and by
   // legitDomains, not by a blanket suffix exemption.
   trustedHostSuffixes: [".gov", ".mil"],
+  // The US has no second-level convention for commerce — brands are on the
+  // gTLDs directly. `.gov` and `.mil` are single-label suffixes.
+  //
+  // `gov.us` and `state.us` are deliberately absent: neither is a public
+  // suffix. The hand-written list this replaced carried both, where they
+  // matched nothing — the real US state convention is `<state>.us` (`ak.us`,
+  // `ca.us`), which the PSL does carry. Listing a non-suffix here is a silent
+  // no-op, which is why a test asserts every entry resolves.
+  brandSuffixes: ["com", "net", "org", "gov", "mil", "us", "co", "io", "me"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

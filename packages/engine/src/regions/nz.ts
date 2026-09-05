@@ -357,6 +357,7 @@ export const NZ: RegionDefinition = {
   // `kiwibank-secure-verify.co.nz` would score no brand signal at all. Genuine
   // brands there are covered by legitDomains and the registrable-label rule.
   trustedHostSuffixes: [".govt.nz", ".mil.nz"],
+  brandSuffixes: ["co.nz", "net.nz", "org.nz", "govt.nz", "mil.nz", "ac.nz", "school.nz", "nz", "com", "net", "org"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 

@@ -140,6 +140,11 @@ export const SG: RegionDefinition = {
   // exactly the domains a scammer registers. Same reasoning as `.co.uk` in the
   // GB pack and `.ca` in CA.
   trustedHostSuffixes: [".gov.sg", ".edu.sg"],
+  // Public-registry facts, which is all a `minimal` pack may assert: these are
+  // Singapore's registrable namespaces, not a judgement about which brands use
+  // which. The pack has no brand lists, so this gates nothing today — it is
+  // here so a promotion to `full` does not have to rediscover it.
+  brandSuffixes: ["com.sg", "net.sg", "org.sg", "edu.sg", "gov.sg", "sg", "com", "net", "org"],
   brandMentions: { substring: [], word: [] },
   officialSenderNames: [],
 

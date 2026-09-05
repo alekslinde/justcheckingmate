@@ -584,6 +584,9 @@ export const AU: RegionDefinition = {
   // `.gov.au` stays: government registration is genuinely eligibility-verified,
   // and it is the suffix the impersonated agencies actually use.
   trustedHostSuffixes: [".gov.au"],
+  // Where Australian brands actually register: the gated government namespace,
+  // the open commercial ones, and the global gTLDs every brand also uses.
+  brandSuffixes: ["com.au", "net.au", "org.au", "gov.au", "edu.au", "asn.au", "id.au", "au", "com", "net", "org"],
   brandMentions: { substring: BRAND_MENTIONS, word: BRAND_MENTION_WORDS },
   officialSenderNames: OFFICIAL_SENDER_NAMES,
 
