@@ -251,6 +251,36 @@ and checked each gap against source.
   longer true — it was corrected in c9872ba's wake and now points at
   `packages/engine/src/`. Item removed.
 
+**2026-09-05, later still — code review fixes.** Seven findings on the gap work,
+six confirmed against the real engine and all fixed. Suite 2115 passing.
+
+- `SMALL_FEE` matched a *prefix* of a number, inverting the rule: "$1,250.00"
+  read as 1 and "$1500" as 15, so the largest demands were flagged as "too small
+  to question". Now bounded on both ends. The original "ignores a large fee"
+  test passed only because its `$450` fixture truncated to 45 — a test that
+  could not fail; replaced with figures that cannot truncate into range.
+- `admin(?:in)?\s+fee` was a typo matching a nonexistent "adminin fee" and
+  missing "administration fee", the wording the lure uses.
+- Fee framing accepted a bare billing line item, so a Netflix renewal notice
+  scored 20/suspicious carrying the lure flag. Release-fee vocabulary now fires
+  alone; everyday billing words need an explicit payment ask alongside.
+- `"startrack"` and `"aupost"` in the *substring* brand list fired inside longer
+  innocent labels (mystartrack.com, aupostal-services.com — both +45). Moved to
+  `TYPOSQUAT_WORD_BRANDS` for separator-boundary matching, the same treatment
+  the pack already gives "velocity" and "ahm".
+- Smart-quote apostrophes: handsets send U+2019 and NFKC does not fold it, so
+  all 49 apostrophe-bearing pack phrases missed real input. Fixed centrally in
+  `normaliseUnicode` (`urlSanitizer.ts`) rather than by respelling entries —
+  a pre-existing pack-wide gap the gap-4 phrases inherited.
+- New tests `await`-ed the synchronous `checkSms`. Removed.
+- One reviewer case did not reproduce: the Uber Eats receipt scored 0, not
+  suspicious. The Netflix case did, so the framing fix stands regardless.
+
+Two of these were caught by the new tests rather than the reviewer: a
+sentence-ending "$3.20." was rejected by the first boundary fix, and the
+smart-quote test initially asserted against `checkSms`, which sits *below* the
+normalisation layer — normalisation is applied at `analyzeContent`.
+
 **2026-09-05, later — gaps 2, 3 and 4 implemented** on
 `feat/verdict-artifact-gaps`. Full suite 2105 passing (13 new tests), lint and
 `tsc --noEmit` clean.

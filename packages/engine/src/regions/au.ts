@@ -394,9 +394,14 @@ const TYPOSQUAT_BRANDS = [
   // auspost-redelivery.secure-track.top matches on the substring pass even
   // though the brand sits in a subdomain rather than the registrable label.
   //
-  // "startrack" is Australia Post's courier arm and a live lure brand. "aupost"
-  // is a deliberate near-miss: a one-character elision squatters register.
-  "auspost", "australiapost", "startrack", "aupost",
+  // Only the two long, distinctive spellings go in the substring list.
+  // "startrack" (Australia Post's courier arm) and "aupost" (the one-character
+  // elision squatters register) are NOT here: as substrings they fire inside
+  // longer labels — "start"+"rack" makes mystartrack.com a +45 brand hit, and
+  // aupostal-services.com the same. That is the failure mode this file already
+  // documents for "velocity" and "ahm", so they go in the word list below and
+  // are matched on separator boundaries instead.
+  "auspost", "australiapost",
 ];
 
 // Brands too short for substring matching in a hostname. Previously excluded
@@ -427,7 +432,13 @@ const TYPOSQUAT_BRANDS = [
 // velocityglobal.com and the program's own velocityfrequentflyer.com. As a label
 // word it still catches "velocity-points-login.cyou" — the shape squats use —
 // while leaving longer legitimate labels alone.
-const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "velocity"];
+// "startrack" and "aupost" are here for length-independent reasons: both are
+// long enough to survive substring matching in principle, but both contain a
+// shorter word boundary that longer innocent labels reproduce (mystartrack.com,
+// aupostal-services.com). Boundary matching still catches the squat shape —
+// "startrack-delivery.top", "aupost-redelivery.cyou" — which is what the lure
+// actually registers.
+const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "velocity", "startrack", "aupost"];
 
 // Consumer (non-government) brands impersonated in SMS bodies.
 const BRAND_MENTIONS = [

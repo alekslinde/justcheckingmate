@@ -1956,6 +1956,25 @@ describe("Australia Post brand impersonation (gap 3)", () => {
     expect(r.verdict).toBe("safe");
   });
 
+  it.each([
+    "https://mystartrack.com/x",
+    "https://aupostal-services.com/x",
+  ])("does not fire inside a longer innocent label: %s", (url) => {
+    // "startrack" and "aupost" are matched on separator boundaries, not as
+    // substrings: "start"+"rack" and "aupostal" would otherwise be +45 brand
+    // hits. Same failure mode the pack documents for "velocity" and "ahm".
+    const r = checkUrl(url, undefined, "AU");
+    expect(r.flags.some((f) => f.includes("Impersonates"))).toBe(false);
+  });
+
+  it.each([
+    "http://startrack-delivery.top/x",
+    "http://aupost-redelivery.cyou/x",
+  ])("still catches the squat shape on a boundary: %s", (url) => {
+    const r = checkUrl(url, undefined, "AU");
+    expect(r.flags.some((f) => f.includes("Impersonates"))).toBe(true);
+  });
+
   it("does not disturb a genuine Australia Post email", () => {
     // Regression guard. Adding the brand to the URL checker's list must not
     // leak into BRAND_MENTIONS, which scores brand names in message bodies —
@@ -1974,13 +1993,13 @@ describe("Australia Post brand impersonation (gap 3)", () => {
 describe("small-fee payment lure (gap 2)", () => {
   // The amount is the signal: a sum too small to argue with, so the card
   // details entered to pay it are the actual take.
-  it("scores a token fee attached to a payment demand", async () => {
-    const r = await checkSms(ARTIFACT_SAMPLE, undefined, "AU");
+  it("scores a token fee attached to a payment demand", () => {
+    const r = checkSms(ARTIFACT_SAMPLE, undefined, "AU");
     expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(true);
   });
 
-  it("matches a written fee without a currency symbol", async () => {
-    const r = await checkSms(
+  it("matches a written fee without a currency symbol", () => {
+    const r = checkSms(
       "Your package is waiting. A redelivery fee of 1.99 is required.",
       undefined,
       "AU",
@@ -1988,14 +2007,37 @@ describe("small-fee payment lure (gap 2)", () => {
     expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(true);
   });
 
-  it("ignores a large fee, which is not this lure", async () => {
+  it.each([
+    "Your parcel requires a customs fee of $450 to be released.",
+    "Your parcel requires a customs fee of $1500 to be released.",
+    "Invoice due: please pay the outstanding customs fee of $1,250.00 today.",
+  ])("ignores a large fee, which is not this lure: %s", (text) => {
     // A big number reads as a scam unaided and trips the existing money rules;
     // the "too trivial to question" property is what this signal is about.
-    const r = await checkSms(
-      "Your parcel requires a customs fee of $450 to be released.",
-      undefined,
-      "AU",
-    );
+    //
+    // The last two exist because the first passed for the wrong reason. The
+    // original pattern matched a PREFIX of the number, so "$450" was read as
+    // 45 and "$1,250.00" as 1 — the largest demands were the ones called too
+    // small to question. Whole-number matching is what these pin.
+    const r = checkSms(text, undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(false);
+  });
+
+  it("matches an administration fee, the wording the lure actually uses", () => {
+    // "admin(?:in)?" was a typo: it matched a nonexistent "adminin fee" and
+    // missed this.
+    const r = checkSms("Your parcel is held pending an administration fee of $3.20.", undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(true);
+  });
+
+  it.each([
+    "Your Netflix subscription renews on the 3rd. Monthly service fee $7.99.",
+    "Your Uber Eats order: food $24.00, delivery fee $3.99, service fee $2.50. Enjoy!",
+  ])("leaves an everyday billing line item alone: %s", (text) => {
+    // A named cost the reader already agreed to is not a demand to pay now to
+    // release something. Without this split the Netflix notice scored 20 and
+    // carried the lure flag.
+    const r = checkSms(text, undefined, "AU");
     expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(false);
   });
 
@@ -2003,28 +2045,42 @@ describe("small-fee payment lure (gap 2)", () => {
     "Your coffee subscription is $9.99 a month, thanks for joining!",
     "Thanks! Your order total was $12.50 and will ship Tuesday.",
     "Reminder: your appointment is at 2.30 tomorrow.",
-  ])("leaves ordinary commerce alone: %s", async (text) => {
+  ])("leaves ordinary commerce alone: %s", (text) => {
     // A price is not a payment demand — the fee framing is what separates them.
-    const r = await checkSms(text, undefined, "AU");
+    const r = checkSms(text, undefined, "AU");
     expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(false);
     expect(r.verdict).toBe("safe");
   });
 });
 
 describe("return-threat urgency phrasing (gap 4)", () => {
-  it("reads the deadline's consequence as urgency", async () => {
+  it("reads the deadline's consequence as urgency", () => {
     // Asserted on its own rather than through the artifact fixture: that sample
     // trips four urgency phrases and the flag quotes only the first three, so
     // the row it renders is no evidence either way about this one.
-    const r = await checkSms("Pay now or it's returned to the depot.", undefined, "AU");
+    const r = checkSms("Pay now or it's returned to the depot.", undefined, "AU");
     const urgency = r.flags.find((f) => f.startsWith("Urgency language detected"))!;
     expect(urgency).toContain("or it's returned");
   });
 
-  it("leaves a completed return-to-sender notice alone", async () => {
+  it("matches the smart-quote apostrophe a real phone sends", async () => {
+    // Handsets substitute U+2019 for a typed apostrophe, and NFKC does not fold
+    // it — so every pack phrase spelled with an ASCII apostrophe (49 of them)
+    // missed real input until normaliseUnicode folded quotes too.
+    //
+    // Asserted through analyzeContent, not checkSms: normalisation is applied
+    // at the entry point, so a direct checkSms call sits below the fold and
+    // would test the wrong layer.
+    const cards = await analyzeContent("Pay now or it\u2019s returned to the depot.", undefined, "AU");
+    const urgency = cards[0].result.flags.find((f) => f.startsWith("Urgency language detected"));
+    expect(urgency).toBeDefined();
+    expect(urgency!).toContain("or it's returned");
+  });
+
+  it("leaves a completed return-to-sender notice alone", () => {
     // A real carrier reports an outcome; the lure threatens one to force a
     // payment. Only the threat carries a deadline.
-    const r = await checkSms(
+    const r = checkSms(
       "Your parcel was returned to sender as the address was incomplete.",
       undefined,
       "AU",

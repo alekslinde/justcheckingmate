@@ -899,19 +899,46 @@ export function checkSms(
   // that gets paid without a second thought. Capped at $20 — above that the
   // "too trivial to question" property stops holding.
   //
-  // Requires fee/pay framing near the amount, so ordinary commerce doesn't
-  // match: "your coffee was $4.50" and "$9.99 a month" name a price without
-  // demanding a payment to release something. The tactic layer already lights
-  // "Unusual payment" for the fee wording (signalTactics pattern 5); this is
-  // the evidence row underneath it, which was missing.
+  // The amount must be matched WHOLE. A pattern that reads a prefix inverts the
+  // rule: "$1,250.00" matched as "$1" and "$1500" as "$15", so the largest
+  // demands were the ones flagged as too small to question. Hence the boundary
+  // on both ends — no thousands separator, no further digit, and no bare
+  // trailing digits after a decimal group. ("$450" truncating to 45 is why the
+  // first large-fee test passed while the rule was broken; it now uses figures
+  // that cannot truncate into range.)
+  //
+  // The lookahead rejects a following digit or comma, and a period only when a
+  // digit follows it — so "$3.20." ending a sentence still matches, while
+  // "$1,250.00" and "$1500" do not.
   //
   // Deliberately does NOT require a currency symbol to be adjacent — "a fee of
   // 2.15" and "$2.15 customs fee" are the same lure — but it does require a
   // decimal or a symbol somewhere, since a bare "2" in prose is usually a count.
-  const SMALL_FEE = /(?:[$£€]\s?(\d{1,2}(?:\.\d{2})?)|\b(\d{1,2}\.\d{2})\b)/;
-  const feeFraming = /\b(?:customs|import|admin(?:in)?|release|redelivery|delivery|shipping|processing|handling|service|small)\s+fee\b|\bfee\s+(?:of|is|due)\b|\bpay\b[^.]{0,40}\bfee\b|\bfee\b[^.]{0,40}\bpay\b/i;
+  const SMALL_FEE = /(?:[$£€]\s?(\d{1,2}(?:\.\d{2})?)|\b(\d{1,2}\.\d{2}))(?![\d,]|\.\d)/;
+
+  // The framing must be a DEMAND, not a line item. "delivery fee $3.99" on a
+  // food order and "monthly service fee" on a subscription name a cost the
+  // reader has already agreed to; the lure asks them to pay something now to
+  // release something they are waiting on. So the bare "<word> fee" alternative
+  // is limited to the deliverable-release vocabulary, and the everyday billing
+  // words (delivery, service, handling, shipping) are accepted only alongside an
+  // explicit pay/release ask. Without this split a Netflix renewal notice scored
+  // 20/suspicious carrying the lure flag.
+  //
+  // "admin(?:in)?" was a typo — it matched the nonexistent "adminin fee" and
+  // missed "administration fee", which is the wording the lure actually uses.
+  const RELEASE_FEE = /\b(?:customs|import|admin(?:istration)?|clearance|release|redelivery|re-?delivery|processing|small)\s+fees?\b/i;
+  const BILLING_FEE = /\b(?:delivery|shipping|handling|service)\s+fees?\b/i;
+  const PAYMENT_ASK = /\b(?:pay|paid|payment|settle|clear|release|unlock|confirm)\b/i;
+  const feeFraming =
+    RELEASE_FEE.test(lower) ||
+    (BILLING_FEE.test(lower) && PAYMENT_ASK.test(lower)) ||
+    /\bfees?\s+(?:of|is|due)\b/i.test(lower) ||
+    /\bpay\b[^.]{0,40}\bfees?\b/i.test(lower) ||
+    /\bfees?\b[^.]{0,40}\bpay\b/i.test(lower);
+
   const feeAmount = SMALL_FEE.exec(text);
-  if (feeAmount && feeFraming.test(lower)) {
+  if (feeAmount && feeFraming) {
     const amount = parseFloat(feeAmount[1] ?? feeAmount[2] ?? "");
     if (Number.isFinite(amount) && amount > 0 && amount <= 20) {
       sig.add(
