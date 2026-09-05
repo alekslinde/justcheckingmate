@@ -3,18 +3,34 @@ import CheckStage from "@/components/CheckStage";
 import HomeHero from "@/components/HomeHero";
 import RadarTeaser from "@/components/RadarTeaser";
 import { resolveRegion } from "@/lib/regionResolver";
+import { getStats } from "@/lib/reportStore";
 
 // Region comes from request headers, so this page is per-request regardless.
-// The check flow is client-side and the stats bar fetches at runtime, so little
-// was being served statically here in any case.
+// The check flow is client-side, so little is served statically here in any
+// case.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const region = resolveRegion(await headers());
 
+  // Resolved here rather than fetched by StatsBar on mount. This render is
+  // already happening per visit, so reading two counter rows inside it costs
+  // nothing extra — while the client fetch it replaces was a second serverless
+  // invocation per homepage view, which is the free tier's binding limit.
+  //
+  // Failure is non-fatal by design: the bar renders empty and the page is
+  // unaffected. A stats widget must never be able to take the check flow down
+  // with it, which is the actual product.
+  let stats: { checks: number; reports: number } | null = null;
+  try {
+    stats = await getStats();
+  } catch {
+    stats = null;
+  }
+
   return (
     <main className="max-w-[1180px] mx-auto px-5 sm:px-8 py-8 sm:py-10 space-y-6">
-      <HomeHero />
+      <HomeHero stats={stats} />
 
       {/* The fold holds exactly two things: paste it here, or forward it from
           your mail app. They are alternatives, so they sit side by side rather

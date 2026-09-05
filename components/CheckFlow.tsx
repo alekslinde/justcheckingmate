@@ -844,6 +844,15 @@ export default function CheckFlow({ initialContent = "", surface = "web", onStep
       // pausing on a tick before showing it would be padding the very wait the
       // panel exists to explain.
       dispatch({ type: "check-succeeded", region: dispatchRegion ?? undefined });
+      // The homepage counter reads its numbers from the server render, so it
+      // has no way to know a check just moved one.
+      //
+      // Fired on re-checks too, because /api/check increments on every call —
+      // it has no notion of a re-check, so the count really does move again.
+      // Skipping it here would show a number the server has already changed.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("veriguard:check-complete"));
+      }
       if (!isRecheck) goForward("result");
     } catch (err) {
       const limited = err instanceof CheckRequestError && err.kind === "rate_limited";
