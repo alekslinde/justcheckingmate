@@ -15,10 +15,10 @@ There's no input-type picker to fuss with. **The app works out what you gave it*
 
 Under the hood it runs:
 
-- **Links** — checks URLs against a live malware/phishing blocklist ([URLhaus](https://urlhaus.abuse.ch), from abuse.ch), URL-shortener expansion, suspicious TLDs, IP-address hosting, typosquatted AU brands, and phishing keywords. Defanged links (`hxxp://evil[.]tk`) and schemeless ones (`evil.tk/login`) are recognised too, so sharing a link safely doesn't cost you the check.
+- **Links** — checks URLs against a live malware/phishing blocklist ([URLhaus](https://urlhaus.abuse.ch), from abuse.ch), URL-shortener expansion, suspicious TLDs, IP-address hosting, typosquatted brand domains, and phishing keywords. Defanged links (`hxxp://evil[.]tk`) and schemeless ones (`evil.tk/login`) are recognised too, so sharing a link safely doesn't cost you the check.
 - **Text messages** — urgency language, reward bait, requests for sensitive info, embedded suspicious links, and government-agency impersonation.
 - **Emails** — all the message checks plus sender-domain analysis, generic greetings, and **email authentication** (SPF / DKIM / DMARC) parsed straight from the raw headers. Forwarded emails are unwrapped back to the original scam, and **tracking pixels** are detected and flagged.
-- **Phone numbers** — line-type detection (mobile / fixed / VoIP / premium / free-call), AU premium-rate ranges, wangiri (one-ring) and premium-rate country risk, and spoofing-risk notes.
+- **Phone numbers** — line-type detection (mobile / fixed / VoIP / premium / free-call), region-specific premium-rate ranges, wangiri (one-ring) and premium-rate country risk, and spoofing-risk notes.
 
 **Screenshots and QR codes:** drop or upload an image and it'll try to decode a QR code first (client-side via jsQR), then fall back to OCR (Tesseract.js) to pull out the text — then run all the checks above on whatever it finds. **Both run on your own device** — the image never leaves it. A server-side OCR fallback exists only for browsers that can't run the WASM engine.
 
@@ -55,7 +55,7 @@ Seen something suspicious? Lodge a report so others can be warned. Submissions a
 A [`/learn`](app/learn/page.tsx) guide covering how to spot scams, how email authentication (SPF/DKIM/DMARC) works, common tactics, what to do if you've been caught, and where to report.
 
 ### Interface language
-The interface ships one neutral English voice. Internally this is two independent axes: **locale** (the language — `en` today) and **tone** (the register — one value today). The "Aussie" register was retired with the rebrand; the axis is kept because "Aussie" was never a language, it was English in a regional voice, and splitting the axes means a future non-English locale doesn't have to choose between being a language or being a voice. Strings live in [`messages/`](messages/) as `en.normal.json`, the complete base bundle.
+The interface ships one neutral English voice. Internally the copy is keyed on two independent axes — **locale** (the language, `en` today) and **tone** (the register, one value today) — so language and regional voice stay separate concerns. Strings live in [`messages/`](messages/) as `en.normal.json`, the complete base bundle.
 
 ---
 
