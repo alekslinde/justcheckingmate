@@ -173,29 +173,76 @@ required — coverage varies by region and changes what a clean result means.
 `category` is free text, because new lures appear faster than an enum can be
 maintained, and slicing recall by it is where regressions actually surface.
 
-## Thresholds
+## Thresholds — withdrawn
 
-`thresholds.json` gates three slice kinds — `region`, `category` and `type` —
-and every printed slice is checked against its section. Category matters most:
-overall recall can hold steady while one lure family collapses, so gating only
-by region would let that ship.
+**This project does not quote a false-positive rate, a recall figure, or any
+aggregate detection metric.** Every gate in `thresholds.json` is `null`, and
+that is the settled position rather than a gap waiting to be filled.
 
-**The `fpr` gates are set where the engine currently measures (0.3), not where
-they should be (0.02).** That gap is deliberate and worth understanding. A
-consumer scam checker that flags one benign message in four burns trust fast, so
-2% is the real target. But gating at the target today leaves the eval
-permanently red, which makes the baseline ratchet unusable and trains everyone
-to ignore the exit code. Holding the line at today's behaviour keeps the ratchet
-sharp: any drift worse than now fails, and every false positive is still printed
-by name on each run. Tighten toward `_fpr_target` as the `suspicious` tier is
-tuned — the sensitivity table above shows that tier carries all of them.
+The corpus eval is a **ratchet, not a measurement**. `baseline.json` records a
+per-case prediction, and a run fails when a case that was right becomes wrong.
+That question needs no statistical validity: it compares this run against the
+previous run, not against a claim about the world.
+
+### Why they went
+
+The gates sat at 0.3 FPR against a stated target of 0.02 — deliberately, so the
+run would not be permanently red. **That gap was the tell.** A gate nobody
+expects to bind is not a standard, and the longer it sat in the repo the likelier
+one of its numbers ended up quoted somewhere it could not be supported.
+
+What settled it was working out what would actually *breach* each gate at the
+corpus sizes we have:
+
+| Slice | Scam cases | Recall gate | Misses to breach |
+|---|---|---|---|
+| AU | 26 | 0.90 | 3 |
+| GB | 2 | 0.85 | 1 |
+| US | 1 | 0.85 | 1 |
+| NZ | 1 | 0.85 | 1 |
+| IE | 0 | 0.85 | unreachable |
+
+**One missed case breaches GB, US and NZ.** Those gates were already ratchets —
+"never regress on this one case" — wearing a percentage that implied a
+population estimate. `baseline.json` does that job properly and names the case
+that flipped. IE's gate could never fire at all. Only AU has enough cases for a
+gate to mean anything, and one region's coarse gate is not worth the misreading
+the other five invite.
+
+### What does the gating now
+
+Three mechanisms, none of which needs a labelled population estimate:
+
+| Mechanism | Question it answers |
+|---|---|
+| `baseline.json` | Did a case that was right become wrong? |
+| Metamorphic relations | Can the engine be talked out of a verdict? |
+| Region relations | Is a pack leaking, or suppressing a base signal? |
+
+The last two need no labels at all, which is why they scale to regions we have
+no corpus for — and that matters more as `minimal` packs make breadth cheap.
+
+### Reading a run
+
+The tables still print recall, FPR and confidence intervals per slice. **They are
+diagnostics, not standards**, and the intervals are the reason: a slice reading
+`100.0% [21-100]` is telling you it knows almost nothing. Read the interval
+before the number, and carry neither into a claim.
+
+### What would reopen this
+
+A corpus with enough labelled cases per slice to distinguish the numbers being
+gated — mechanical stratified sampling from `reports` plus blind labelling,
+roughly a day of work no tooling removes. That is **blocked upstream**:
+submission volume is too low to stratify. If it changes, the honest move is to
+re-derive gates from the new corpus, not to un-`null` these.
 
 ## Known limits
 
-- **The seed corpus is tiny (45 cases) and mostly handwritten.** Its numbers are
-  a smoke test, not a measurement — the widest gated interval is ±19pp, and the
-  run says so on every invocation. The thresholds in `thresholds.json` are
-  placeholders until the corpus is large enough to support them.
+- **The corpus is small and mostly handwritten.** Its numbers are a smoke test,
+  not a measurement, and the run says so on every invocation. This is the limit
+  that decided the thresholds question: rather than leave placeholder gates in
+  place, they were withdrawn — see *Thresholds — withdrawn* above.
 - **Intervals describe sampling error only.** They assume cases are drawn
   independently from the population being measured, and the seed corpus is
   hand-picked rather than sampled — so the true uncertainty is *wider* than the
@@ -390,12 +437,17 @@ number anyone answers.
 fixed line raises "easy to spoof". The note is educational and true, but it
 lands as a *verdict* on any real number a user checks.
 
-## AU false-positive rate
+## The false-positive work, and what it did
 
-AU measures **0.0% [0-12]** against 29 benign cases, down from 41.4%.
+**Read this as a record of what changed in the engine, not as a measurement.**
+The numbers below are what the corpus showed before and after a specific piece
+of work; the interval on the "after" figure reaches 12% against 29 benign cases,
+which is why the thresholds were withdrawn and why neither number belongs in a
+claim. What is durable here is the *diagnosis* — three signals that fired on a
+message's subject rather than on anything wrong with it.
 
-The drop is three signals that fired on a message's *subject* rather than on
-anything wrong with it, all found by the sender-template cases:
+Against the AU benign corpus the flagged share went from 41.4% to 0.0% [0-12].
+All three causes were found by the sender-template cases:
 
 - **Agency mention** (+25) fired on any mention, including genuine mail from
   that agency. It now needs corroboration — a link, a callback number, urgency,
@@ -419,9 +471,9 @@ told it was dodgy. The caution still reaches the reader through `spoofingNotes`;
 it just no longer scores. What stays scored is a range unusual for its claimed
 purpose — VoIP, premium rate, wangiri, elevated-volume origins.
 
-Recall is unchanged at 100%. The gates stay at 0.3 as a drift ceiling rather
-than a target — see `thresholds.json`. The interval still reaches 12%, so 0.0%
-is 29 cases' worth of evidence rather than a settled number.
+Recall was unchanged by the fix. The interval on the resulting figure reaches
+12%, i.e. 29 cases' worth of evidence rather than a settled number — which is
+why the gates that once quoted it are gone. See *Thresholds — withdrawn*.
 
 Fixing these also surfaced that six phrase-list matchers used a raw `includes()`
 instead of `mentions()`, so they carried the whitespace bug fixed earlier for
