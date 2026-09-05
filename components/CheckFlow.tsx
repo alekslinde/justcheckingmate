@@ -373,7 +373,7 @@ function CheckPipeline({
  * reassuring value is also the default one; naming the claim forces each caller
  * to say which of them is true for the phase it is actually in.
  */
-export type PrivacyClaim = "on-device" | "on-device-done" | "sending" | "sent" | "server-ocr";
+type PrivacyClaim = "on-device" | "on-device-done" | "sending" | "sent" | "server-ocr";
 
 const PRIVACY_COPY = {
   // Reading a screenshot, or reading and parsing pasted text: genuinely local.
