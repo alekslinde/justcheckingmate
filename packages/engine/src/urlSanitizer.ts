@@ -195,6 +195,77 @@ export function hasConfusables(text: string): boolean {
   return normaliseUnicode(text) !== text;
 }
 
+/**
+ * Cyrillic and Greek ranges — the two scripts that supply Latin homoglyphs.
+ *
+ * Deliberately narrow. These are the scripts whose letters render identically
+ * to Latin ones in common fonts: Cyrillic а/е/о/р/с/х and Greek ο/ν/α do the
+ * work in homoglyph phishing. Widening this to "any non-Latin script" would
+ * flag ordinary Japanese, Arabic or Thai domains, which is both wrong and
+ * discriminatory — those scripts share no shapes with Latin, so a reader cannot
+ * be misled by them the way this guards against.
+ */
+const CONFUSABLE_SCRIPTS = /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F]/;
+
+/**
+ * The hostname as written, before `new URL()` punycodes it.
+ *
+ * Shared by the mixed-script check and the hyphen counter, which both need the
+ * pre-encoding form for the same reason: punycode is all-ASCII and uses hyphens
+ * structurally, so the encoded string answers neither "what script is this" nor
+ * "how many hyphens did the registrant choose".
+ *
+ * Returns "" when no host can be recovered, which every caller treats as "no
+ * signal" rather than as evidence either way.
+ */
+function rawHostname(raw: string): string {
+  const m = /^(?:[a-z][a-z0-9+.-]*:\/\/)?(?:[^/?#@\s]*@)?([^/?#\s:]+)/i.exec(raw.trim());
+  return m?.[1] ?? "";
+}
+
+/**
+ * How many hyphens the hostname actually shows, counted before encoding.
+ *
+ * Punycode uses hyphens as structure — "münchen.de" encodes to "xn--mnchen-3ya"
+ * — so counting them in the encoded form invents hyphens the reader cannot see.
+ * That produced a "Heaps of hyphens in the domain (3)" flag on hosts displaying
+ * none, which is a false explanation attached to a real detection.
+ *
+ * Skipping the rule for internationalised hosts was the first fix and was too
+ * blunt: it also discarded the *real* hyphens in "münchen-bank-secure-login.de",
+ * so one accented letter shed the signal its ASCII twin still scored. Counting
+ * on the pre-encoding string keeps both halves honest.
+ */
+export function displayedHyphenCount(raw: string): number {
+  return (rawHostname(raw).match(/-/g) ?? []).length;
+}
+
+/**
+ * Whether a URL's hostname mixes Latin letters with Cyrillic or Greek ones
+ * inside a single label — the homoglyph attack, as distinct from an ordinary
+ * internationalised domain.
+ *
+ * **Must be called on the RAW input, before normaliseForAnalysis.** `new URL()`
+ * punycodes a non-ASCII hostname on parse, and the encoded form carries no
+ * script information: "аuspost-redelivery.bond" (Cyrillic а) becomes
+ * "xn--uspost-redelivery-r4n.bond", in which nothing is Cyrillic any more.
+ * Decoding it back would need a punycode implementation, and the engine has no
+ * `node:` imports by design — it has to bundle for a browser — so the signal is
+ * taken from the string while it still exists.
+ *
+ * The mixing is what matters, not the presence of non-Latin characters.
+ * "münchen.de", "bücher.de" and a wholly Japanese domain are ordinary names;
+ * none mixes a confusable script into a Latin word, because a homoglyph only
+ * has value when the rest of the word still reads as the brand being
+ * impersonated. Scoring plain IDNs as attacks would penalise people for their
+ * language, which is the worst place for this engine to be wrong.
+ */
+export function hasMixedScriptHost(raw: string): boolean {
+  return rawHostname(raw)
+    .split(".")
+    .some((label) => /[a-z]/i.test(label) && CONFUSABLE_SCRIPTS.test(label));
+}
+
 // ── Normalise for analysis ────────────────────────────────────────────────────
 // Closes common evasion tricks before pattern matching:
 //   - Lowercase hostname (checkers are case-insensitive but lists are lowercase)

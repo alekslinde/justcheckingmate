@@ -1,5 +1,5 @@
 import { parseEmailHeaders, analyseEmailIdentities, domainOf } from "./emailHeaders";
-import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged, normaliseUnicode } from "./urlSanitizer";
+import { extractIdentifiers, normaliseForAnalysis, defang, refang, isDefanged, normaliseUnicode, hasMixedScriptHost, displayedHyphenCount } from "./urlSanitizer";
 import { detectType } from "./detectType";
 import { analysePhone, PhoneIntel } from "./phoneIntel";
 import { isShortened, expandUrl, type ExpandFetch } from "./urlExpander";
@@ -416,7 +416,24 @@ const TWO_PART_SUFFIXES = new Set([
 // URL checker
 // ────────────────────────────────────────────────────────────────────────────
 
-export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionInput): CheckResult {
+export function checkUrl(
+  raw: string,
+  blocklist?: Set<string>,
+  region?: RegionInput,
+  /**
+   * The URL as the user actually wrote it, before normaliseForAnalysis.
+   *
+   * Only the script-mixing check needs this. `new URL()` punycodes a non-ASCII
+   * hostname on parse, so by the time a caller has normalised — which
+   * analyzeContent does, and must, to close percent-encoding tricks — the
+   * Cyrillic or Greek characters that make a homoglyph domain detectable are
+   * gone, replaced by an all-ASCII "xn--" label.
+   *
+   * Optional so direct callers keep working: when omitted, `raw` is used, which
+   * is correct for anyone who has not normalised first.
+   */
+  original?: string,
+): CheckResult {
   const PACK = resolveRegionPack(region);
   const {
     shortenerDomains: SCAM_DOMAINS,
@@ -585,8 +602,86 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     }
   }
 
+  // ── Punycode / internationalised domain ──────────────────────────────────
+  //
+  // `new URL()` converts a non-ASCII hostname to its punycode form, so a
+  // homoglyph domain arrives here already encoded: "commbаnk.com" with a
+  // Cyrillic а becomes "xn--commbnk-6fg.com". Two consequences, both bugs
+  // before this block existed.
+  //
+  // First, nothing scored it. urlSanitizer deliberately does NOT fold Cyrillic
+  // or Greek homoglyphs to Latin — rewriting them would make the engine report
+  // the real brand's hostname while describing the scammer's site — and its
+  // comment says a mixed-script hostname "is a signal to raise, not a string to
+  // rewrite, and that belongs in the scorer". This is the scorer, and the
+  // signal was never added: a Cyrillic lookalike of a major bank scored 30.
+  //
+  // Second, and worse, the hyphen rule below counted hyphens in the ENCODED
+  // form. Punycode uses hyphens structurally, so "commbаnk.com" — a hostname
+  // displaying no hyphens at all — was reported as "Heaps of hyphens in the
+  // domain (3)". A false explanation attached to a real detection is worse than
+  // a miss here: the teaching layer is the product, and this taught a pattern
+  // that is not there.
+  //
+  // An encoded label is NOT automatically an attack, and this is the line the
+  // rule has to walk. "münchen.de", "bücher.de" and a wholly Japanese domain
+  // are ordinary internationalised names, and scoring them as suspicious would
+  // punish non-Latin scripts for being non-Latin — a false positive aimed
+  // squarely at people whose language is not English, which is the worst
+  // possible place for this engine to be wrong.
+  //
+  // What separates an attack is MIXED SCRIPT WITHIN ONE LABEL: Latin letters
+  // sitting beside Cyrillic or Greek characters that render identically to
+  // them. "commbаnk" (Cyrillic а) and "рaypal" (Cyrillic р) are mixed; "münchen"
+  // and "bücher" are Latin throughout, and "日本語" carries no Latin at all.
+  // None of the legitimate forms mix a confusable script into a Latin word,
+  // because there is no reason to — the homoglyph only has value if the rest of
+  // the word reads as the brand being impersonated.
+  //
+  // Scored against the PRE-ENCODING hostname, recovered from the raw input:
+  // `new URL()` has already punycoded it by the time `hostname` is read, and
+  // the encoded form has no script information left in it.
+  const punycodeLabels = hostname.split(".").filter((l) => l.startsWith("xn--"));
+  const isPunycode = punycodeLabels.length > 0;
+  if (isPunycode) {
+    // Tested against `raw`, the untouched argument — `input` has already been
+    // through normaliseForAnalysis, which punycodes the hostname and destroys
+    // the script information this depends on. That mismatch was a real bug: the
+    // rule worked when checkUrl was called directly and silently downgraded to
+    // the benign-IDN branch on the analyzeContent path the app actually uses,
+    // which is how it reached the metamorphic harness as a "homoglyph makes the
+    // verdict WEAKER" violation rather than as a failing unit test.
+    if (hasMixedScriptHost(original ?? raw)) {
+      sig.add(
+        "link",
+        "Mixed-script web address — this domain combines ordinary letters with Cyrillic or Greek characters that look identical to them. This is how a fake address is made to read exactly like a real one",
+        45,
+      );
+    } else {
+      // A legitimate-looking IDN. Worth naming so the reader knows the address
+      // is not plain ASCII, but not an accusation on its own.
+      sig.add(
+        "link",
+        "Internationalised domain name — this address uses non-Latin characters. That is normal for many sites, but check it against the real one if you were not expecting it",
+        10,
+      );
+    }
+  }
+
   // Excessive hyphens (scam site hallmark)
-  const hyphens = (hostname.match(/-/g) || []).length;
+  //
+  // Counted on the PRE-ENCODING hostname. Punycode uses hyphens structurally,
+  // so counting them in `hostname` invents hyphens the reader cannot see — that
+  // is what put "Heaps of hyphens in the domain (3)" on hosts displaying none.
+  //
+  // Skipping the rule outright for internationalised hosts was the first fix
+  // and was too blunt: it also discarded the REAL hyphens in
+  // "münchen-bank-secure-login.de", so a single accented letter shed a signal
+  // its plain-ASCII twin still scored. Counting on the original keeps the
+  // artefact out without handing evaders a way to switch the rule off.
+  const hyphens = isPunycode
+    ? displayedHyphenCount(original ?? raw)
+    : (hostname.match(/-/g) || []).length;
   if (hyphens >= 3) {
     sig.add("link", `Heaps of hyphens in the domain (${hyphens}) — scammers love this trick`, 20);
   }
@@ -2177,8 +2272,25 @@ const PROSE_LEFT_LABELS = new Set([
   "when", "while", "not", "no", "do", "does", "did", "go", "get", "got",
 ]);
 
-const BARE_HOST_GLOBAL =
-  /(?<![\w@.\/\\-])((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24})(\/[^\s<>"']*)?/gi;
+// Label characters include the Cyrillic and Greek ranges, not just ASCII.
+//
+// An ASCII-only class does not merely miss an internationalised host — it
+// TRUNCATES one, because the match simply starts after the offending character.
+// "www.аuspost-redelivery.bond/pay" (Cyrillic а) yielded the bare host
+// "uspost-redelivery.bond/pay": a different domain from the one in the message,
+// scored and shown to the user as though it were the link they were sent.
+//
+// The ranges mirror CONFUSABLE_SCRIPTS in urlSanitizer — the scripts that
+// supply Latin homoglyphs, which are the ones an evader reaches for. Kept
+// narrow rather than \p{L}: this pattern also decides what counts as a host in
+// ordinary prose, and matching every letter in every script would turn far more
+// sentences into candidate URLs.
+const HOST_LABEL_CHAR = "a-z0-9\\u0370-\\u03FF\\u0400-\\u04FF\\u0500-\\u052F";
+
+const BARE_HOST_GLOBAL = new RegExp(
+  `(?<![\\w@./\\\\-])((?:[${HOST_LABEL_CHAR}](?:[${HOST_LABEL_CHAR}-]*[${HOST_LABEL_CHAR}])?\\.)+[a-z]{2,24})(/[^\\s<>"']*)?`,
+  "gi",
+);
 
 /**
  * Schemeless hostnames in free text that are worth analysing as URLs.
@@ -2293,7 +2405,7 @@ function extractBareHosts(text: string, suspiciousTlds: string[]): string[] {
 async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<string>, region?: RegionInput, fetcher?: ExpandFetch): Promise<CheckResult> {
   if (!isShortened(url)) return base;
 
-  const { expandedUrl, hops } = await expandUrl(url, fetcher);
+  const { expandedUrl, rawExpandedUrl, hops } = await expandUrl(url, fetcher);
   if (!expandedUrl) {
     // Say so whenever the destination was not resolved, rather than returning a
     // verdict that reads as if it had been assessed. This covers both causes:
@@ -2308,7 +2420,21 @@ async function applyExpansion(url: string, base: CheckResult, blocklist?: Set<st
     };
   }
 
-  const destResult = checkUrl(normaliseForAnalysis(expandedUrl), blocklist, region);
+  // `expandedUrl` passed as the original for the same reason as the call sites
+  // above: normaliseForAnalysis punycodes a non-ASCII hostname, so without it
+  // a shortener resolving to a homoglyph domain reads as an ordinary IDN. The
+  // destination of a shortener is exactly where a hidden lookalike lands.
+  // `rawExpandedUrl` is the Location header as sent, before the expander's own
+  // `new URL()` resolved and punycoded it — without it the homoglyph check sees
+  // an "xn--" host with no script left to inspect, and a shortener hiding a
+  // lookalike domain scores as an ordinary IDN. Falls back to `expandedUrl` for
+  // callers that construct an ExpandResult without the field.
+  const destResult = checkUrl(
+    normaliseForAnalysis(expandedUrl),
+    blocklist,
+    region,
+    rawExpandedUrl ?? expandedUrl,
+  );
   const destDefanged = defang(expandedUrl);
   // The merged score is the worse of the two, not their sum, so neither side's
   // rows can be read as adding up to it. They are carried as evidence with no
@@ -2397,7 +2523,10 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
     // (e.g. a "www." host with no scheme), assess the whole string as a URL.
     if (urls.length === 0) {
       const normalised = normaliseForAnalysis(text);
-      const base = checkUrl(normalised, blocklist, region);
+      // `text` as well as the normalised form: normalisation punycodes a
+      // non-ASCII hostname, and the homoglyph check needs the characters it
+      // destroys. Here the whole input IS the URL, so `text` is the original.
+      const base = checkUrl(normalised, blocklist, region, text);
       const result = await applyExpansion(normalised, base, blocklist, region, options?.fetcher);
       out.push({ kind: "url", value: text, result });
     }
@@ -2409,7 +2538,9 @@ export async function analyzeContent(content: string, blocklist?: Set<string>, r
   // Expansion runs for each URL that resolves to a known shortener host.
   for (const u of urls) {
     const normalised = normaliseForAnalysis(u);
-    const base = checkUrl(normalised, blocklist, region);
+    // `u` as well as the normalised form: normalisation punycodes a non-ASCII
+    // hostname, and the homoglyph check needs the characters it destroys.
+    const base = checkUrl(normalised, blocklist, region, u);
     const result = await applyExpansion(normalised, base, blocklist, region, options?.fetcher);
     out.push({ kind: "url", value: u, result });
   }

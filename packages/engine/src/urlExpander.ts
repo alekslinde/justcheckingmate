@@ -39,6 +39,24 @@ export type ExpandFetch = (
 
 export interface ExpandResult {
   expandedUrl: string | null;
+  /**
+   * The destination as the Location header actually spelled it, before
+   * `new URL()` resolved and punycoded it.
+   *
+   * Needed because that resolution is lossy in one specific way: it encodes a
+   * non-ASCII hostname to its "xn--" form, which carries no script information.
+   * A caller scoring only `expandedUrl` therefore cannot tell a homoglyph
+   * lookalike from an ordinary internationalised domain — and the destination
+   * of a shortener is precisely where a hidden lookalike is put.
+   *
+   * Null whenever `expandedUrl` is, and optional so a caller constructing an
+   * ExpandResult by hand (tests, stubs) need not supply it — scoring falls back
+   * to `expandedUrl`, which is the pre-existing behaviour.
+   *
+   * Not for display: prefer `expandedUrl`, which is absolute and normalised.
+   * This exists for script inspection.
+   */
+  rawExpandedUrl?: string | null;
   hops: string[];
   /**
    * Why expandedUrl is null, so a caller can tell "we looked and there was
@@ -69,7 +87,7 @@ export function isShortened(url: string): boolean {
 export async function expandUrl(shortUrl: string, fetcher?: ExpandFetch): Promise<ExpandResult> {
   // No transport — report unavailability instead of pretending we looked.
   // Not cached: a client that gains a transport later must not be served this.
-  if (!fetcher) return { expandedUrl: null, hops: [], status: "unavailable" };
+  if (!fetcher) return { expandedUrl: null, rawExpandedUrl: null, hops: [], status: "unavailable" };
 
   const cacheKey = shortUrl.toLowerCase();
   const hit = cache.get(cacheKey);
@@ -85,7 +103,7 @@ async function followRedirects(
   remainingHops: number,
   fetcher: ExpandFetch,
 ): Promise<ExpandResult> {
-  if (remainingHops === 0) return { expandedUrl: null, hops: [], status: "failed" };
+  if (remainingHops === 0) return { expandedUrl: null, rawExpandedUrl: null, hops: [], status: "failed" };
 
   try {
     const res = await fetcher(url, {
@@ -96,7 +114,7 @@ async function followRedirects(
     });
 
     const location = res.headers.get("location");
-    if (!location) return { expandedUrl: null, hops: [], status: "failed" };
+    if (!location) return { expandedUrl: null, rawExpandedUrl: null, hops: [], status: "failed" };
 
     const dest = new URL(location, url).toString();
 
@@ -109,22 +127,31 @@ async function followRedirects(
       // bit.ly reputable and tell the user a malicious chain looked clean.
       // `hops` still records how far we actually got, for the multi-hop signal.
       if (remainingHops <= 1) {
-        return { expandedUrl: null, hops: [dest], status: "failed" };
+        return { expandedUrl: null, rawExpandedUrl: null, hops: [dest], status: "failed" };
       }
 
       const inner = await followRedirects(dest, remainingHops - 1, fetcher);
       if (!inner.expandedUrl) {
-        return { expandedUrl: null, hops: [dest, ...inner.hops], status: inner.status };
+        return { expandedUrl: null, rawExpandedUrl: null, hops: [dest, ...inner.hops], status: inner.status };
       }
       return {
         expandedUrl: inner.expandedUrl,
+        rawExpandedUrl: inner.rawExpandedUrl,
         hops: [dest, ...inner.hops],
         status: "expanded",
       };
     }
 
-    return { expandedUrl: dest, hops: [dest], status: "expanded" };
+    // `location` rather than `dest`: the raw header text, before new URL()
+    // resolved and punycoded it. Falls back to dest for a relative header,
+    // which cannot carry a hostname anyway.
+    return {
+      expandedUrl: dest,
+      rawExpandedUrl: /^[a-z][a-z0-9+.-]*:\/\//i.test(location) ? location : dest,
+      hops: [dest],
+      status: "expanded",
+    };
   } catch {
-    return { expandedUrl: null, hops: [], status: "failed" };
+    return { expandedUrl: null, rawExpandedUrl: null, hops: [], status: "failed" };
   }
 }
