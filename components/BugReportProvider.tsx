@@ -62,6 +62,28 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
   // the user on stale state.
   const [session, setSession] = useState(0);
 
+  // On a phone the floating chip sits right over the check input at the top of
+  // the page, so it's hidden until the reader scrolls past the fold — at which
+  // point it fades in as a compact icon (see the button below; the text label
+  // is desktop-only). The gate is mobile-only: on ≥sm there's room to spare, so
+  // the button is always shown there via `sm:` classes and this state is inert.
+  // A failure still opens the modal directly through reportFailure(), so the
+  // manual chip being tucked away never blocks the auto-report path.
+  const [scrolledPastFold, setScrolledPastFold] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      const past = window.scrollY > window.innerHeight * 0.6;
+      setScrolledPastFold((prev) => (prev === past ? prev : past));
+    };
+    onScroll(); // sync initial state (e.g. a restored scroll position)
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   const reportFailure = useCallback((action: BugAction, error?: unknown) => {
     setDiag({ action, error: errorToText(error) });
     setAuto(true);
@@ -86,14 +108,31 @@ export function BugReportProvider({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         onClick={openManual}
+        aria-haspopup="dialog"
+        // The label is desktop-only, so the accessible name comes from aria-label
+        // (it stays correct when the chip is icon-only on mobile).
+        aria-label={t("bug.button")}
         // Opaque, no backdrop-filter: mobile Safari mis-composites a fixed,
         // semi-transparent backdrop-blur element in dark mode (renders as a grey
         // block / fails to repaint on scroll). The chip sits on a near-black
         // page, so the blur added almost nothing — dropping it is the reliable fix.
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-[var(--rule)] bg-[var(--ink-2)] px-3 py-2 text-xs text-gray-300 shadow-lg hover:border-emerald-500 hover:text-emerald-400 transition-colors"
-        aria-haspopup="dialog"
+        //
+        // Sizing: a 44px round icon button on mobile (a full tap target that
+        // clears the input up top), expanding to a labelled pill on ≥sm.
+        // Reveal: on mobile it's hidden until scrolled past the fold, then fades
+        // in; on ≥sm the sm: classes force it visible regardless of scroll.
+        className={
+          "fixed bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center gap-1.5 " +
+          "rounded-full border border-[var(--rule)] bg-[var(--ink-2)] text-xs text-gray-300 " +
+          "shadow-lg transition-all duration-200 hover:border-emerald-500 hover:text-emerald-400 " +
+          "sm:h-auto sm:w-auto sm:px-3 sm:py-2 sm:opacity-100 sm:translate-y-0 sm:pointer-events-auto " +
+          (scrolledPastFold
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 translate-y-3 pointer-events-none")
+        }
       >
-        <span>{t("bug.button")}</span>
+        <BugIcon />
+        <span className="hidden sm:inline">{t("bug.button")}</span>
       </button>
       {open && (
         <BugModal key={session} diag={diag} auto={auto} onClose={() => setOpen(false)} />
@@ -322,6 +361,37 @@ function BugModal({
         )}
       </div>
     </dialog>
+  );
+}
+
+// Inline so the chip carries no external request. currentColor lets it inherit
+// the button's text colour and its hover transition for free.
+function BugIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <path d="m8 2 1.88 1.88" />
+      <path d="M14.12 3.88 16 2" />
+      <path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" />
+      <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6" />
+      <path d="M12 20v-9" />
+      <path d="M6.53 9C4.6 8.8 3 7.1 3 5" />
+      <path d="M6 13H2" />
+      <path d="M3 21c0-2.1 1.7-3.9 3.8-4" />
+      <path d="M20.97 5c0 2.1-1.6 3.8-3.5 4" />
+      <path d="M22 13h-4" />
+      <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" />
+    </svg>
   );
 }
 
