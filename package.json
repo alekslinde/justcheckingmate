@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "predev": "node scripts/copy-ocr-assets.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/copy-ocr-assets.mjs",
