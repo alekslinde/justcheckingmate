@@ -20,7 +20,7 @@ describe("matchedTactics", () => {
 
   it.each([
     ["urgency", "Urgency language detected: \"account suspended\", \"verify now\"", 1],
-    ["impersonation", 'Looks like it\'s impersonating "mygov" — classic phishing move', 2],
+    ["impersonation", 'Looks like it\'s Impersonates "mygov" — classic phishing move', 2],
     ["reward", 'Prize/reward language: "you have won"', 3],
     ["authority", "Claims to be from a government agency — verify directly via official channels", 4],
     ["payment", "Asks you to pay a small customs fee to release the parcel", 5],
@@ -32,7 +32,7 @@ describe("matchedTactics", () => {
   it("reports several tactics from one set of signals", () => {
     const found = matchedTactics([
       sig('Urgency language detected: "within 24 hours"'),
-      sig('Looks like it\'s impersonating "Australia Post" — classic phishing move'),
+      sig('Looks like it\'s Impersonates "Australia Post" — classic phishing move'),
     ]);
     expect(found.has(1)).toBe(true);
     expect(found.has(2)).toBe(true);

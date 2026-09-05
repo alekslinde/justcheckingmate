@@ -567,15 +567,20 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     // colliding with "bagelshop".
     const labelWords = registrable.split(/[^a-z0-9]+/i).filter(Boolean);
 
+    // "Impersonates X in the domain name" rather than "looks like it's
+    // impersonating X": the reader is deciding whether to trust a link, and the
+    // hedge invited them to weigh it up. Naming *where* the brand appears is
+    // also the teachable part — the tell is the brand sitting somewhere other
+    // than the registrable label, which is exactly what the check tests.
     for (const brand of TYPOSQUAT_BRANDS.substring) {
       // The brand owning the whole label is the real site, not a squat.
       if (hostname.includes(brand) && registrable !== brand) {
-        sig.add("link", `Looks like it's impersonating "${brand}" — classic phishing move`, 45);
+        sig.add("link", `Impersonates "${brand}" in the domain name — classic phishing move`, 45);
       }
     }
     for (const brand of TYPOSQUAT_BRANDS.word) {
       if (labelWords.includes(brand) && registrable !== brand) {
-        sig.add("link", `Looks like it's impersonating "${brand}" — classic phishing move`, 45);
+        sig.add("link", `Impersonates "${brand}" in the domain name — classic phishing move`, 45);
       }
     }
   }
@@ -881,6 +886,40 @@ export function checkSms(
   const urgencyHits = URGENCY_WORDS.filter((w) => mentions(lower, w));
   if (urgencyHits.length > 0) {
     sig.add("message", `Urgency language detected: "${urgencyHits.slice(0, 3).join('", "')}"`, Math.min(urgencyHits.length * 10, 35));
+  }
+
+  // Small-fee payment lure. A trivial amount — a few dollars of "customs",
+  // "redelivery" or "processing" fee — attached to a payment demand. The money
+  // is not the point: the amount is chosen to be too small to argue with, so
+  // the card details entered to pay it are the actual take.
+  //
+  // The size test is what carries the signal, which is why it is a rule of its
+  // own rather than another urgencyWords entry. A large sum reads as a scam to
+  // most people unaided and trips the existing money rules; $2.15 is the one
+  // that gets paid without a second thought. Capped at $20 — above that the
+  // "too trivial to question" property stops holding.
+  //
+  // Requires fee/pay framing near the amount, so ordinary commerce doesn't
+  // match: "your coffee was $4.50" and "$9.99 a month" name a price without
+  // demanding a payment to release something. The tactic layer already lights
+  // "Unusual payment" for the fee wording (signalTactics pattern 5); this is
+  // the evidence row underneath it, which was missing.
+  //
+  // Deliberately does NOT require a currency symbol to be adjacent — "a fee of
+  // 2.15" and "$2.15 customs fee" are the same lure — but it does require a
+  // decimal or a symbol somewhere, since a bare "2" in prose is usually a count.
+  const SMALL_FEE = /(?:[$£€]\s?(\d{1,2}(?:\.\d{2})?)|\b(\d{1,2}\.\d{2})\b)/;
+  const feeFraming = /\b(?:customs|import|admin(?:in)?|release|redelivery|delivery|shipping|processing|handling|service|small)\s+fee\b|\bfee\s+(?:of|is|due)\b|\bpay\b[^.]{0,40}\bfee\b|\bfee\b[^.]{0,40}\bpay\b/i;
+  const feeAmount = SMALL_FEE.exec(text);
+  if (feeAmount && feeFraming.test(lower)) {
+    const amount = parseFloat(feeAmount[1] ?? feeAmount[2] ?? "");
+    if (Number.isFinite(amount) && amount > 0 && amount <= 20) {
+      sig.add(
+        "message",
+        "Small-fee payment lure — a token amount like this is chosen to be too small to question, and the card details you enter to pay it are what the scam is actually after",
+        20,
+      );
+    }
   }
 
   // Address correction presented as blocking a delivery (D1 / 2026-08-29

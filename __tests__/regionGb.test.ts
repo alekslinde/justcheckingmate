@@ -226,12 +226,12 @@ describe("GB URL detection", () => {
   it("flags a DVLA typosquat", () => {
     const r = checkUrl("http://dvla-vehicle-tax-refund.top/login", undefined, "GB");
     expect(r.verdict).toBe("likely_scam");
-    expect(flagText(r)).toContain("impersonating \"dvla\"");
+    expect(flagText(r)).toContain("impersonates \"dvla\"");
   });
 
   it("flags a UK bank typosquat", () => {
     const r = checkUrl("http://barclays-secure-login.xyz", undefined, "GB");
-    expect(flagText(r)).toContain("impersonating \"barclays\"");
+    expect(flagText(r)).toContain("impersonates \"barclays\"");
   });
 
   it("does not flag a brand on its own national domain", () => {
@@ -242,8 +242,8 @@ describe("GB URL detection", () => {
 
   it("matches short brands on separator boundaries, not substrings", () => {
     // "bt" must hit bt-billing but not subtleshop; same rule as the AU "agl" case.
-    expect(flagText(checkUrl("http://bt-billing-refund.top", undefined, "GB"))).toContain("impersonating \"bt\"");
-    expect(flagText(checkUrl("https://subtleshop.com/x", undefined, "GB"))).not.toContain("impersonating");
+    expect(flagText(checkUrl("http://bt-billing-refund.top", undefined, "GB"))).toContain("impersonates \"bt\"");
+    expect(flagText(checkUrl("https://subtleshop.com/x", undefined, "GB"))).not.toContain("impersonates");
   });
 
   // Code review, finding 1 — the blocker. Trusted suffixes suppress brand
@@ -258,14 +258,14 @@ describe("GB URL detection", () => {
     ["http://secure-barclays.co.uk", "barclays"],
   ])("flags a typosquat on the open registration %s", (url, brand) => {
     const r = checkUrl(url, undefined, "GB");
-    expect(flagText(r)).toContain(`impersonating "${brand}"`);
+    expect(flagText(r)).toContain(`impersonates "${brand}"`);
     expect(r.verdict).toBe("likely_scam");
   });
 
   it("still exempts eligibility-restricted suffixes", () => {
     // .gov.uk and .nhs.uk are vetted registries, so a brand name is genuine.
     for (const url of ["https://www.hmrc.gov.uk/", "https://www.nhs.uk/"]) {
-      expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonating");
+      expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonates");
     }
   });
 
@@ -279,13 +279,13 @@ describe("GB URL detection", () => {
     "https://www.britishgas.co.uk/",
     "https://personal.natwest.com/",
   ])("does not flag the genuine site %s", (url) => {
-    expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonating");
+    expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonates");
   });
 
   it("flags a brand used as a subdomain of another registrable domain", () => {
     // The brand owns the label only on its real site; here "evil" does.
     const r = checkUrl("http://barclays.co.uk.evil.top/login", undefined, "GB");
-    expect(flagText(r)).toContain("impersonating \"barclays\"");
+    expect(flagText(r)).toContain("impersonates \"barclays\"");
   });
 
   // Code review, finding 3 — "three" was in the substring list, contradicting
@@ -294,7 +294,7 @@ describe("GB URL detection", () => {
   it.each(["https://threefold.network/about", "https://threema.ch/en"])(
     "does not flag %s as brand impersonation",
     (url) => {
-      expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonating");
+      expect(flagText(checkUrl(url, undefined, "GB"))).not.toContain("impersonates");
     },
   );
 });
@@ -413,8 +413,8 @@ describe("region isolation", () => {
   it("does not treat .com.au as trusted for a UK check, or .co.uk for an AU one", () => {
     // Each region's trusted suffixes must not leak — otherwise a typosquat
     // hides behind the other country's domain convention.
-    expect(flagText(checkUrl("http://barclays-login.com.au", undefined, "GB"))).toContain("impersonating");
-    expect(flagText(checkUrl("http://commbank-login.co.uk", undefined, "AU"))).toContain("impersonating");
+    expect(flagText(checkUrl("http://barclays-login.com.au", undefined, "GB"))).toContain("impersonates");
+    expect(flagText(checkUrl("http://commbank-login.co.uk", undefined, "AU"))).toContain("impersonates");
   });
 
   it("scopes crypto-exchange TOAD copy to the matched brand", () => {

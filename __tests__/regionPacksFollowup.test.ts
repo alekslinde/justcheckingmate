@@ -175,23 +175,23 @@ describe("US detection", () => {
     // .com is not a trusted suffix — exempting it would disable brand scoring
     // across most of the web.
     const r = checkUrl("http://irs-gov-refund-claim.com/login", undefined, "US");
-    expect(flagText(r)).toContain("impersonating");
+    expect(flagText(r)).toContain("impersonates");
     expect(r.verdict).toBe("likely_scam");
   });
 
   it("flags a Chase typosquat but not the genuine site", () => {
     expect(flagText(checkUrl("http://chase-secure-verify.top/login", undefined, "US")))
-      .toContain('impersonating "chase"');
+      .toContain('impersonates "chase"');
     expect(flagText(checkUrl("https://www.chase.com/", undefined, "US")))
-      .not.toContain("impersonating");
+      .not.toContain("impersonates");
   });
 
   it("matches short brands on separator boundaries, not substrings", () => {
     // "ups" must hit ups-tracking but not "startups".
     expect(flagText(checkUrl("http://ups-tracking-redelivery.top", undefined, "US")))
-      .toContain('impersonating "ups"');
+      .toContain('impersonates "ups"');
     expect(flagText(checkUrl("https://startups.com/directory", undefined, "US")))
-      .not.toContain("impersonating");
+      .not.toContain("impersonates");
   });
 
   it("does not treat 'attention' as the AT&T brand", () => {
@@ -290,13 +290,13 @@ describe("NZ detection", () => {
     // .co.nz is sold to anyone, so it must not be a trusted suffix — the same
     // trap the GB pack fell into with .co.uk.
     const r = checkUrl("http://kiwibank-secure-verify.co.nz/login", undefined, "NZ");
-    expect(flagText(r)).toContain('impersonating "kiwibank"');
+    expect(flagText(r)).toContain('impersonates "kiwibank"');
     expect(r.verdict).toBe("likely_scam");
   });
 
   it("does not flag genuine NZ brand sites", () => {
     for (const url of ["https://www.kiwibank.co.nz/", "https://www.trademe.co.nz/"]) {
-      expect(flagText(checkUrl(url, undefined, "NZ"))).not.toContain("impersonating");
+      expect(flagText(checkUrl(url, undefined, "NZ"))).not.toContain("impersonates");
     }
   });
 
@@ -304,7 +304,7 @@ describe("NZ detection", () => {
     // "ird" as a bare substring fires on ordinary English — it must be
     // word-matched only.
     expect(flagText(checkUrl("https://thirdweird.com/x", undefined, "NZ")))
-      .not.toContain("impersonating");
+      .not.toContain("impersonates");
   });
 
   it("attributes NZ area codes", () => {
@@ -396,13 +396,13 @@ describe("CA detection", () => {
     // .ca has residency requirements but is otherwise open — residency is not
     // the same eligibility bar as government status, so it is not trusted.
     const r = checkUrl("http://cra-refund-secure.ca/login", undefined, "CA");
-    expect(flagText(r)).toContain('impersonating "cra"');
+    expect(flagText(r)).toContain('impersonates "cra"');
   });
 
   it("does not treat 'craft' or 'scratch' as the CRA brand", () => {
     // "cra" as a bare substring fires on ordinary English — word-matched only.
     expect(flagText(checkUrl("https://craftshop.com/scratch", undefined, "CA")))
-      .not.toContain("impersonating");
+      .not.toContain("impersonates");
   });
 
   it("does not treat ordinary words containing 'td' as the TD brand", () => {
@@ -507,7 +507,7 @@ describe("IE detection", () => {
     // .ie relaxed its connection-to-Ireland requirement in 2018 and is now
     // effectively open, so it must not be a trusted suffix. Only .gov.ie is.
     const r = checkUrl("http://revenue-ie-refund.ie/login", undefined, "IE");
-    expect(flagText(r)).toContain("impersonating");
+    expect(flagText(r)).toContain("impersonates");
   });
 
   it("does not treat 'their' or 'receiving' as the Eir brand", () => {
@@ -519,7 +519,7 @@ describe("IE detection", () => {
 
   it("still matches Eir on a separator boundary", () => {
     expect(flagText(checkUrl("http://eir-billing-refund.top", undefined, "IE")))
-      .toContain('impersonating "eir"');
+      .toContain('impersonates "eir"');
   });
 
   it("attributes Irish area codes", () => {
@@ -605,9 +605,9 @@ describe("region isolation", () => {
   it("does not leak trusted suffixes between regions", () => {
     // Each region's trusted suffixes must not apply elsewhere — otherwise a
     // typosquat hides behind another country's domain convention.
-    expect(flagText(checkUrl("http://chase-login.com.au", undefined, "US"))).toContain("impersonating");
-    expect(flagText(checkUrl("http://kiwibank-login.co.uk", undefined, "NZ"))).toContain("impersonating");
-    expect(flagText(checkUrl("http://commbank-login.co.nz", undefined, "AU"))).toContain("impersonating");
+    expect(flagText(checkUrl("http://chase-login.com.au", undefined, "US"))).toContain("impersonates");
+    expect(flagText(checkUrl("http://kiwibank-login.co.uk", undefined, "NZ"))).toContain("impersonates");
+    expect(flagText(checkUrl("http://commbank-login.co.nz", undefined, "AU"))).toContain("impersonates");
   });
 
   it("forwards the region through checkEmail to the body scorer", () => {
@@ -642,7 +642,7 @@ describe("region isolation", () => {
     ["http://anpost.gov.co/track", "IE", "anpost"],
   ])("flags %s as impersonating despite the fake two-part suffix", (url, region, brand) => {
     const r = checkUrl(url, undefined, region);
-    expect(flagText(r)).toContain(`impersonating "${brand}"`);
+    expect(flagText(r)).toContain(`impersonates "${brand}"`);
   });
 
   it("gives the packs disjoint national brand lists", () => {
