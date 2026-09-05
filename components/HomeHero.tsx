@@ -4,7 +4,17 @@ import { useLang } from "@/lib/lang";
 import { accent } from "@/lib/richText";
 import StatsBar from "./StatsBar";
 
-export default function HomeHero() {
+/**
+ * `stats` is passed straight through to StatsBar. This component is a client
+ * component (it uses useLang), so it cannot fetch server-side itself — the
+ * homepage resolves the counters during its own render and hands them down.
+ *
+ * Required rather than optional, and deliberately so: an optional prop would
+ * let a future caller render `<HomeHero />`, type-check cleanly, and silently
+ * lose the invocation saving with nothing failing. `null` says the server tried
+ * and could not.
+ */
+export default function HomeHero({ stats }: { stats: { checks: number; reports: number } | null }) {
   const { t } = useLang();
   return (
     // Left-aligned rather than centred: the page reads as a tool with a job to
@@ -28,7 +38,7 @@ export default function HomeHero() {
       <p className="text-base sm:text-[17px] text-[var(--text-dim)] max-w-[58ch] leading-relaxed">
         {t("home.subtitle")}
       </p>
-      <StatsBar />
+      <StatsBar initial={stats} />
     </div>
   );
 }
