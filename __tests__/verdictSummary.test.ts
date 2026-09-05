@@ -298,6 +298,21 @@ describe("formatVerdictEmail — plain language & branding", () => {
     expect(email.text).not.toMatch(/don't click any links/i);
   });
 
+  it("renders the verdict meaning as dark text on a tint, not white on the accent", () => {
+    // The banner is for low-vision readers; white on the amber/green accents
+    // fails WCAG AA at body size, so the meaning must stay dark-on-pale.
+    const email = formatVerdictEmail({
+      results: [ident("url", "suspicious", "http://x.test", 40, ["Odd link"])],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    // Tint background + accent border + dark meaning text — never a solid-accent
+    // fill under white body text.
+    expect(email.html).toContain("background:#fdf6e3"); // the suspicious tint
+    expect(email.html).toContain("color:#2b3648"); // dark meaning text
+    expect(email.html).not.toContain("background:#b9770e"); // solid accent fill
+  });
+
   it("states plainly that it will never ask for anything, so it can't read as a scam", () => {
     const email = scam();
     expect(email.html).toMatch(/never ask you for passwords/i);

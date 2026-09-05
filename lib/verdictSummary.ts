@@ -136,11 +136,15 @@ export function overallCoverage(results: AnalyzedIdentifier[]): RegionCoverage {
 //   • emoji + line — the headline the reply leads with (some clients render the
 //     emoji inconsistently, so the words never depend on it).
 //   • label — two or three words that ARE the verdict, shown large in the banner
-//     so it reads at a glance without parsing a sentence.
+//     so it reads at a glance without parsing a sentence. The HTML banner leads
+//     with this; the plain-text reply leads with `line` (a fuller sentence reads
+//     better without the banner's visual weight). Both say the same thing.
 //   • meaning — one sentence saying what that verdict means in everyday terms.
-//   • accent — the banner colour; it carries the verdict for colour-sighted
-//     readers even before they read a word. accent is dark enough to sit under
-//     white text; tint is the pale wash used for the softer caveat blocks.
+//   • accent / tint — the verdict colour and its pale wash. The banner is the
+//     tint behind an accent left-border with the label in the accent colour, so
+//     the meaning sentence stays dark-on-pale and readable (white-on-accent at
+//     body size fails AA for the amber/green verdicts — the exact low-vision
+//     readers this reply is for).
 const VERDICT_HEADLINE: Record<Verdict, {
   emoji: string; line: string; label: string; meaning: string; accent: string; tint: string;
 }> = {
@@ -436,13 +440,16 @@ export function formatVerdictEmail(input: VerdictEmailInput): VerdictEmail {
     `${escapeHtml("Scam check for links, texts & emails")}</div>` +
     `</div>`;
 
-  // The verdict banner: the colour carries the answer, the big label states it
-  // in words, and the sentence under it says what that means in plain terms.
+  // The verdict banner: the accent colour (border + label) carries the answer at
+  // a glance, the big label states it in words, and the sentence under it says
+  // what that means. Kept dark-on-tint rather than white-on-accent so the 14px
+  // meaning line clears WCAG AA — white on the amber/green accents does not.
   const banner =
-    `<div style="background:${head.accent};border-radius:10px;padding:16px 18px;margin:0 0 18px">` +
-    `<div style="color:#ffffff;font-size:19px;font-weight:bold;line-height:1.3">` +
+    `<div style="background:${head.tint};border-left:5px solid ${head.accent};` +
+    `border-radius:8px;padding:14px 16px;margin:0 0 18px">` +
+    `<div style="color:${head.accent};font-size:19px;font-weight:bold;line-height:1.3">` +
     `${escapeHtml(`${head.emoji} ${head.label}`)}</div>` +
-    `<div style="color:#ffffff;font-size:14px;line-height:1.5;margin-top:6px;opacity:0.95">` +
+    `<div style="color:#2b3648;font-size:14px;line-height:1.5;margin-top:6px">` +
     `${escapeHtml(head.meaning)}</div>` +
     `</div>`;
 
