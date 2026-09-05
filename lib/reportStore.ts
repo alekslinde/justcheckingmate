@@ -43,6 +43,25 @@ const RATE_LIMIT = 4;
  */
 export const CHECK_RATE_LIMIT = 30;
 
+/**
+ * Read budget for the public feed and the stats breakdown, over
+ * RATE_WINDOW_MS — which is TEN minutes, not one.
+ *
+ * The window matters more than the number and is easy to misread: this shares
+ * `rateLimiter` with the submission and check budgets, so it inherits their
+ * 10-minute window. Sized at 60 the first time against an assumed 1-minute
+ * window, which made the real budget a tenth of the intended one and would have
+ * cut off an ordinary reader paging the feed.
+ *
+ * 240 over ten minutes is roughly one request every 2.5 seconds sustained.
+ * Browsing the submissions browser hard — paging, filtering, searching — stays
+ * comfortably under it; a loop pulling pages does not.
+ *
+ * The real saving is the edge cache on those routes; this is the floor under it
+ * for requests that miss the cache or vary their query string to defeat it.
+ */
+export const FEED_RATE_LIMIT = 240;
+
 const rateLimiter = new Map<string, number[]>();
 
 function cleanRateLimiter() {

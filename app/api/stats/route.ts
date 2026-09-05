@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { getStats, getCheckEvents, type CheckSurface, type CheckOutcome } from "@/lib/reportStore";
+import { getStats, getCheckEvents, checkAndRecordRateLimit, FEED_RATE_LIMIT, type CheckSurface, type CheckOutcome } from "@/lib/reportStore";
+import { clientIpFromHeaders } from "@/lib/geo";
+import { isSameOriginRead } from "@/lib/readGuard";
 
 // Days of history the breakdown covers when `?days=` is omitted. Four weeks is
 // enough to read a weekly rate and see a trend.
@@ -42,11 +44,50 @@ interface SurfaceSummary {
  * meaningful and isn't.
  */
 export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const wantsBreakdown = url.searchParams.get("breakdown") === "1";
+
+  // The breakdown scans check_events over a window; the default path reads two
+  // counter rows. Only the expensive one is throttled — rate-limiting the hero
+  // counters would punish ordinary visitors for the site's own page loads,
+  // which the cache below already collapses into one query per window.
+  //
+  // Same "unknown" caveat as /api/reports: keying every unidentifiable caller
+  // into one bucket would take the breakdown down for all of them at once.
+  // The breakdown is operational detail — per-surface volumes and a daily
+  // series — and the route's own header calls it opt-in so the public component
+  // "cannot start emitting operational detail by accident". Same-origin is the
+  // consistent reading of that: the default counters stay open because they are
+  // two public integers rendered in the hero, but the breakdown is not for
+  // arbitrary callers.
+  if (wantsBreakdown && !isSameOriginRead(request.headers)) {
+    return NextResponse.json(
+      { error: "The breakdown is served to this site.", code: "forbidden_origin" },
+      { status: 403, headers: { Vary: "Origin", "Cache-Control": "no-store" } },
+    );
+  }
+
+  const ip = clientIpFromHeaders(request.headers);
+  if (wantsBreakdown && ip !== "unknown" && !checkAndRecordRateLimit(`stats:${ip}`, FEED_RATE_LIMIT)) {
+    return NextResponse.json(
+      { error: "Too many requests — give it a few minutes and try again.", code: "rate_limited" },
+      // Never cached: a stored 429 would lock out every visitor behind the same
+      // CDN node, turning a per-IP limit into a site-wide outage.
+      { status: 429, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  // Read on both paths deliberately — the breakdown response spreads `...stats`
+  // into its body, so hoisting this below the branch would just duplicate it.
   const stats = await getStats();
 
-  const url = new URL(request.url);
-  if (url.searchParams.get("breakdown") !== "1") {
-    return NextResponse.json(stats);
+  if (!wantsBreakdown) {
+    // Cached at the edge. These are two integers that change slowly, and they
+    // are read on every homepage load — uncached, the site's own traffic is the
+    // main consumer of the free-tier row-read budget.
+    return NextResponse.json(stats, {
+      headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" },
+    });
   }
 
   const rawDays = url.searchParams.get("days");
@@ -103,6 +144,16 @@ export async function GET(request: Request) {
       // list is never mistaken for a quiet period.
       daily,
       truncated: rows.length > daily.length,
+    },
+  }, {
+    // Shorter than the default path: the breakdown is an operational view, so
+    // staleness is more noticeable, but it is also the expensive query and the
+    // one worth not repeating per request. Vary because the route now refuses
+    // by origin — without it the CDN would serve a cached breakdown past that
+    // guard.
+    headers: {
+      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+      Vary: "Origin",
     },
   });
 }
