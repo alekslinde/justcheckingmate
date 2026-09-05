@@ -260,6 +260,52 @@ failure and train everyone to ignore the output.
 Both are judged on the **verdict**, not the score. The score is internal and
 moves for legitimate reasons; the verdict is what the product asserts.
 
+## Region relations
+
+The two relations above transform the **content** and hold the region fixed:
+"can this message be rewritten until it slips through?". A third family, in
+`regionRelations.ts`, does the opposite — it holds the content fixed and varies
+the **region pack**.
+
+They are separated because they fail differently. A content transform finds
+evasion. A region relation finds *pack leakage*, which is the defect class the
+region programme has actually produced: four data-only packs, three defects, two
+of them in already-shipped packs. No content transform can see those, because a
+content transform never changes the pack.
+
+| Relation | Asserts | Catches |
+|---|---|---|
+| `region-invariance` | Content with no national signal scores identically under every pack | A universal signal authored into one pack instead of `base.ts` |
+| `coverage-monotonicity` | A national layer may only *add* signal, never subtract | An allowlist or suffix exemption swallowing a base detection |
+
+Both were verified by **injecting the defect they guard against**, per the
+project's standing rule that a green run is not evidence. Three findings from
+that exercise are worth recording, because each changed the design:
+
+- **Invariance compares the score, not just the verdict.** A leak scoring 10 on
+  region-neutral text still reads as `unknown` beside AU's `safe` — below the
+  20-point threshold — and would have been filed as the coverage gate working.
+  It is not: it is a national signal firing on text with no national content,
+  one edit from crossing the line.
+- **Monotonicity catches total suppression, not partial.** An exempted `.co.uk`
+  inside an ordinary scam sentence still scored 77 under GB against 27 under ZZ,
+  because the authority mention and tax urgency covered the missing brand
+  signal. The suppression was real and entirely invisible.
+- **So the open-suffix probes are bare hosts.** Stripped to the URL alone, the
+  same defect scores 25 under GB and 25 under ZZ — identical, because the
+  national layer contributed nothing. The assertion is therefore *strict
+  improvement* over `ZZ`, not merely "not worse": equality is the failure.
+
+The probes live in the harness rather than the corpus because the corpus cannot
+express them. A region-neutral fixture cannot name a national suffix by
+definition, and the corpus holds no `.co.uk` case at all — which is precisely
+how an over-broad `trustedHostSuffixes` entry survives a green run.
+
+These matter more as breadth grows. A `minimal` pack is cheap enough to add in
+bulk, and the base layer is where worldwide coverage actually comes from — but a
+base edit changes every region at once while the corpus measures six countries.
+These relations are what make that safe to do quickly.
+
 ## Reading a run
 
 There is no threshold to tune and no baseline to ratchet. A violation is a

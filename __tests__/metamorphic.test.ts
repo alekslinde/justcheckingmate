@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { TRANSFORMS } from "@/eval/metamorphic";
 import { formatSummary, type MetamorphicResult, type Violation } from "@/eval/metamorphicRunner";
+import { REGION_NEUTRAL, OPEN_SUFFIX_PROBES } from "@/eval/regionRelations";
+import { overallCoverage } from "@/lib/verdictSummary";
 import type { EvalCase } from "@/eval/schema";
 
 // The metamorphic suite gates detection changes, so it needs its own coverage
@@ -162,5 +164,58 @@ describe("formatSummary", () => {
     const v = { transform: "zero-width" } as Violation;
     const out = formatSummary(result({ applied: new Map([["zero-width", 4]]), violations: [v] }));
     expect(out).toMatch(/zero-width.*4.*1.*25\.0%/);
+  });
+});
+
+// ── Region relations ─────────────────────────────────────────────────────────
+//
+// Same reasoning as the transform registry above: these relations gate
+// detection changes, so a fixture set that quietly emptied out, or a comparison
+// that never fires, would report a clean run while checking nothing.
+
+describe("region relation fixtures", () => {
+  it("carries region-neutral fixtures", () => {
+    expect(REGION_NEUTRAL.length).toBeGreaterThan(0);
+  });
+
+  it("has unique fixture ids", () => {
+    const ids = [...REGION_NEUTRAL.map((f) => f.id), ...OPEN_SUFFIX_PROBES.map((p) => p.id)];
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps region-neutral fixtures free of national signal", () => {
+    // The fixtures only mean something if they are genuinely neutral. A
+    // currency symbol, a national phone number or a country TLD in one of these
+    // would make a legitimate regional difference look like a leak — the
+    // fixture would be the bug, and it would be reported against the engine.
+    const NATIONAL = /[£€$¥]|\+\d{1,3}\s?\d|\.(au|uk|nz|ca|ie|sg)\b/i;
+    for (const f of REGION_NEUTRAL) {
+      expect(NATIONAL.test(f.content), `${f.id} carries a national signal`).toBe(false);
+    }
+  });
+
+  it("probes open suffixes, never restricted ones", () => {
+    // The probe asserts a pack must NOT exempt the suffix. Pointing one at a
+    // genuinely restricted suffix (.gov.uk, .gov.sg) would assert the opposite
+    // of the rule and fail on correct packs.
+    for (const p of OPEN_SUFFIX_PROBES) {
+      expect(p.content, `${p.id} probes a restricted suffix`).not.toMatch(
+        /\.(gov|nhs|edu|gc)\./i,
+      );
+    }
+  });
+
+  it("ranks coverage with minimal below partial", () => {
+    // Asserted against overallCoverage itself, not a copy of its ranking. An
+    // earlier version compared a local constant that mirrored it, which could
+    // not detect the drift its own comment claimed to guard against — the real
+    // ranking could be reordered and this stayed green.
+    const at = (coverage: string) =>
+      [{ result: { verdict: "safe", score: 0, flags: [], details: "", category: "SMS", coverage } }] as never;
+    const weakest = (a: string, b: string) => overallCoverage([...at(a), ...at(b)] as never);
+
+    expect(weakest("full", "partial")).toBe("partial");
+    expect(weakest("partial", "minimal")).toBe("minimal");
+    expect(weakest("minimal", "none")).toBe("none");
   });
 });

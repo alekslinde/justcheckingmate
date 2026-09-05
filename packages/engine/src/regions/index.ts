@@ -8,6 +8,7 @@ import { US } from "./us";
 import { NZ } from "./nz";
 import { CA } from "./ca";
 import { IE } from "./ie";
+import { SG } from "./sg";
 import { REST_OF_WORLD } from "./rest-of-world";
 import type { RegionCode, RegionDefinition, RegionPack } from "./types";
 
@@ -38,6 +39,7 @@ const REGIONS: Record<RegionCode, RegionDefinition> = {
   NZ,
   CA,
   IE,
+  SG,
   ZZ: REST_OF_WORLD,
 };
 

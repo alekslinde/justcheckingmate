@@ -9,6 +9,15 @@
 //   --list                                  print the transforms and exit
 //   --json                                  machine-readable output only
 //
+// Runs two families in one pass:
+//   · CONTENT relations (metamorphic.ts) — rewrite the message, hold the region.
+//     Catches evasion.
+//   · REGION relations (regionRelations.ts) — hold the message, vary the pack.
+//     Catches pack leakage and suppressed base signals.
+// Both are reported separately because they fail for different reasons and
+// point at different files, but they gate together: either one violating is a
+// failing run.
+//
 // Exits non-zero when any relation is violated. Unlike the corpus eval there
 // is no threshold to tune and no baseline to ratchet: a violation is a
 // self-inconsistency, which is a bug rather than a trade-off someone chose.
@@ -17,7 +26,15 @@ import { join } from "node:path";
 import { loadCorpus } from "@/eval/corpus";
 import { runMetamorphic, formatSummary, formatViolations } from "@/eval/metamorphicRunner";
 import { TRANSFORMS } from "@/eval/metamorphic";
+import {
+  runRegionRelations,
+  formatRegionSummary,
+  formatRegionViolations,
+} from "@/eval/regionRelations";
 import type { SuspiciousPolicy } from "@/eval/schema";
+
+/** Region-relation ids, selectable via --only alongside transform ids. */
+const REGION_RELATION_IDS = ["region-invariance", "coverage-monotonicity"];
 
 const ROOT = process.cwd();
 const args = process.argv.slice(2);
@@ -34,6 +51,9 @@ const jsonOnly = args.includes("--json");
 
 if (args.includes("--list")) {
   for (const t of TRANSFORMS) console.log(`${t.id.padEnd(25)} ${t.relation.padEnd(10)} ${t.intent}`);
+  for (const id of REGION_RELATION_IDS) {
+    console.log(`${id.padEnd(25)} ${"region".padEnd(10)} varies the region pack, holds content fixed`);
+  }
   process.exit(0);
 }
 
@@ -43,10 +63,11 @@ if (!["flagged", "clean", "abstain"].includes(suspiciousAs)) {
 }
 
 if (only?.length) {
-  const unknown = only.filter((id) => !TRANSFORMS.some((t) => t.id === id));
+  const known = [...TRANSFORMS.map((t) => t.id), ...REGION_RELATION_IDS];
+  const unknown = only.filter((id) => !known.includes(id));
   if (unknown.length > 0) {
-    console.error(`Unknown transform(s): ${unknown.join(", ")}`);
-    console.error(`Available: ${TRANSFORMS.map((t) => t.id).join(", ")}`);
+    console.error(`Unknown relation(s): ${unknown.join(", ")}`);
+    console.error(`Available: ${known.join(", ")}`);
     process.exit(2);
   }
 }
@@ -60,14 +81,20 @@ async function main(): Promise<void> {
   }
 
   const result = await runMetamorphic(cases, suspiciousAs, only);
+  const regionResult = await runRegionRelations(cases, suspiciousAs, only);
+  const totalViolations = result.violations.length + regionResult.violations.length;
 
   if (jsonOnly) {
     console.log(
       JSON.stringify(
         {
-          checks: [...result.applied.values()].reduce((a, b) => a + b, 0),
+          checks:
+            [...result.applied.values()].reduce((a, b) => a + b, 0) +
+            [...regionResult.applied.values()].reduce((a, b) => a + b, 0),
           violations: result.violations,
           applied: Object.fromEntries(result.applied),
+          regionViolations: regionResult.violations,
+          regionApplied: Object.fromEntries(regionResult.applied),
         },
         null,
         2,
@@ -78,9 +105,11 @@ async function main(): Promise<void> {
     console.log(`Suspicious counted as: ${suspiciousAs}`);
     console.log(formatSummary(result));
     console.log(formatViolations(result));
+    console.log(formatRegionSummary(regionResult));
+    console.log(formatRegionViolations(regionResult));
   }
 
-  process.exit(result.violations.length > 0 ? 1 : 0);
+  process.exit(totalViolations > 0 ? 1 : 0);
 }
 
 main().catch((err) => {

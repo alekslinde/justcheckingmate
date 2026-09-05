@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { checkUrl, checkSms, checkEmail, checkCustom, checkPhone, analyzeContent } from "@veriguard/engine/scamDetector";
 import { overallCoverage, isClean, formatVerdictEmail } from "@/lib/verdictSummary";
-import { FALLBACK_REGION } from "@veriguard/engine/regions";
+import { FALLBACK_REGION, resolveRegionPack, supportedRegions, type RegionCoverage } from "@veriguard/engine/regions";
+import { toPrediction } from "@/eval/schema";
+import { analysePhone } from "@veriguard/engine/phoneIntel";
 
 // The Phase 3 guarantee: a "safe" verdict asserts we looked and found nothing.
 // Where we have no rules to look with, that assertion isn't available — a clean
@@ -189,5 +191,142 @@ describe("region-specific copy is not asserted globally", () => {
   it("uses the region's wording for an allowlisted domain", () => {
     const au = checkUrl("https://my.gov.au", undefined, "AU");
     expect(au.flags[0]).toContain("Australian government domain");
+  });
+});
+
+// ── The `minimal` tier ───────────────────────────────────────────────────────
+//
+// `minimal` is a promise about what a "safe" verdict means, not a description
+// of effort. These pin the two properties that make it honest: it does not earn
+// the right to assert safety, and it ranks BELOW `partial` despite the names
+// suggesting otherwise.
+
+describe("minimal coverage tier", () => {
+  it("downgrades a clean verdict, exactly like partial and none", () => {
+    // The whole design rests on this. A minimal pack knows the local agencies
+    // but has no brands, keywords or allowlist, so a quiet result still means
+    // "no rule matched because no rule exists".
+    const result = checkSms(BENIGN, undefined, "SG");
+    expect(result.coverage).toBe("minimal");
+    expect(result.verdict).toBe("unknown");
+    expect(result.details).toContain("not checked");
+  });
+
+  it("still reports positive detections at full strength", () => {
+    // The tier's value is entirely on the positive side. Base signals fire
+    // everywhere, so anything they catch must read as found.
+    const covered = checkUrl("http://bit.ly/x", undefined, "AU");
+    const minimal = checkUrl("http://bit.ly/x", undefined, "SG");
+    expect(minimal.verdict).toBe(covered.verdict);
+    expect(minimal.score).toBe(covered.score);
+  });
+
+  it("ranks below partial, not above it", () => {
+    // The one ordering that is easy to get backwards: CA's `partial` has
+    // brands, agencies and a number plan and lacks only French keywords, while
+    // `minimal` has no brand knowledge at all. Reversing these would report the
+    // stronger pack as the weakest link.
+    const at = (coverage: RegionCoverage) =>
+      [{ result: { verdict: "safe", score: 0, flags: [], details: "", category: "SMS", coverage } }] as never;
+
+    expect(overallCoverage(at("minimal"))).toBe("minimal");
+    expect(
+      overallCoverage([...at("partial"), ...at("minimal")] as never),
+    ).toBe("minimal");
+    expect(
+      overallCoverage([...at("minimal"), ...at("none")] as never),
+    ).toBe("none");
+  });
+
+  it("abstains in the eval rather than counting as a prediction", () => {
+    // A minimal pack's clean cases must land in a coverage metric, never in
+    // recall — the same treatment CA's partial cases get.
+    expect(toPrediction({ verdict: "safe", score: 0, flags: [], details: "", category: "SMS", coverage: "minimal" } as never)).toBe("abstain");
+  });
+});
+
+describe("minimal pack phone plans", () => {
+  // The phone plan was the one part of the SG pack nothing exercised, and all
+  // three of its fields were wrong: premiumPrefixes missing the trunk 0 (so the
+  // rule never fired), tollFreeFlag naming the NANP 800 range instead of
+  // Singapore's 1800, and a comment claiming 1800 sat in emergencyNumbers,
+  // which matches on exact equality rather than as a prefix.
+  //
+  // These are pinned per-region rather than generically because the numbering
+  // plan is the whole point: a generic "some prefix fires" assertion would have
+  // passed against every one of those bugs.
+
+  it("fires the premium-rate rule on a Singapore 1900 number", () => {
+    // The regression that made premiumFlag unreachable. analysePhone matches
+    // against "0" + the national number, so a prefix authored without the trunk
+    // 0 is compared against "01900…" and never matches.
+    const r = analysePhone("1900 112 233", "SG");
+    expect(r.lineType).toBe("premium");
+    expect(r.spoofingNotes.join(" ")).toContain("1900");
+  });
+
+  it("fires it on the same number in +65 form", () => {
+    expect(analysePhone("+65 1900 112 233", "SG").lineType).toBe("premium");
+  });
+
+  it("names Singapore's own toll-free range, not the NANP one", () => {
+    // A genuine 1800 line was being described as an "800 number" — the exact
+    // unverified regional claim this tier's rules forbid.
+    const notes = analysePhone("1800 255 0000", "SG").spoofingNotes.join(" ");
+    expect(notes).toContain("1800");
+    expect(notes).not.toMatch(/\b800 numbers\b/);
+  });
+
+  it("recognises the ScamShield helpline as an emergency number", () => {
+    expect(analysePhone("1799", "SG").lineType).toBe("emergency");
+  });
+
+  it("leaves ordinary mobiles alone", () => {
+    // Guards the premium fix against over-reaching onto normal numbers.
+    expect(analysePhone("+65 9123 4567", "SG").lineType).toBe("mobile");
+  });
+});
+
+describe("minimal packs make no claims they have not verified", () => {
+  // Each of these fields either asserts something about a real organisation's
+  // policy or waves a URL through. A minimal pack does no research, so it must
+  // leave them empty — enforced here rather than left to convention, because
+  // the failure mode is fabricating a regulatory claim about a foreign country.
+  const MINIMAL_PACKS = supportedRegions().filter(
+    (code) => resolveRegionPack(code).coverage === "minimal",
+  );
+
+  it("has at least one minimal pack to check", () => {
+    // Guards the suite against quietly passing if the tier is ever emptied.
+    expect(MINIMAL_PACKS.length).toBeGreaterThan(0);
+  });
+
+  it.each(MINIMAL_PACKS)("%s asserts no no-link-sender policy", (code) => {
+    // The flag copy states an organisation has publicly committed to never
+    // sending links. Asserting that unverified invents a policy.
+    expect(resolveRegionPack(code).noLinkSenders).toEqual([]);
+  });
+
+  it.each(MINIMAL_PACKS)("%s ships no allowlist", (code) => {
+    // legitDomains short-circuits URL scoring to "safe". A wrong entry waves a
+    // scam through, so the bar is verified evidence.
+    expect(resolveRegionPack(code).legitDomains).toEqual([]);
+  });
+
+  it.each(MINIMAL_PACKS)("%s claims no brand knowledge", (code) => {
+    // Having brands would make it a partial pack, not a minimal one.
+    const pack = resolveRegionPack(code);
+    expect(pack.typosquatBrands.substring).toEqual([]);
+    expect(pack.typosquatBrands.word).toEqual([]);
+    expect(pack.brandMentions.substring).toEqual([]);
+    expect(pack.brandMentions.word).toEqual([]);
+  });
+
+  it.each(MINIMAL_PACKS)("%s still names where to report", (code) => {
+    // The positive half of the bargain: the tier exists to give a victim a
+    // local authority instead of a foreign one.
+    const pack = resolveRegionPack(code);
+    expect(pack.reportingBody).not.toBe("");
+    expect(pack.authorityMentions.length).toBeGreaterThan(0);
   });
 });
