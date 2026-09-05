@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# Rejects AI attribution trailers in commit messages.
+#
+# Per CLAUDE.md: never add "🤖 Generated with Claude Code", "Co-Authored-By:
+# Claude", or any similar attribution line to commit messages.
+#
+# Matching is deliberately pattern-based, not literal-string based: the exact
+# trailer drifts with each model and tool version. The history of this repo
+# already carries three variants that a fixed string would have missed:
+#
+#   Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+#   Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+#   Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+#
+# So we match on the shape of the attribution (any co-author whose name or
+# address is an AI vendor; any "generated/created with <assistant>" line;
+# the robot emoji) rather than on any single rendering of it.
+#
+# Escape hatch: git commit --no-verify
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+# Strip comment lines so commented-out examples don't trip the hook.
+body=$(grep -v '^#' "$msg_file")
+
+# Vendor/assistant names that make an attribution line an AI attribution line.
+vendors='claude|anthropic|copilot|chatgpt|openai|gpt-[0-9]|codex|gemini|bard|cursor|windsurf|devin|aider|sourcegraph|cody|tabnine|codeium'
+
+fail() {
+	echo "commit-msg: blocked — AI attribution trailer found." >&2
+	echo >&2
+	echo "  $1" >&2
+	echo >&2
+	echo "CLAUDE.md forbids attribution lines in commit messages." >&2
+	echo "Remove the line and commit again (or use --no-verify to override)." >&2
+	exit 1
+}
+
+# 1. Co-author / signed-off style trailers naming an AI vendor.
+#    Covers any model name and any address: "Co-Authored-By: Claude <x>",
+#    "Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>", etc.
+hit=$(printf '%s\n' "$body" \
+	| grep -iEn "^[[:space:]]*(co[- ]?authored[- ]?by|signed[- ]?off[- ]?by|assisted[- ]?by|authored[- ]?by)[[:space:]]*:.*($vendors)" \
+	| head -1)
+[ -n "$hit" ] && fail "$hit"
+
+# 2. "Generated/created/written/built with <assistant>" attribution lines,
+#    with or without the robot emoji or markdown link wrapping.
+hit=$(printf '%s\n' "$body" \
+	| grep -iEn "(generated|created|written|authored|built|made|produced)[[:space:]]+(with|by|using)[[:space:]]+.{0,40}($vendors)" \
+	| head -1)
+[ -n "$hit" ] && fail "$hit"
+
+# 3. Bare vendor URLs used as attribution footers.
+hit=$(printf '%s\n' "$body" \
+	| grep -iEn "^[[:space:]]*.{0,20}(https?://)?(claude\.com/claude-code|claude\.ai|anthropic\.com)" \
+	| head -1)
+[ -n "$hit" ] && fail "$hit"
+
+# 4. The robot emoji, which only ever appears here as an attribution marker.
+hit=$(printf '%s\n' "$body" | grep -n '🤖' | head -1)
+[ -n "$hit" ] && fail "$hit"
+
+exit 0
