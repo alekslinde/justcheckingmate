@@ -237,6 +237,97 @@ describe("formatVerdictEmail", () => {
   });
 });
 
+// ── Plain language + branding ─────────────────────────────────────────────────
+//
+// The reply has to read as a genuine, easy-to-follow message from a real
+// service to a worried, non-technical reader — not a wall of jargon, and not
+// something that could itself be mistaken for a scam. These lock in the parts
+// that carry that: a branded header, a colour-coded verdict banner, a prominent
+// "what to do" step, everyday status words, and a trust line.
+
+describe("formatVerdictEmail — plain language & branding", () => {
+  const scam = () =>
+    formatVerdictEmail({
+      results: [ident("url", "likely_scam", "http://evil.tk/login", 90, ["Dodgy top-level domain"])],
+      emailFlags: [],
+      pixelReport: null,
+      siteUrl: "https://veriguard.app",
+    });
+
+  it("carries a Veriguard-branded header and states what the service is", () => {
+    const email = scam();
+    // The wordmark appears in both channels so the reply is identifiably ours.
+    expect(email.html).toContain("Veriguard");
+    expect(email.text).toContain("VERIGUARD");
+    // A branded surface colour (the app's navy ground) — i.e. it isn't a bare
+    // wall of black-on-white text.
+    expect(email.html).toContain("#141C2B");
+  });
+
+  it("leads with a plain-English verdict label, not the engine's machine value", () => {
+    const email = scam();
+    expect(email.html).toContain("Likely a scam");
+    // The raw enum value must never surface to the reader.
+    expect(email.html).not.toContain("likely_scam");
+    expect(email.text).not.toContain("likely_scam");
+  });
+
+  it("gives a clear, prominent next step near the top", () => {
+    const email = scam();
+    expect(email.html).toContain("What you should do");
+    expect(email.text).toContain("WHAT YOU SHOULD DO");
+    // The concrete instruction, not vague reassurance.
+    expect(email.text).toMatch(/don't click any links/i);
+  });
+
+  it("labels each part of the email in everyday words", () => {
+    const email = scam();
+    // "Dangerous", not "likely scam"; the section reads "What we found".
+    expect(email.html).toContain("Dangerous");
+    expect(email.text).toContain("What we found".toUpperCase());
+  });
+
+  it("softens the advice for a clean result instead of shouting", () => {
+    const email = formatVerdictEmail({
+      results: [ident("url", "safe", "https://auspost.com.au/track", 0)],
+      emailFlags: [],
+      pixelReport: null,
+      siteUrl: "https://veriguard.app",
+    });
+    expect(email.text).toMatch(/likely fine/i);
+    expect(email.text).not.toMatch(/don't click any links/i);
+  });
+
+  it("renders the verdict meaning as dark text on a tint, not white on the accent", () => {
+    // The banner is for low-vision readers; white on the amber/green accents
+    // fails WCAG AA at body size, so the meaning must stay dark-on-pale.
+    const email = formatVerdictEmail({
+      results: [ident("url", "suspicious", "http://x.test", 40, ["Odd link"])],
+      emailFlags: [],
+      pixelReport: null,
+    });
+    // Tint background + accent border + dark meaning text — never a solid-accent
+    // fill under white body text.
+    expect(email.html).toContain("background:#fdf6e3"); // the suspicious tint
+    expect(email.html).toContain("color:#2b3648"); // dark meaning text
+    expect(email.html).not.toContain("background:#b9770e"); // solid accent fill
+  });
+
+  it("states plainly that it will never ask for anything, so it can't read as a scam", () => {
+    const email = scam();
+    expect(email.html).toMatch(/never ask you for passwords/i);
+    expect(email.text).toMatch(/never ask you for passwords/i);
+  });
+
+  it("still references no external resource even with the fuller branded layout", () => {
+    // The whole shell — header, banner, footer — must stay image- and
+    // web-font-free so the reply can't leak a read receipt.
+    const email = scam();
+    expect(email.html).not.toMatch(/src\s*=\s*["']?https?:/i);
+    expect(email.html).not.toMatch(/<link|@import|url\(/i);
+  });
+});
+
 // ── Explaining the verdict ────────────────────────────────────────────────────
 //
 // The email once printed "Link evil[.]tk: likely scam" and nothing else: the
