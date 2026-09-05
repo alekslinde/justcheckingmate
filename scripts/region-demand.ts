@@ -140,7 +140,9 @@ async function main() {
   }
 
   // 4. Uncovered regions are the one thing that would justify jumping the queue
-  //    ahead of detection depth, per the plan's "Explicitly not next" section.
+  //    ahead of detection depth. Authoring a full region pack is expensive and
+  //    every one so far has surfaced cross-region defects, so breadth is only
+  //    worth buying against demonstrated demand — which is what this measures.
   //
   //    Derived from the engine's own pack list rather than hand-kept: this set
   //    was written when six packs existed and silently went stale when SG
@@ -173,8 +175,8 @@ async function main() {
       `⚠️  ${n} report(s) (${pct(n, attributed)} of attributed) from regions with no pack:`,
     );
     for (const r of uncovered) console.log(`      ${r.region}: ${r.n}`);
-    console.log("   Per the plan, significant volume here is the one argument for");
-    console.log("   adding an English region before resolving the Phase 6 question.");
+    console.log("   Significant volume here is the one argument for authoring a");
+    console.log("   new region pack ahead of further detection depth.");
   } else {
     console.log(
       `✅ No reports from uncovered regions — all ${attributed} attributed report(s)`,
