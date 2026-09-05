@@ -25,14 +25,31 @@ export async function GET(req: NextRequest) {
   if (!isSameOriginRead(req.headers)) {
     return NextResponse.json(
       { error: "This endpoint serves the submissions page on this site.", code: "forbidden_origin" },
-      { status: 403 },
+      // Vary here too, and no-store: a cached 403 handed to a legitimate
+      // visitor would break the submissions page for them.
+      { status: 403, headers: { Vary: "Origin", "Cache-Control": "no-store" } },
     );
   }
 
-  if (!checkAndRecordRateLimit(`feed:${clientIpFromHeaders(req.headers)}`, FEED_RATE_LIMIT)) {
+  // Only rate-limited when the caller can actually be identified.
+  //
+  // clientIpFromHeaders returns "unknown" for a missing or malformed
+  // x-forwarded-for, and keying on that puts EVERY such visitor in one shared
+  // bucket — so the feed would go dark site-wide after a couple of people
+  // browsed it. That converts a cost control into an availability bug, which is
+  // a strictly worse failure than the one it guards against.
+  //
+  // Failing open here is safe because it is not the only control: the origin
+  // guard above still applies, and the edge cache absorbs the volume. Vercel
+  // sets the header in production, so this is the degraded path rather than the
+  // normal one.
+  const ip = clientIpFromHeaders(req.headers);
+  if (ip !== "unknown" && !checkAndRecordRateLimit(`feed:${ip}`, FEED_RATE_LIMIT)) {
     return NextResponse.json(
-      { error: "Too many requests — give it a minute.", code: "rate_limited" },
-      { status: 429 },
+      { error: "Too many requests — give it a few minutes and try again.", code: "rate_limited" },
+      // Never cached: a stored 429 would lock out every visitor behind the same
+      // CDN node, turning a per-IP limit into a site-wide outage.
+      { status: 429, headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -78,6 +95,17 @@ export async function GET(req: NextRequest) {
   // development only, and caching it would hide fixture changes.
   return NextResponse.json(
     { reports: dbReports, total: dbTotal },
-    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        // Without this the cache silently defeats the origin guard above: once
+        // the CDN holds a 200 for this URL from a legitimate visit, a request
+        // from any origin is served from cache and never reaches the function.
+        // A route whose output depends on Origin must say so on every response
+        // — the same reasoning corsHeaders already documents, which I failed to
+        // carry over when adding the cache.
+        Vary: "Origin",
+      },
+    },
   );
 }

@@ -168,4 +168,3 @@ export function corsPreflightHeaders(
     "Access-Control-Max-Age": "86400",
   };
 }
-
