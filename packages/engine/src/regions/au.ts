@@ -51,6 +51,17 @@ const URGENCY_PARCEL = [
   // scored 0 — the miss that prompted this sweep. (D2)
   "parcel is held", "package is being held", "held pending payment",
   "release fee",
+  // The return threat — the deadline's consequence, and the half that makes the
+  // urgency bite. "Pay within 24 hours" is a deadline; "or it's returned" is
+  // what the reader is being made to fear, and it is the phrasing they recall
+  // afterwards. Both inflections, since the apostrophe form is what arrives in
+  // real texts and literal-substring matching would miss it.
+  //
+  // Safe for a real carrier's vocabulary: genuine return-to-sender notices
+  // report a completed outcome ("your parcel was returned to sender"), not a
+  // payment deadline that will cause one.
+  "or it's returned", "or it will be returned", "will be returned to sender",
+  "returned to sender within",
 ];
 
 // The gated half of D1 (2026-08-29 sweep). "Confirm your address" is ordinary
@@ -370,6 +381,27 @@ const TYPOSQUAT_BRANDS = [
   // word list below. "ahm" is excluded from the URL checker entirely — see the
   // note there; it stays in brandMentions, which is where the lures name it.
   "medibank", "bupa",
+  // Postal / parcel delivery. AU was the only pack with no postal brand at all,
+  // while every sibling carries theirs (ie: anpost, gb: royalmail,
+  // ca: canadapost, nz: nzpost, us: usps/fedex/ups) — an omission, not a
+  // decision: undelivered-parcel SMS is among the most-reported AU scam lures,
+  // and "australia post" was already in authorityMentions and brandMentions for
+  // message bodies. Only the URL checker was blind to it.
+  //
+  // auspost.com.au and track.auspost.com.au stay clean via the brand-owns-the-
+  // registrable-label exemption (.com.au is a two-part suffix, so the label is
+  // "auspost"), the same way medibank does above. Squats score:
+  // auspost-redelivery.secure-track.top matches on the substring pass even
+  // though the brand sits in a subdomain rather than the registrable label.
+  //
+  // Only the two long, distinctive spellings go in the substring list.
+  // "startrack" (Australia Post's courier arm) and "aupost" (the one-character
+  // elision squatters register) are NOT here: as substrings they fire inside
+  // longer labels — "start"+"rack" makes mystartrack.com a +45 brand hit, and
+  // aupostal-services.com the same. That is the failure mode this file already
+  // documents for "velocity" and "ahm", so they go in the word list below and
+  // are matched on separator boundaries instead.
+  "auspost", "australiapost",
 ];
 
 // Brands too short for substring matching in a hostname. Previously excluded
@@ -400,7 +432,13 @@ const TYPOSQUAT_BRANDS = [
 // velocityglobal.com and the program's own velocityfrequentflyer.com. As a label
 // word it still catches "velocity-points-login.cyou" — the shape squats use —
 // while leaving longer legitimate labels alone.
-const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "velocity"];
+// "startrack" and "aupost" are here for length-independent reasons: both are
+// long enough to survive substring matching in principle, but both contain a
+// shorter word boundary that longer innocent labels reproduce (mystartrack.com,
+// aupostal-services.com). Boundary matching still catches the squat shape —
+// "startrack-delivery.top", "aupost-redelivery.cyou" — which is what the lure
+// actually registers.
+const TYPOSQUAT_WORD_BRANDS = ["agl", "nib", "hcf", "velocity", "startrack", "aupost"];
 
 // Consumer (non-government) brands impersonated in SMS bodies.
 const BRAND_MENTIONS = [

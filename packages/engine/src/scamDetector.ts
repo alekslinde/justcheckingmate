@@ -567,15 +567,20 @@ export function checkUrl(raw: string, blocklist?: Set<string>, region?: RegionIn
     // colliding with "bagelshop".
     const labelWords = registrable.split(/[^a-z0-9]+/i).filter(Boolean);
 
+    // "Impersonates X in the domain name" rather than "looks like it's
+    // impersonating X": the reader is deciding whether to trust a link, and the
+    // hedge invited them to weigh it up. Naming *where* the brand appears is
+    // also the teachable part — the tell is the brand sitting somewhere other
+    // than the registrable label, which is exactly what the check tests.
     for (const brand of TYPOSQUAT_BRANDS.substring) {
       // The brand owning the whole label is the real site, not a squat.
       if (hostname.includes(brand) && registrable !== brand) {
-        sig.add("link", `Looks like it's impersonating "${brand}" — classic phishing move`, 45);
+        sig.add("link", `Impersonates "${brand}" in the domain name — classic phishing move`, 45);
       }
     }
     for (const brand of TYPOSQUAT_BRANDS.word) {
       if (labelWords.includes(brand) && registrable !== brand) {
-        sig.add("link", `Looks like it's impersonating "${brand}" — classic phishing move`, 45);
+        sig.add("link", `Impersonates "${brand}" in the domain name — classic phishing move`, 45);
       }
     }
   }
@@ -881,6 +886,67 @@ export function checkSms(
   const urgencyHits = URGENCY_WORDS.filter((w) => mentions(lower, w));
   if (urgencyHits.length > 0) {
     sig.add("message", `Urgency language detected: "${urgencyHits.slice(0, 3).join('", "')}"`, Math.min(urgencyHits.length * 10, 35));
+  }
+
+  // Small-fee payment lure. A trivial amount — a few dollars of "customs",
+  // "redelivery" or "processing" fee — attached to a payment demand. The money
+  // is not the point: the amount is chosen to be too small to argue with, so
+  // the card details entered to pay it are the actual take.
+  //
+  // The size test is what carries the signal, which is why it is a rule of its
+  // own rather than another urgencyWords entry. A large sum reads as a scam to
+  // most people unaided and trips the existing money rules; $2.15 is the one
+  // that gets paid without a second thought. Capped at $20 — above that the
+  // "too trivial to question" property stops holding.
+  //
+  // The amount must be matched WHOLE. A pattern that reads a prefix inverts the
+  // rule: "$1,250.00" matched as "$1" and "$1500" as "$15", so the largest
+  // demands were the ones flagged as too small to question. Hence the boundary
+  // on both ends — no thousands separator, no further digit, and no bare
+  // trailing digits after a decimal group. ("$450" truncating to 45 is why the
+  // first large-fee test passed while the rule was broken; it now uses figures
+  // that cannot truncate into range.)
+  //
+  // The lookahead rejects a following digit or comma, and a period only when a
+  // digit follows it — so "$3.20." ending a sentence still matches, while
+  // "$1,250.00" and "$1500" do not.
+  //
+  // Deliberately does NOT require a currency symbol to be adjacent — "a fee of
+  // 2.15" and "$2.15 customs fee" are the same lure — but it does require a
+  // decimal or a symbol somewhere, since a bare "2" in prose is usually a count.
+  const SMALL_FEE = /(?:[$£€]\s?(\d{1,2}(?:\.\d{2})?)|\b(\d{1,2}\.\d{2}))(?![\d,]|\.\d)/;
+
+  // The framing must be a DEMAND, not a line item. "delivery fee $3.99" on a
+  // food order and "monthly service fee" on a subscription name a cost the
+  // reader has already agreed to; the lure asks them to pay something now to
+  // release something they are waiting on. So the bare "<word> fee" alternative
+  // is limited to the deliverable-release vocabulary, and the everyday billing
+  // words (delivery, service, handling, shipping) are accepted only alongside an
+  // explicit pay/release ask. Without this split a Netflix renewal notice scored
+  // 20/suspicious carrying the lure flag.
+  //
+  // "admin(?:in)?" was a typo — it matched the nonexistent "adminin fee" and
+  // missed "administration fee", which is the wording the lure actually uses.
+  const RELEASE_FEE = /\b(?:customs|import|admin(?:istration)?|clearance|release|redelivery|re-?delivery|processing|small)\s+fees?\b/i;
+  const BILLING_FEE = /\b(?:delivery|shipping|handling|service)\s+fees?\b/i;
+  const PAYMENT_ASK = /\b(?:pay|paid|payment|settle|clear|release|unlock|confirm)\b/i;
+  const feeFraming =
+    RELEASE_FEE.test(lower) ||
+    (BILLING_FEE.test(lower) && PAYMENT_ASK.test(lower)) ||
+    /\bfees?\s+(?:of|is|due)\b/i.test(lower) ||
+    /\bpay\b[^.]{0,40}\bfees?\b/i.test(lower) ||
+    /\bfees?\b[^.]{0,40}\bpay\b/i.test(lower);
+
+  const feeAmount = SMALL_FEE.exec(text);
+  if (feeAmount && feeFraming) {
+    const amount = parseFloat(feeAmount[1] ?? feeAmount[2] ?? "");
+    if (Number.isFinite(amount) && amount > 0 && amount <= 20) {
+      sig.add(
+        "message",
+        "Small-fee payment lure — a token amount like this is chosen to be too small to question, and the card details you enter to pay it are what the scam is actually after",
+        20,
+      );
+    }
   }
 
   // Address correction presented as blocking a delivery (D1 / 2026-08-29

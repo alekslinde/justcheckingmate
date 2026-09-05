@@ -144,7 +144,7 @@ describe("pack invariants (every region)", () => {
     // bought, not the brand's real site under a government suffix.
     for (const host of [`${brand}.gov.co`, `${brand}.com.co`, `${brand}.co.io`]) {
       const flags = checkUrl(`http://${host}/login`, undefined, code).flags.join(" | ").toLowerCase();
-      expect({ host, impersonating: flags.includes("impersonating") })
+      expect({ host, impersonating: flags.includes("impersonates") })
         .toEqual({ host, impersonating: true });
     }
   });
@@ -172,7 +172,7 @@ describe("pack invariants (every region)", () => {
     ];
     for (const host of hosts) {
       const flags = checkUrl(`https://${host}/`, undefined, code).flags.join(" | ").toLowerCase();
-      expect({ host, impersonating: flags.includes("impersonating") })
+      expect({ host, impersonating: flags.includes("impersonates") })
         .toEqual({ host, impersonating: false });
     }
   });

@@ -158,6 +158,21 @@ const DOTS = /[\u3002\uFF61\u2024]/g;
 const SLASHES = /[\u2044\u2215]/g;
 
 /**
+ * Apostrophe- and quote-like characters, folded to their ASCII forms.
+ *
+ * NFKC leaves U+2019 alone, and phones substitute it for a typed apostrophe by
+ * default — so "or it's returned" arrives as "or it\u2019s returned" and every
+ * pack phrase spelled with an ASCII apostrophe silently fails to match. That is
+ * 49 phrases across the six region packs, all of them written the way a
+ * keyboard produces them rather than the way a handset sends them.
+ *
+ * Folded centrally rather than per-phrase: the alternative is spelling every
+ * entry twice and remembering to do so forever.
+ */
+const QUOTES = /[\u2018\u2019\u201B\u02BC\u02B9\u2032]/g;
+const DQUOTES = /[\u201C\u201D\u201F\u2033]/g;
+
+/**
  * Fold a string to one canonical spelling before any pattern matching.
  *
  * Length is not preserved — invisibles are removed and NFKC can expand a
@@ -170,7 +185,9 @@ export function normaliseUnicode(text: string): string {
     .normalize("NFKC")
     .replace(DASHES, "-")
     .replace(DOTS, ".")
-    .replace(SLASHES, "/");
+    .replace(SLASHES, "/")
+    .replace(QUOTES, "'")
+    .replace(DQUOTES, '"');
 }
 
 /** Whether normalisation changes anything — i.e. the input carried confusables. */

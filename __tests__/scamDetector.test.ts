@@ -1059,12 +1059,12 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
 
   it("flags health-fund typosquat domains but not lookalike words (D4)", () => {
     for (const host of ["http://medibank-renew.cyou", "http://nib-claims.top", "http://hcf-login.cyou"]) {
-      expect(checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")))
+      expect(checkUrl(host, undefined, "AU").flags.some((f) => f.includes("Impersonates")))
         .toBe(true);
     }
     // Separator-split label matching keeps these clear.
     for (const host of ["https://bonnibel.com", "https://ahmed-photography.com"]) {
-      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("Impersonates")) })
         .toEqual({ host, hit: false });
     }
     // "ahm" is not a URL-checker brand: boundary matching stops substring
@@ -1072,7 +1072,7 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
     // common surname/initialism, so these unrelated businesses would have
     // scored the full +45 brand hit — likely_scam on that signal alone.
     for (const host of ["http://ahm-photography.com", "http://ahm-legal.com", "http://ahm-transport.com"]) {
-      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("Impersonates")) })
         .toEqual({ host, hit: false });
     }
     // The funds' real sites must stay clean.
@@ -1096,7 +1096,7 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       "http://my-commbank.com.au",
     ]) {
       const result = checkUrl(host, undefined, "AU");
-      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+      expect({ host, impersonation: result.flags.some((f) => f.includes("Impersonates")) })
         .toEqual({ host, impersonation: true });
     }
   });
@@ -1113,7 +1113,7 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       "https://my.gov.au", "https://ato.gov.au", "https://servicesaustralia.gov.au",
     ]) {
       const result = checkUrl(host, undefined, "AU");
-      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+      expect({ host, impersonation: result.flags.some((f) => f.includes("Impersonates")) })
         .toEqual({ host, impersonation: false });
     }
   });
@@ -1133,12 +1133,12 @@ describe("threat-intel roadmap 2026-07-05 (#73-#78)", () => {
       "https://www.velocitybank.com",
     ]) {
       const result = checkUrl(host, undefined, "AU");
-      expect({ host, impersonation: result.flags.some((f) => f.includes("impersonating")) })
+      expect({ host, impersonation: result.flags.some((f) => f.includes("Impersonates")) })
         .toEqual({ host, impersonation: false });
     }
     // The squat shapes must still score.
     for (const host of ["http://velocity-points-login.cyou", "http://velocityfrequentflyer-login.top"]) {
-      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("impersonating")) })
+      expect({ host, hit: checkUrl(host, undefined, "AU").flags.some((f) => f.includes("Impersonates")) })
         .toEqual({ host, hit: true });
     }
   });
@@ -1304,13 +1304,13 @@ describe("threat-intel roadmap 2026-07-12 (#80-#85)", () => {
     for (const host of ["https://qantas-points-verify.xyz/login", "https://velocity-rewards.site"]) {
       const result = checkUrl(host);
       expect(result.score).toBeGreaterThanOrEqual(45);
-      expect(result.flags.some((f) => f.includes("impersonating"))).toBe(true);
+      expect(result.flags.some((f) => f.includes("Impersonates"))).toBe(true);
     }
   });
 
   it("does not flag the real qantas.com.au domain (#81)", () => {
     const result = checkUrl("https://www.qantas.com.au/frequent-flyer");
-    expect(result.flags.some((f) => f.includes("impersonating"))).toBe(false);
+    expect(result.flags.some((f) => f.includes("Impersonates"))).toBe(false);
   });
 
   it("flags Amazon and YouTube fake-recruiter SMS brand mentions (D3 / #82)", () => {
@@ -1910,5 +1910,181 @@ describe("the clamp row", () => {
     expect(raw).toBeLessThanOrEqual(urlCard!.result.score);
     expect(signals.some((x) => x.source === "score")).toBe(false);
     expect(urlCard?.result.flags.some((f) => /capped at/.test(f))).toBe(false);
+  });
+});
+
+// ── Verdict-artifact gap work ────────────────────────────────────────────────
+//
+// Three rules the design artifact promised that the engine did not produce.
+// The fixture is the artifact's own sample, so the totals here are the ones the
+// verdict card was designed around; see docs/verdict-artifact-gap-plan.md.
+
+const ARTIFACT_SAMPLE =
+  "AusPost: your parcel is held pending a $2.15 customs fee. " +
+  "Pay within 24 hours or it's returned. " +
+  "http://auspost-redelivery.secure-track.top/pay";
+
+describe("Australia Post brand impersonation (gap 3)", () => {
+  // AU was the only region pack carrying no postal brand, so the URL checker
+  // was blind to the most-reported local lure. The brand sits in a SUBDOMAIN
+  // here — the registrable label is "secure-track" — which is why this has to
+  // match on the substring pass rather than the label-word one.
+  it("flags the brand when it sits in a subdomain, not the registrable label", () => {
+    const r = checkUrl("http://auspost-redelivery.secure-track.top/pay", undefined, "AU");
+    expect(r.flags.some((f) => f.includes('Impersonates "auspost"'))).toBe(true);
+    expect(r.verdict).toBe("likely_scam");
+  });
+
+  it("names where the brand appears rather than hedging", () => {
+    // The reader is deciding whether to trust a link; "looks like it's
+    // impersonating" invited them to weigh it up. Naming the domain name is
+    // also the teachable half.
+    const r = checkUrl("http://auspost-redelivery.secure-track.top/pay", undefined, "AU");
+    const row = r.flags.find((f) => f.includes("auspost"))!;
+    expect(row).toContain('Impersonates "auspost" in the domain name');
+  });
+
+  it.each([
+    "https://auspost.com.au/track",
+    "https://track.auspost.com.au/mypost",
+  ])("leaves the real Australia Post site alone: %s", (url) => {
+    // Protected by the brand-owns-the-registrable-label exemption, not by any
+    // suffix allowlist — .com.au is a two-part suffix, so the label is
+    // "auspost" and the brand owns it.
+    const r = checkUrl(url, undefined, "AU");
+    expect(r.flags.some((f) => f.includes("Impersonates"))).toBe(false);
+    expect(r.verdict).toBe("safe");
+  });
+
+  it.each([
+    "https://mystartrack.com/x",
+    "https://aupostal-services.com/x",
+  ])("does not fire inside a longer innocent label: %s", (url) => {
+    // "startrack" and "aupost" are matched on separator boundaries, not as
+    // substrings: "start"+"rack" and "aupostal" would otherwise be +45 brand
+    // hits. Same failure mode the pack documents for "velocity" and "ahm".
+    const r = checkUrl(url, undefined, "AU");
+    expect(r.flags.some((f) => f.includes("Impersonates"))).toBe(false);
+  });
+
+  it.each([
+    "http://startrack-delivery.top/x",
+    "http://aupost-redelivery.cyou/x",
+  ])("still catches the squat shape on a boundary: %s", (url) => {
+    const r = checkUrl(url, undefined, "AU");
+    expect(r.flags.some((f) => f.includes("Impersonates"))).toBe(true);
+  });
+
+  it("does not disturb a genuine Australia Post email", () => {
+    // Regression guard. Adding the brand to the URL checker's list must not
+    // leak into BRAND_MENTIONS, which scores brand names in message bodies —
+    // AU is deliberately the one pack where postal brands do not sit in both,
+    // and crossing them promoted a deferred row and made real mail suspicious.
+    const email = [
+      "From: noreply@auspost.com.au",
+      "Subject: Your parcel is on its way",
+      "",
+      "Track your delivery at https://auspost.com.au/track",
+    ].join("\n");
+    expect(checkEmail(email, undefined, "AU").verdict).toBe("safe");
+  });
+});
+
+describe("small-fee payment lure (gap 2)", () => {
+  // The amount is the signal: a sum too small to argue with, so the card
+  // details entered to pay it are the actual take.
+  it("scores a token fee attached to a payment demand", () => {
+    const r = checkSms(ARTIFACT_SAMPLE, undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(true);
+  });
+
+  it("matches a written fee without a currency symbol", () => {
+    const r = checkSms(
+      "Your package is waiting. A redelivery fee of 1.99 is required.",
+      undefined,
+      "AU",
+    );
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(true);
+  });
+
+  it.each([
+    "Your parcel requires a customs fee of $450 to be released.",
+    "Your parcel requires a customs fee of $1500 to be released.",
+    "Invoice due: please pay the outstanding customs fee of $1,250.00 today.",
+  ])("ignores a large fee, which is not this lure: %s", (text) => {
+    // A big number reads as a scam unaided and trips the existing money rules;
+    // the "too trivial to question" property is what this signal is about.
+    //
+    // The last two exist because the first passed for the wrong reason. The
+    // original pattern matched a PREFIX of the number, so "$450" was read as
+    // 45 and "$1,250.00" as 1 — the largest demands were the ones called too
+    // small to question. Whole-number matching is what these pin.
+    const r = checkSms(text, undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(false);
+  });
+
+  it("matches an administration fee, the wording the lure actually uses", () => {
+    // "admin(?:in)?" was a typo: it matched a nonexistent "adminin fee" and
+    // missed this.
+    const r = checkSms("Your parcel is held pending an administration fee of $3.20.", undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(true);
+  });
+
+  it.each([
+    "Your Netflix subscription renews on the 3rd. Monthly service fee $7.99.",
+    "Your Uber Eats order: food $24.00, delivery fee $3.99, service fee $2.50. Enjoy!",
+  ])("leaves an everyday billing line item alone: %s", (text) => {
+    // A named cost the reader already agreed to is not a demand to pay now to
+    // release something. Without this split the Netflix notice scored 20 and
+    // carried the lure flag.
+    const r = checkSms(text, undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(false);
+  });
+
+  it.each([
+    "Your coffee subscription is $9.99 a month, thanks for joining!",
+    "Thanks! Your order total was $12.50 and will ship Tuesday.",
+    "Reminder: your appointment is at 2.30 tomorrow.",
+  ])("leaves ordinary commerce alone: %s", (text) => {
+    // A price is not a payment demand — the fee framing is what separates them.
+    const r = checkSms(text, undefined, "AU");
+    expect(r.flags.some((f) => f.startsWith("Small-fee payment lure"))).toBe(false);
+    expect(r.verdict).toBe("safe");
+  });
+});
+
+describe("return-threat urgency phrasing (gap 4)", () => {
+  it("reads the deadline's consequence as urgency", () => {
+    // Asserted on its own rather than through the artifact fixture: that sample
+    // trips four urgency phrases and the flag quotes only the first three, so
+    // the row it renders is no evidence either way about this one.
+    const r = checkSms("Pay now or it's returned to the depot.", undefined, "AU");
+    const urgency = r.flags.find((f) => f.startsWith("Urgency language detected"))!;
+    expect(urgency).toContain("or it's returned");
+  });
+
+  it("matches the smart-quote apostrophe a real phone sends", async () => {
+    // Handsets substitute U+2019 for a typed apostrophe, and NFKC does not fold
+    // it — so every pack phrase spelled with an ASCII apostrophe (49 of them)
+    // missed real input until normaliseUnicode folded quotes too.
+    //
+    // Asserted through analyzeContent, not checkSms: normalisation is applied
+    // at the entry point, so a direct checkSms call sits below the fold and
+    // would test the wrong layer.
+    const cards = await analyzeContent("Pay now or it\u2019s returned to the depot.", undefined, "AU");
+    const urgency = cards[0].result.flags.find((f) => f.startsWith("Urgency language detected"));
+    expect(urgency).toBeDefined();
+    expect(urgency!).toContain("or it's returned");
+  });
+
+  it("leaves a completed return-to-sender notice alone", () => {
+    // A real carrier reports an outcome; the lure threatens one to force a
+    // payment. Only the threat carries a deadline.
+    const r = checkSms(
+      "Your parcel was returned to sender as the address was incomplete.",
+      undefined,
+      "AU",
+    );
+    expect(r.verdict).toBe("safe");
   });
 });
