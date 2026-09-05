@@ -104,3 +104,53 @@ describe("the signal survives normalisation", () => {
     expect(r.verdict).toBe("likely_scam");
   });
 });
+
+describe("every path that scores a URL sees the original", () => {
+  // Three call sites normalise before calling checkUrl, and each one has to
+  // hand over the pre-normalisation string. Two were missed on the first pass:
+  // the schemeless-host branch (which additionally referenced an out-of-scope
+  // variable and would have thrown) and the shortener-expansion path. Both are
+  // exercised here rather than left to the one path that happened to be tested.
+  const NO_NET = () => { throw new Error("no network in tests"); };
+  const worst = async (content: string, fetcher = NO_NET) => {
+    const cards = await analyzeContent(content, new Set<string>(), "AU", { fetcher });
+    return cards.reduce((a, b) => (b.result.score > a.result.score ? b : a)).result;
+  };
+
+  it("detects a homoglyph in a schemeless www. host", async () => {
+    // The bare-URL branch: no scheme, so the URL regex misses it and the whole
+    // string is assessed as a URL. This branch threw a ReferenceError before.
+    const r = await worst("www.аuspost-redelivery.bond/pay");
+    expect(r.flags.join(" ")).toContain("Mixed-script");
+  });
+
+  it("detects a homoglyph behind a shortener", async () => {
+    // The expansion path scores the DESTINATION, which is exactly where a
+    // hidden lookalike lands — the whole point of shortening it.
+    const expandTo = "https://commаnk.com/login";
+    // ExpandFetch only reads `headers.get("location")`, so the mock is that
+    // shape rather than a whole Response.
+    const fetcher = (async () => ({
+      headers: { get: (n: string) => (n.toLowerCase() === "location" ? expandTo : null) },
+    })) as never;
+    const r = await worst("https://bit.ly/3xQz9Lm", fetcher);
+    expect(r.flags.join(" ")).toContain("Mixed-script");
+  });
+});
+
+describe("hyphens are counted as displayed, not as encoded", () => {
+  it("still flags real hyphens on an internationalised host", () => {
+    // Skipping the rule for every IDN was too blunt: one accented letter shed
+    // a signal the plain-ASCII twin scored, which is a free evasion.
+    const idn = checkUrl("https://münchen-bank-secure-login.de/x", undefined, "AU");
+    expect(idn.flags.join(" ")).toContain("hyphens");
+  });
+
+  it("counts the same number as the ASCII equivalent", () => {
+    const idn = checkUrl("https://münchen-bank-secure-login.de/x", undefined, "AU");
+    const ascii = checkUrl("https://munchen-bank-secure-login.de/x", undefined, "AU");
+    const count = (r: { flags: string[] }) =>
+      r.flags.find((f) => f.includes("hyphens"))?.match(/\((\d+)\)/)?.[1];
+    expect(count(idn)).toBe(count(ascii));
+  });
+});

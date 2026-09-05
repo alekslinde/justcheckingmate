@@ -208,6 +208,39 @@ export function hasConfusables(text: string): boolean {
 const CONFUSABLE_SCRIPTS = /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F]/;
 
 /**
+ * The hostname as written, before `new URL()` punycodes it.
+ *
+ * Shared by the mixed-script check and the hyphen counter, which both need the
+ * pre-encoding form for the same reason: punycode is all-ASCII and uses hyphens
+ * structurally, so the encoded string answers neither "what script is this" nor
+ * "how many hyphens did the registrant choose".
+ *
+ * Returns "" when no host can be recovered, which every caller treats as "no
+ * signal" rather than as evidence either way.
+ */
+function rawHostname(raw: string): string {
+  const m = /^(?:[a-z][a-z0-9+.-]*:\/\/)?(?:[^/?#@\s]*@)?([^/?#\s:]+)/i.exec(raw.trim());
+  return m?.[1] ?? "";
+}
+
+/**
+ * How many hyphens the hostname actually shows, counted before encoding.
+ *
+ * Punycode uses hyphens as structure — "münchen.de" encodes to "xn--mnchen-3ya"
+ * — so counting them in the encoded form invents hyphens the reader cannot see.
+ * That produced a "Heaps of hyphens in the domain (3)" flag on hosts displaying
+ * none, which is a false explanation attached to a real detection.
+ *
+ * Skipping the rule for internationalised hosts was the first fix and was too
+ * blunt: it also discarded the *real* hyphens in "münchen-bank-secure-login.de",
+ * so one accented letter shed the signal its ASCII twin still scored. Counting
+ * on the pre-encoding string keeps both halves honest.
+ */
+export function displayedHyphenCount(raw: string): number {
+  return (rawHostname(raw).match(/-/g) ?? []).length;
+}
+
+/**
  * Whether a URL's hostname mixes Latin letters with Cyrillic or Greek ones
  * inside a single label — the homoglyph attack, as distinct from an ordinary
  * internationalised domain.
@@ -228,9 +261,7 @@ const CONFUSABLE_SCRIPTS = /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F]/;
  * language, which is the worst place for this engine to be wrong.
  */
 export function hasMixedScriptHost(raw: string): boolean {
-  const host = /^(?:[a-z][a-z0-9+.-]*:\/\/)?([^/?#\s]+)/i.exec(raw.trim())?.[1];
-  if (!host) return false;
-  return host
+  return rawHostname(raw)
     .split(".")
     .some((label) => /[a-z]/i.test(label) && CONFUSABLE_SCRIPTS.test(label));
 }
