@@ -2056,18 +2056,22 @@ function scoreToResult(
   let verdict: CheckResult["verdict"];
   let details: string;
 
+  // `details` is a one-line summary for surfaces that want one; the web sheet
+  // deliberately does not render it (see VerdictBadge), because every value
+  // restates copy the sheet already shows. Keep it neutral: the regional
+  // register was retired in e5ee74b, and this was the last place it survived.
   if (score < 20) {
     verdict = "safe";
-    details = "Looks pretty right to us — but always keep your wits about ya.";
+    details = "Nothing here matched our scam patterns — but stay alert anyway.";
   } else if (score < 45) {
     verdict = "suspicious";
-    details = "Something's a bit sus here. Don't click any links, share personal info, or send money until you've verified this yourself.";
+    details = "Something here looks off. Don't click any links, share personal info, or send money until you've verified this yourself.";
   } else if (score < 70) {
     verdict = "likely_scam";
-    details = "This is giving strong scam vibes. Do NOT engage, click links, or provide any information.";
+    details = "This has strong signs of a scam. Do not engage, click links, or provide any information.";
   } else {
     verdict = "likely_scam";
-    details = `Crikey, this is almost certainly a scam. Delete it, block the sender, and report it to ${reportingBody}.`;
+    details = `This is almost certainly a scam. Delete it, block the sender, and report it to ${reportingBody}.`;
   }
 
   // finalise() appends the clamp row when the raw total overshot, so signals and

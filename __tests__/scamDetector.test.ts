@@ -407,10 +407,12 @@ describe("verdict thresholds", () => {
     expect(result.verdict).toBe("likely_scam");
   });
 
-  it("score ≥ 70 → likely_scam with 'Crikey' details", () => {
+  it("score ≥ 70 → likely_scam, with details naming the reporting body", () => {
     const result = checkUrl("http://commbank-secure-login.tk/verify");
     expect(result.verdict).toBe("likely_scam");
-    expect(result.details).toMatch(/Crikey/);
+    expect(result.details).toMatch(/almost certainly a scam/);
+    // The top band is the one that tells the user where to report.
+    expect(result.details).toMatch(/Scamwatch/);
   });
 });
 
